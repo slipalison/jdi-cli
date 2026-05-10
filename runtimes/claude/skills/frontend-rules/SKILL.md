@@ -1,4 +1,4 @@
----
+﻿---
 name: frontend-rules
 description: Universal UI/UX and accessibility rules for any web interface. Framework-agnostic - works for React, Vue, Svelte, Solid, Angular, Blazor, Razor, Twig, Jinja, ERB, Blade, and any template engine. Based on WCAG 2.2 AA, Nielsen heuristics, Material/Apple HIG.
 ---

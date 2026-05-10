@@ -1,4 +1,4 @@
----
+﻿---
 name: dry
 description: DRY (Don't Repeat Yourself). 1 source of truth per piece of knowledge. Detects real duplication (same decision in 2+ places) and separates from apparent duplication (same code, different reasons). Applies in any language.
 ---

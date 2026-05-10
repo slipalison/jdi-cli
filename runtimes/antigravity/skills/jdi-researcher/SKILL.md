@@ -1,4 +1,4 @@
----
+﻿---
 name: jdi-researcher
 description: Upfront pre-roadmap research. Reads user idea, asks key questions, researches stack/domain, generates initial PROJECT.md + ROADMAP.md. Single agent instead of multiple parallel researchers to save tokens.
 triggers:

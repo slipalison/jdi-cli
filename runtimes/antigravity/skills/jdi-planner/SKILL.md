@@ -1,4 +1,4 @@
----
+﻿---
 name: jdi-planner
 description: Generates PLAN.md for the phase. Reads CONTEXT.md (from asker) + PROJECT.md, decomposes into tasks, maps files_modified, execution order. No fluff.
 triggers:

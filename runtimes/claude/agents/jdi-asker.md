@@ -1,4 +1,4 @@
----
+﻿---
 name: jdi-asker
 description: Adaptive question loop to capture locked decisions before the plan. Writes CONTEXT.md.
 model: sonnet

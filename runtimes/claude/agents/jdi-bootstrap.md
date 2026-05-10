@@ -1,4 +1,4 @@
----
+﻿---
 name: jdi-bootstrap
 description: Fires jdi-architect in specialist mode to generate doer + reviewer per-project. Reads PROJECT.md, drives architect, validates outputs, updates routing.
 model: sonnet
@@ -76,20 +76,59 @@ Pass `adopted=$ADOPTED` and `boundary_commit=$BOUNDARY` to the architect in Step
 
 ### Step 2.7: Multi-stack? (multi-specialist support)
 
-AskUserQuestion:
+**MANDATORY step. Never skip — even if PROJECT.md only mentions 1 language, ASK the user.**
+
+#### Step 2.7a: Auto-detect fullstack from PROJECT.md
+
+Before asking, parse `.jdi/PROJECT.md` Stack/Frameworks/Vision sections. Detect dual-stack patterns:
+
+**Backend keywords (case-insensitive):**
+`C#|.NET|dotnet|ASP\.NET|Java|Spring|Kotlin|Go|Rust|Python|Django|Flask|FastAPI|Node|Express|NestJS|Ruby|Rails|PHP|Laravel|Elixir|Phoenix`
+
+**Frontend keywords (case-insensitive):**
+`React|Vue|Svelte|Angular|Next\.?js|Nuxt|Remix|SvelteKit|Astro|Solid|Qwik|Preact|Blazor`
+
+**Mobile keywords:**
+`iOS|Swift|Android|Kotlin Mobile|React Native|Flutter|Dart|Xamarin|MAUI`
+
+**Infra keywords:**
+`Terraform|Pulumi|CloudFormation|Kubernetes|Helm|Ansible`
+
+If ≥2 categories match (e.g. backend + frontend), set `SUGGESTED_COUNT=2` and `SUGGESTED_PAIRS` accordingly.
+
+Examples of detection result from `Stack: "C# 10 + React 19"`:
+- Match: `C#` (backend) + `React` (frontend) → SUGGESTED_COUNT=2
+- Suggested pairs:
+  - `{stack_label: "Backend C#", file_glob: "**/*.{cs,csproj,sln}"}`
+  - `{stack_label: "Frontend React", file_glob: "**/*.{ts,tsx,jsx,css,scss}"}`
+
+#### Step 2.7b: AskUserQuestion (always run)
+
+If `SUGGESTED_COUNT >= 2`, the FIRST option (default-selected by AskUserQuestion) MUST be the suggested multi-stack option. Format:
+
+> "Detected fullstack project: **{detected_categories}** (e.g. {match_keywords}).
+>  Stack count?"
+>
+> Options (when SUGGESTED_COUNT=2):
+> - [Multi (2 pairs — backend + frontend) **(Recommended)**]
+> - [Single (1 specialist pair)]
+> - [Multi (3 pairs)]
+> - [Multi (custom count)]
+
+If `SUGGESTED_COUNT=1` (single language detected, e.g. just Python or just Go):
 
 > "Project stack count?
 >  - **Single-stack:** 1 doer + 1 reviewer (90% of projects)
->  - **Multi-stack:** multiple doer/reviewer pairs, each owning a file glob (fullstack: backend + frontend, mobile: iOS + Android, etc.)"
+>  - **Multi-stack:** multiple pairs (fullstack, mobile iOS+Android, infra+app, etc.)"
 >
 > Options:
-> - [Single (1 specialist pair)]
-> - [Multi (2 pairs — e.g. backend + frontend)]
-> - [Multi (3 pairs — e.g. backend + frontend + infra)]
+> - [Single (1 specialist pair) **(Recommended)**]
+> - [Multi (2 pairs)]
+> - [Multi (3 pairs)]
 > - [Multi (custom count)]
 
 If single: `SPECIALIST_COUNT=1`. Standard flow.
-If multi: `SPECIALIST_COUNT=N`. Architect loops S1-S8 N times.
+If multi: `SPECIALIST_COUNT=N`. Architect loops S1-S8 N times. Pre-fill `stack_label` + `file_glob` from `SUGGESTED_PAIRS` when available (user can edit each).
 
 For multi-stack, ask glob+label per specialist BEFORE architect S1:
 
@@ -192,7 +231,7 @@ Bootstrap ok. Next: /jdi-discuss 1
 - Never create specialist without PROJECT.md present
 - Never skip architect — bootstrap is wrapper, not generator
 - Never commit if architect returned cancelled/failed
-- 1 doer + 1 reviewer per project (default). Multi-stack = future feature
+- Single-stack (1 doer + 1 reviewer) is the default. Multi-stack (N pairs with file-glob routing) is opt-in via S2.7 — ALWAYS execute S2.7 (do not skip the question)
 </rules>
 
 <fallbacks>
