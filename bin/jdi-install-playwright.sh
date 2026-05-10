@@ -10,29 +10,38 @@
 #   ./bin/jdi-install-playwright.sh --runtime claude
 #
 # Flags:
-#   --skip-browser      Skip `npx playwright install chromium`
-#   --skip-mcp          Skip MCP config injection (only dep + browser)
-#   --runtime <r>       claude | opencode | all (default: all detected)
+#   --skip-browser            Skip `npx playwright install chromium`
+#   --skip-mcp                Skip MCP config injection (only dep + browser)
+#   --runtime <r>             claude | opencode | copilot | antigravity | all (default: all)
+#   --antigravity-scope <s>   user (default) | project
 
 set -euo pipefail
 
 PROJECT_DIR="$(pwd)"
+USER_HOME="${HOME:-$USERPROFILE}"
 SKIP_BROWSER=0
 SKIP_MCP=0
 RUNTIME=all
+AG_SCOPE=user
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --skip-browser) SKIP_BROWSER=1; shift ;;
-    --skip-mcp)     SKIP_MCP=1; shift ;;
-    --runtime)      RUNTIME="$2"; shift 2 ;;
+    --skip-browser)      SKIP_BROWSER=1; shift ;;
+    --skip-mcp)          SKIP_MCP=1; shift ;;
+    --runtime)           RUNTIME="$2"; shift 2 ;;
+    --antigravity-scope) AG_SCOPE="$2"; shift 2 ;;
     *) echo "Unknown flag: $1"; exit 1 ;;
   esac
 done
 
 case "$RUNTIME" in
-  claude|opencode|all) ;;
-  *) echo "Invalid --runtime. Use: claude | opencode | all"; exit 1 ;;
+  claude|opencode|copilot|antigravity|all) ;;
+  *) echo "Invalid --runtime. Use: claude | opencode | copilot | antigravity | all"; exit 1 ;;
+esac
+
+case "$AG_SCOPE" in
+  user|project) ;;
+  *) echo "Invalid --antigravity-scope. Use: user | project"; exit 1 ;;
 esac
 
 detect_pm() {
@@ -166,13 +175,80 @@ console.log('  -> wrote .opencode/opencode.jsonc (mcp.playwright)');
 NODE_EOF
 }
 
-warn_copilot_antigravity() {
-  if [ -f "$PROJECT_DIR/.github/copilot-instructions.md" ]; then
-    echo "  [warn] Copilot detected: no MCP toggle support. Use Playwright via skill jdi-frontend-validator only."
+inject_copilot_mcp() {
+  local vscode_dir="$PROJECT_DIR/.vscode"
+  local f="$vscode_dir/mcp.json"
+
+  if [ -f "$f" ] && grep -q '"playwright"' "$f" 2>/dev/null; then
+    echo "  [skip] servers.playwright already present in .vscode/mcp.json"
+    return
   fi
-  if [ -d "$PROJECT_DIR/skills" ] && [ -n "$(ls -A "$PROJECT_DIR/skills" 2>/dev/null || true)" ]; then
-    echo "  [warn] Antigravity skills dir detected: MCP config not injected (support unverified)."
+
+  mkdir -p "$vscode_dir"
+
+  if ! command -v node >/dev/null 2>&1; then
+    echo "  [warn] node not in PATH; cannot edit JSON safely"
+    return
   fi
+
+  node - <<'NODE_EOF'
+const fs = require('fs');
+const path = require('path');
+const f = path.join(process.cwd(), '.vscode', 'mcp.json');
+let s = {};
+if (fs.existsSync(f)) {
+  try { s = JSON.parse(fs.readFileSync(f, 'utf8')); }
+  catch { console.log('  [warn] mcp.json invalid JSON; skip'); process.exit(0); }
+}
+s.servers = s.servers || {};
+if (s.servers.playwright) {
+  console.log('  [skip] servers.playwright already present');
+  process.exit(0);
+}
+s.servers.playwright = { command: 'npx', args: ['-y', '@playwright/mcp@latest'] };
+fs.writeFileSync(f, JSON.stringify(s, null, 2) + '\n');
+console.log('  -> wrote .vscode/mcp.json (servers.playwright) for Copilot');
+NODE_EOF
+}
+
+inject_antigravity_mcp() {
+  local base
+  if [ "$AG_SCOPE" = "user" ]; then
+    base="$USER_HOME/.gemini"
+  else
+    base="$PROJECT_DIR/.gemini"
+  fi
+  local f="$base/settings.json"
+
+  if [ -f "$f" ] && grep -q '"playwright"' "$f" 2>/dev/null; then
+    echo "  [skip] mcpServers.playwright already present in $f"
+    return
+  fi
+
+  mkdir -p "$base"
+
+  if ! command -v node >/dev/null 2>&1; then
+    echo "  [warn] node not in PATH; cannot edit JSON safely"
+    return
+  fi
+
+  AG_FILE="$f" node - <<'NODE_EOF'
+const fs = require('fs');
+const f = process.env.AG_FILE;
+let s = {};
+if (fs.existsSync(f)) {
+  try { s = JSON.parse(fs.readFileSync(f, 'utf8')); }
+  catch { console.log('  [warn] settings.json invalid JSON; skip'); process.exit(0); }
+}
+s.mcpServers = s.mcpServers || {};
+if (s.mcpServers.playwright) {
+  console.log('  [skip] mcpServers.playwright already present');
+  process.exit(0);
+}
+s.mcpServers.playwright = { command: 'npx', args: ['-y', '@playwright/mcp@latest'] };
+fs.writeFileSync(f, JSON.stringify(s, null, 2) + '\n');
+console.log('  -> wrote ' + f + ' (mcpServers.playwright) for Antigravity');
+NODE_EOF
 }
 
 # =====================================================================
@@ -193,13 +269,16 @@ install_chromium
 if [ "$SKIP_MCP" != "1" ]; then
   echo ""
   echo "Step 3: Inject MCP config in detected runtimes"
-  if [ "$RUNTIME" = "claude" ]   || [ "$RUNTIME" = "all" ]; then inject_claude_mcp; fi
-  if [ "$RUNTIME" = "opencode" ] || [ "$RUNTIME" = "all" ]; then inject_opencode_mcp; fi
-  warn_copilot_antigravity
+  if [ "$RUNTIME" = "claude" ]      || [ "$RUNTIME" = "all" ]; then inject_claude_mcp; fi
+  if [ "$RUNTIME" = "opencode" ]    || [ "$RUNTIME" = "all" ]; then inject_opencode_mcp; fi
+  if [ "$RUNTIME" = "copilot" ]     || [ "$RUNTIME" = "all" ]; then inject_copilot_mcp; fi
+  if [ "$RUNTIME" = "antigravity" ] || [ "$RUNTIME" = "all" ]; then inject_antigravity_mcp; fi
 fi
 
 echo ""
 echo "Done. Restart your runtime to pick up MCP changes."
 echo "  - Claude Code: close + reopen, OR run /mcp to verify"
 echo "  - OpenCode: opencode reload"
+echo "  - Copilot (VS Code): reload window, palette 'MCP: List Servers'"
+echo "  - Antigravity: restart antigravity"
 echo ""

@@ -328,6 +328,20 @@ if [ -f "$PROJECT_DIR/.opencode/opencode.jsonc" ]; then
   fi
 fi
 
+if [ -f "$PROJECT_DIR/.vscode/mcp.json" ]; then
+  if grep -q '"playwright"' "$PROJECT_DIR/.vscode/mcp.json" 2>/dev/null; then
+    ok "Copilot (VS Code) MCP playwright configured"
+  else
+    note ".vscode/mcp.json present but no playwright entry"
+  fi
+fi
+
+if [ -f "$HOME/.gemini/settings.json" ] && grep -q '"playwright"' "$HOME/.gemini/settings.json" 2>/dev/null; then
+  ok "Antigravity MCP playwright configured (user scope)"
+elif [ -f "$PROJECT_DIR/.gemini/settings.json" ] && grep -q '"playwright"' "$PROJECT_DIR/.gemini/settings.json" 2>/dev/null; then
+  ok "Antigravity MCP playwright configured (project scope)"
+fi
+
 # ---------------------------------------------------------------------------
 section "11. Caveman plugin (optional)"
 

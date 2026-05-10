@@ -316,6 +316,23 @@ if (Test-Path $opencodeMcp) {
   }
 }
 
+$copilotMcp = Join-Path $ProjectDir '.vscode\mcp.json'
+if (Test-Path $copilotMcp) {
+  if ((Get-Content $copilotMcp -Raw) -match '"playwright"\s*:') {
+    Write-OK 'Copilot (VS Code) MCP playwright configured'
+  } else {
+    Write-Note '.vscode/mcp.json present but no playwright entry'
+  }
+}
+
+$agUser    = Join-Path $UserHome '.gemini\settings.json'
+$agProject = Join-Path $ProjectDir '.gemini\settings.json'
+if ((Test-Path $agUser) -and ((Get-Content $agUser -Raw) -match '"playwright"\s*:')) {
+  Write-OK 'Antigravity MCP playwright configured (user scope)'
+} elseif ((Test-Path $agProject) -and ((Get-Content $agProject -Raw) -match '"playwright"\s*:')) {
+  Write-OK 'Antigravity MCP playwright configured (project scope)'
+}
+
 # ---------------------------------------------------------------------------
 Write-Section '11. Caveman plugin (optional)'
 

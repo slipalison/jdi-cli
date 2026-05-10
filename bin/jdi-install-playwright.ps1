@@ -24,19 +24,26 @@
 
 .PARAMETER Runtime
   Force MCP injection only into this runtime. Default: detect all present.
-  Values: claude | opencode | all
+  Values: claude | opencode | copilot | antigravity | all
+
+.PARAMETER AntigravityScope
+  Antigravity MCP scope: user (~/.gemini/settings.json) or project (.gemini/settings.json).
+  Default: user
 
 .EXAMPLE
   .\bin\jdi-install-playwright.ps1
   .\bin\jdi-install-playwright.ps1 -SkipBrowser
   .\bin\jdi-install-playwright.ps1 -Runtime claude
+  .\bin\jdi-install-playwright.ps1 -Runtime all -AntigravityScope project
 #>
 [CmdletBinding()]
 param(
   [switch]$SkipBrowser,
   [switch]$SkipMcp,
-  [ValidateSet('claude','opencode','all')]
-  [string]$Runtime = 'all'
+  [ValidateSet('claude','opencode','copilot','antigravity','all')]
+  [string]$Runtime = 'all',
+  [ValidateSet('user','project')]
+  [string]$AntigravityScope = 'user'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -191,13 +198,85 @@ function Inject-OpencodeMcp {
   Write-Host "  -> wrote .opencode/opencode.jsonc (mcp.playwright)"
 }
 
-function Warn-CopilotAntigravity {
-  if (Test-Path (Join-Path $ProjectDir '.github\copilot-instructions.md')) {
-    Write-Warning "Copilot detected: no MCP toggle support. Use Playwright via skill jdi-frontend-validator only."
+function Inject-CopilotMcp {
+  # Copilot MCP via VS Code workspace: .vscode/mcp.json
+  $vscodeDir = Join-Path $ProjectDir '.vscode'
+  $f = Join-Path $vscodeDir 'mcp.json'
+
+  if ((Test-Path $f) -and ((Get-Content $f -Raw) -match '"playwright"\s*:')) {
+    Write-Host "  [skip] servers.playwright already present in .vscode/mcp.json"
+    return
   }
-  if (Test-Path (Join-Path $ProjectDir 'skills') -and (Get-ChildItem (Join-Path $ProjectDir 'skills') -ErrorAction SilentlyContinue | Select-Object -First 1)) {
-    Write-Warning "Antigravity skills dir detected: MCP config not injected (support unverified)."
+
+  New-Item -ItemType Directory -Force -Path $vscodeDir | Out-Null
+
+  $settings = @{}
+  if (Test-Path $f) {
+    try {
+      $parsed = Get-Content $f -Raw | ConvertFrom-Json
+      $parsed.PSObject.Properties | ForEach-Object { $settings[$_.Name] = $_.Value }
+    } catch {
+      Write-Warning "  Existing .vscode/mcp.json not valid JSON; skipping."
+      return
+    }
   }
+
+  if (-not $settings.ContainsKey('servers')) { $settings['servers'] = @{} }
+  $servers = @{}
+  if ($settings['servers'] -is [psobject]) {
+    $settings['servers'].PSObject.Properties | ForEach-Object { $servers[$_.Name] = $_.Value }
+  } elseif ($settings['servers'] -is [hashtable]) {
+    $servers = $settings['servers']
+  }
+
+  $servers['playwright'] = @{
+    command = 'npx'
+    args    = @('-y', '@playwright/mcp@latest')
+  }
+  $settings['servers'] = $servers
+
+  ($settings | ConvertTo-Json -Depth 8) | Out-File -FilePath $f -Encoding UTF8 -NoNewline
+  Write-Host "  -> wrote .vscode/mcp.json (servers.playwright) for Copilot"
+}
+
+function Inject-AntigravityMcp {
+  $base = if ($AntigravityScope -eq 'user') { Join-Path $UserHome '.gemini' } else { Join-Path $ProjectDir '.gemini' }
+  $f = Join-Path $base 'settings.json'
+
+  if ((Test-Path $f) -and ((Get-Content $f -Raw) -match '"playwright"\s*:')) {
+    Write-Host "  [skip] mcpServers.playwright already present in $f"
+    return
+  }
+
+  New-Item -ItemType Directory -Force -Path $base | Out-Null
+
+  $settings = @{}
+  if (Test-Path $f) {
+    try {
+      $parsed = Get-Content $f -Raw | ConvertFrom-Json
+      $parsed.PSObject.Properties | ForEach-Object { $settings[$_.Name] = $_.Value }
+    } catch {
+      Write-Warning "  Existing $f not valid JSON; skipping."
+      return
+    }
+  }
+
+  if (-not $settings.ContainsKey('mcpServers')) { $settings['mcpServers'] = @{} }
+  $mcp = @{}
+  if ($settings['mcpServers'] -is [psobject]) {
+    $settings['mcpServers'].PSObject.Properties | ForEach-Object { $mcp[$_.Name] = $_.Value }
+  } elseif ($settings['mcpServers'] -is [hashtable]) {
+    $mcp = $settings['mcpServers']
+  }
+
+  $mcp['playwright'] = @{
+    command = 'npx'
+    args    = @('-y', '@playwright/mcp@latest')
+  }
+  $settings['mcpServers'] = $mcp
+
+  ($settings | ConvertTo-Json -Depth 8) | Out-File -FilePath $f -Encoding UTF8 -NoNewline
+  Write-Host "  -> wrote $f (mcpServers.playwright) for Antigravity"
 }
 
 # =====================================================================
@@ -225,13 +304,16 @@ if (-not $bOk) {
 if (-not $SkipMcp) {
   Write-Host ''
   Write-Host 'Step 3: Inject MCP config in detected runtimes'
-  if ($Runtime -in 'claude','all')   { Inject-ClaudeMcp }
-  if ($Runtime -in 'opencode','all') { Inject-OpencodeMcp }
-  Warn-CopilotAntigravity
+  if ($Runtime -in 'claude','all')      { Inject-ClaudeMcp }
+  if ($Runtime -in 'opencode','all')    { Inject-OpencodeMcp }
+  if ($Runtime -in 'copilot','all')     { Inject-CopilotMcp }
+  if ($Runtime -in 'antigravity','all') { Inject-AntigravityMcp }
 }
 
 Write-Host ''
 Write-Host 'Done. Restart your runtime to pick up MCP changes.'
 Write-Host '  - Claude Code: close + reopen, OR run /mcp to verify'
 Write-Host '  - OpenCode: opencode reload'
+Write-Host '  - Copilot (VS Code): reload window, palette `MCP: List Servers`'
+Write-Host '  - Antigravity: restart antigravity'
 Write-Host ''
