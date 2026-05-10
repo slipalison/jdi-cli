@@ -75,9 +75,19 @@ jobs:
             exit 1
           fi
 
-      - name: Rebuild runtimes from core
+      - name: Verify runtimes are in sync (no rebuild)
         shell: bash
-        run: node bin/jdi.js build
+        run: |
+          # CI nao rebuilda — runtimes/ commitado eh source-of-truth.
+          # Se voce esqueceu de rodar `jdi build` antes do tag, o publish
+          # ainda vai funcionar (publica o que esta no disco), mas as
+          # runtimes/ podem estar desync com core/. Solucao: rodar
+          # `node bin/jdi.js build` local, commitar, e re-tagear.
+          test -d runtimes/claude/agents
+          test -d runtimes/copilot/agents
+          test -d runtimes/antigravity/skills
+          test -d runtimes/opencode/agents
+          echo "runtimes/ presentes — usando o que esta commitado"
 
       - name: Verify package contents (dry-run)
         shell: bash

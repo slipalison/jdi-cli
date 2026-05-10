@@ -45,9 +45,10 @@ build_claude_agent() {
   ' "$src" > "$dst"
 
   # extrai claude tools/model do override
+  # range explicito por indent: ativa em "  claude:" (2 spaces), desativa em proxima chave de 2 spaces
   local claude_tools claude_model
-  claude_tools=$(awk '/^[[:space:]]*claude:/,/^[[:space:]]*[a-z]+:/' "$src" | grep -E "^[[:space:]]+tools:" | head -1 | sed 's/^[[:space:]]*tools:[[:space:]]*//')
-  claude_model=$(awk '/^[[:space:]]*claude:/,/^[[:space:]]*[a-z]+:/' "$src" | grep -E "^[[:space:]]+model:" | head -1 | sed 's/^[[:space:]]*model:[[:space:]]*//')
+  claude_tools=$(awk '/^  claude:/{f=1;next} f && /^  [a-z]+:/{f=0} f' "$src" | grep -E "^[[:space:]]+tools:" | head -1 | sed 's/^[[:space:]]*tools:[[:space:]]*//' || true)
+  claude_model=$(awk '/^  claude:/{f=1;next} f && /^  [a-z]+:/{f=0} f' "$src" | grep -E "^[[:space:]]+model:" | head -1 | sed 's/^[[:space:]]*model:[[:space:]]*//' || true)
 
   # injeta tools e model no frontmatter alvo (apos description)
   if [[ -n "$claude_tools" ]]; then
@@ -77,8 +78,8 @@ build_copilot_agent() {
   ' "$src" > "$dst"
 
   local copilot_tools copilot_model
-  copilot_tools=$(awk '/^[[:space:]]*copilot:/,/^[[:space:]]*[a-z]+:/' "$src" | grep -E "^[[:space:]]+tools:" | head -1 | sed 's/^[[:space:]]*tools:[[:space:]]*//')
-  copilot_model=$(awk '/^[[:space:]]*copilot:/,/^[[:space:]]*[a-z]+:/' "$src" | grep -E "^[[:space:]]+model:" | head -1 | sed 's/^[[:space:]]*model:[[:space:]]*//')
+  copilot_tools=$(awk '/^  copilot:/{f=1;next} f && /^  [a-z]+:/{f=0} f' "$src" | grep -E "^[[:space:]]+tools:" | head -1 | sed 's/^[[:space:]]*tools:[[:space:]]*//' || true)
+  copilot_model=$(awk '/^  copilot:/{f=1;next} f && /^  [a-z]+:/{f=0} f' "$src" | grep -E "^[[:space:]]+model:" | head -1 | sed 's/^[[:space:]]*model:[[:space:]]*//' || true)
 
   [[ -n "$copilot_tools" ]] && sed -i "/^description:/a tools: ${copilot_tools}" "$dst"
   [[ -n "$copilot_model" ]] && sed -i "/^description:/a model: ${copilot_model}" "$dst"
