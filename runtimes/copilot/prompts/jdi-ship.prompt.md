@@ -77,10 +77,45 @@ phase_status: ready (se {N+1} existe) ou complete
 next_step: /jdi-discuss {N+1} ou done
 ```
 
-### Passo 5: Commit final
+### Passo 5: Archive de phases antigas (compaction)
+
+Le `archive_after` de `.jdi/config.json` (default 5). Se a phase atual esta avancando pra `N+1`, e existe phase com numero `<= (N+1) - archive_after`, move pra `.jdi/archive/`.
 
 ```bash
-git add .jdi/ROADMAP.md .jdi/STATE.md
+ARCHIVE_AFTER=5
+if [ -f .jdi/config.json ]; then
+  if command -v jq >/dev/null 2>&1; then
+    ARCHIVE_AFTER=$(jq -r '.compaction.archive_after // 5' .jdi/config.json)
+  fi
+fi
+
+NEXT=$((N + 1))
+THRESHOLD=$((NEXT - ARCHIVE_AFTER))
+
+if [ "$THRESHOLD" -ge 1 ]; then
+  mkdir -p .jdi/archive
+  test -f .jdi/archive/index.md || echo "# Archive index" > .jdi/archive/index.md
+
+  for dir in .jdi/phases/*/; do
+    NN=$(basename "$dir" | grep -oE '^[0-9]+' || true)
+    [ -z "$NN" ] && continue
+    NN_NUM=$((10#$NN))  # forca decimal
+    if [ "$NN_NUM" -le "$THRESHOLD" ]; then
+      VERDICT_OLD=$(grep -oE 'Veredicto:\*\* (APPROVED|APPROVED_WITH_WARNINGS|BLOCKED)' "$dir/REVIEW.md" 2>/dev/null | awk '{print $2}' || echo "UNKNOWN")
+      mv "$dir" .jdi/archive/
+      echo "- $(basename "$dir"): ${VERDICT_OLD} (archived $(date -u +%F))" >> .jdi/archive/index.md
+    fi
+  done
+fi
+# Windows: equivalente em PowerShell — Move-Item + Add-Content
+```
+
+Phases archived continuam acessiveis via `.jdi/archive/` mas saem do read-path default. Read-depth rule (`ARCHITECTURE.md > Read-depth scaling`) trata archive como `<= current - 2`.
+
+### Passo 6: Commit final
+
+```bash
+git add .jdi/ROADMAP.md .jdi/STATE.md .jdi/archive/ 2>/dev/null
 git commit -m "feat({NN-slug}): ship phase {N} ({VERDICT})"
 ```
 
@@ -89,7 +124,7 @@ Tag opcional (se PROJECT.md tem `tag_phases: true`):
 git tag "phase-{N}-{slug}"
 ```
 
-### Passo 6: Confirma
+### Passo 7: Confirma
 
 ```
 Phase {N} shipped.
@@ -101,7 +136,7 @@ Phase {N} shipped.
 
 <gates>
 - pre: REVIEW.md existe + veredicto != BLOCKED
-- post: ROADMAP.md + STATE.md atualizados + commit (+ tag opcional)
+- post: ROADMAP.md + STATE.md atualizados + phases antigas archived (se aplicavel) + commit (+ tag opcional)
 </gates>
 
 <errors>

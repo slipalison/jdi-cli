@@ -56,7 +56,34 @@ test -f .jdi/ROADMAP.md || { echo "ROADMAP.md nao criado"; exit 1; }
 test -f .jdi/STATE.md || { echo "STATE.md nao criado"; exit 1; }
 ```
 
-### Passo 4: Confirma
+### Passo 4: Cria config.json (token/context budget)
+
+Se `.jdi/config.json` ainda nao existe, escreve o default abaixo. Defaults (200k context, 60/70% warn/critical, coverage 80%) cobrem 95% dos casos. User edita se rodar 1M-window model ou quiser thresholds mais apertados.
+
+```json
+{
+  "$schema_version": "1.1",
+  "context_window": 200000,
+  "thresholds": {
+    "warn_pct": 60,
+    "critical_pct": 70
+  },
+  "budgets": {
+    "max_context_chars": 6000,
+    "max_plan_chars": 12000,
+    "max_summary_chars": 8192
+  },
+  "compaction": {
+    "keep_phases": 2,
+    "archive_after": 5
+  },
+  "coverage_min": 80
+}
+```
+
+Referencia canonica do default tambem fica em `templates-jdi-folder/config.json` (shipped pelo pacote npm) — pra users que queiram regenerar manual.
+
+### Passo 5: Confirma
 
 ```
 {project_name} iniciado. {N} phases planejadas em .jdi/.
@@ -67,7 +94,7 @@ Proximo: /jdi-bootstrap
 
 <gates>
 - pre: diretorio sem `.jdi/` existente (ou `--reset`)
-- post: PROJECT.md + ROADMAP.md + STATE.md + DECISIONS.md criados, commit inicial feito
+- post: PROJECT.md + ROADMAP.md + STATE.md + DECISIONS.md + config.json criados, commit inicial feito
 </gates>
 
 <errors>

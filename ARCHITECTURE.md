@@ -142,6 +142,36 @@ Por task no PLAN.md:
 
 Veredicto: APPROVED / APPROVED_WITH_WARNINGS / BLOCKED. BLOCKED bloqueia /jdi-ship.
 
+## Read-depth scaling (token budget)
+
+Regra dura: **read-depth escala com distancia da phase atual**. Orchestrator e agentes nao leem corpo de phase qualquer — leem o necessario.
+
+| Distancia | Arquivo | Read permitido |
+|---|---|---|
+| `current_phase` | CONTEXT, PLAN, SUMMARY, REVIEW da phase | Corpo inteiro (ate budget de `config.json`) |
+| `current_phase - 1` | SUMMARY.md, REVIEW.md anterior | **Frontmatter + veredict apenas**. Nunca corpo. |
+| `<= current_phase - 2` | Phases antigas | **Nao ler.** Existencia via `ls`. Metadados via `head -10`. |
+
+**Excecoes documentadas:**
+- `/jdi-verify N` pode ler `PLAN.md` de phase `N-1` se task atual referencia `D-XX` daquela phase (rastreabilidade)
+- `/jdi-discuss N` (asker) le ate **2 CONTEXT.md anteriores** (regra ja vigente em `core/agents/jdi-asker.md`)
+- `jdi-researcher` le PROJECT/ROADMAP inteiros — sao curtos por design (PROJECT cap 80 linhas, ROADMAP eh sumario)
+
+**Por que:**
+- Phase 8 nao precisa de corpo de SUMMARY phase 1. Frontmatter ja contem `status` + `verdict`.
+- Context rot: pesquisa Anthropic/Chroma 2025 confirma — recall degrada com tokens, mesmo dentro do limite.
+- Cache hit aumenta: arquivos imutaveis (PROJECT, DECISIONS) viram prefix estavel.
+
+**Como aplicar (orchestrator):**
+- Antes de `Read` em arquivo de phase anterior: cheque distancia via STATE.md
+- Use `head -20` no lugar de `cat` quando so quer frontmatter
+- Phases archived (`.jdi/archive/`): tratar como phase `<= current - 2`. Nao ler corpo.
+- Pra arquivos grandes na phase atual, use `bin/lib/jdi-truncate.{sh,ps1}` antes de inline em prompt:
+  ```bash
+  bash bin/lib/jdi-truncate.sh .jdi/phases/01-x/PLAN.md 12000   # cap em chars
+  ```
+  Helper preserva frontmatter, headings, 1a linha de cada secao. Resto vira pointer.
+
 ## Memoria
 
 | Arquivo | Lifespan | Conteudo |

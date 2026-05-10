@@ -12,6 +12,12 @@ tools_canonical:
   - grep
   - glob
   - bash
+cache_breakpoints:
+  # Arquivos estaveis que valem como prefix de prompt cache
+  # (runtimes que suportam cache_control aplicam — outros ignoram).
+  - .jdi/PROJECT.md          # immutable apos /jdi-new
+  - .jdi/DECISIONS.md        # append-only, prefix estavel
+  - .jdi/agents/jdi-doer-{PROJECT_SLUG}.md  # specialist body
 triggers:
   - "executar phase"
   - "/jdi-do"

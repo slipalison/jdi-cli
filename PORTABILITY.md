@@ -398,6 +398,23 @@ Pra projetos novos: `jdi-install.sh all --scope project` (ou `.ps1 -Runtime all 
 
 Os scripts geram exatamente os mesmos arquivos em `runtimes/`. Voce pode rodar `.sh` em uma maquina e `.ps1` em outra — output identico.
 
+### Cache breakpoints (prompt caching)
+
+JDI ships uma convencao de prompt cache via frontmatter `cache_breakpoints:` nos templates `doer-specialist.md` e `reviewer-specialist.md`. Lista de paths estaveis (PROJECT.md, DECISIONS.md, body do specialist) que valem como prefix de cache.
+
+**Suporte por runtime:**
+
+| Runtime | Suporte | Como usar |
+|---|---|---|
+| Claude Code | sim — `cache_control` na API | Harness aplica em system prompt + tool defs automaticamente quando o subagent eh spawned |
+| OpenCode | sim — passa-se ao provider Anthropic | Habilitado por default em providers que suportam |
+| Copilot | n/a | Sem cache control no GHCP. Frontmatter eh ignorado |
+| Antigravity | n/a | Sem cache control. Frontmatter eh ignorado |
+
+A convencao eh **declarativa**: frontmatter declara o que **nao muda** entre tasks da mesma phase. Runtimes que entendem usam — outros ignoram sem warning. Zero codigo. Zero dep.
+
+**Por que vale a pena:** prefix-match cache hit corta 70-80% do custo de input tokens em fluxos multi-task da mesma phase (Claude API: cache write 1.25x, cache read 0.1x).
+
 ## Limitacoes conhecidas
 
 | Limitacao | Workaround |

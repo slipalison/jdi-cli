@@ -44,11 +44,34 @@ Invoca agent. Aguarda.
 - cancelled -> sai limpo
 - failed -> mostra erro
 
+### Passo 4: MCP audit (token budget)
+
+Aplicavel a runtimes com MCP (Claude Code, OpenCode). Imprime checklist apos confirmacao do Passo 3:
+
+```
+MCP audit (token budget):
+Cada MCP enabled injeta tool schema em TODA turn — heavyweight (browser/playwright,
+mac-tools, win-tools) custa 20k+ tokens/turn cada. Antes de comecar /jdi-discuss:
+
+  [ ] Browser/playwright enabled? Disable se phases atuais nao tem UI work
+  [ ] Platform-specific (mac-tools/win-tools)? Disable se nao usa
+  [ ] Cross-project MCPs ainda ligados de outro projeto?
+  [ ] MCPs duplicados (2 filesystem helpers, 2 search providers)?
+
+Toggle (Claude Code):  .claude/settings.json -> enabledMcpjsonServers / disabledMcpjsonServers
+Toggle (OpenCode):     .opencode/opencode.jsonc -> mcp.<name>.enabled
+Toggle (Copilot):      n/a (sem suporte a MCP toggle granular)
+
+Skip se ja auditou recentemente.
+```
+
+Nao bloqueia. So lembra. JDI nao gerencia `.claude/settings.json` nem `.opencode/opencode.jsonc` — esses pertencem ao runtime, nao ao state do projeto.
+
 </process>
 
 <gates>
 - pre: `.jdi/PROJECT.md` existe + working tree clean (ou changes apenas em `.jdi/`)
-- post: `.jdi/agents/jdi-doer-*.md` e `.jdi/agents/jdi-reviewer-*.md` existem + routing atualizado + commit
+- post: `.jdi/agents/jdi-doer-*.md` e `.jdi/agents/jdi-reviewer-*.md` existem + routing atualizado + commit + MCP audit checklist exibida
 </gates>
 
 <errors>

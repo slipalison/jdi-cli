@@ -45,6 +45,13 @@ ls .jdi/phases/{NN}*/PLAN.md 2>/dev/null || {
   echo "PLAN.md ausente pra phase {N}. Rode /jdi-plan {N}."
   exit 1
 }
+
+# Context budget warm-up (nao bloqueia)
+JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
+if [ -f "$JDI_LIB/jdi-monitor.sh" ]; then
+  bash "$JDI_LIB/jdi-monitor.sh" .jdi/PROJECT.md .jdi/DECISIONS.md .jdi/phases/{NN}*/PLAN.md .jdi/phases/{NN}*/CONTEXT.md || true
+fi
+# Windows: pwsh -File "$JDI_LIB/jdi-monitor.ps1" -Paths @(...)
 ```
 
 ### Passo 2: Resolve doer specialist do projeto

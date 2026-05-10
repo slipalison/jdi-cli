@@ -12,6 +12,7 @@ Decisoes locked ficam em `DECISIONS.md`. Audit trail dos specialists/agents cria
 +-- ROADMAP.md           phases sequencial, status por linha
 +-- STATE.md             current_phase + next_step + flags. Atualizado por comandos
 +-- DECISIONS.md         append-only. ADR mini. D-1, D-2, ...
++-- config.json          token/context budget + thresholds. Editavel
 +-- specialists.md       routing per-project (gerado por /jdi-bootstrap)
 +-- reviewers.md         routing per-project
 +-- registry.md          audit trail (R-1, R-2, ...) — tudo que /jdi-create ou /jdi-bootstrap criou
@@ -31,8 +32,10 @@ Decisoes locked ficam em `DECISIONS.md`. Audit trail dos specialists/agents cria
 ```
 
 Nada de `templates-jdi-folder/` copiado pra `.jdi/`. Files sao gerados direto pelos comandos:
-- `/jdi-new` cria PROJECT, ROADMAP, STATE, DECISIONS, .gitattributes
+- `/jdi-new` cria PROJECT, ROADMAP, STATE, DECISIONS, config.json, .gitattributes
 - `/jdi-bootstrap` cria specialists.md, reviewers.md, registry.md + agents/*
+
+Excecao: `config.json` eh copiado direto de `templates-jdi-folder/config.json` (defaults estaveis) — `/jdi-new` so copia se ausente. User edita pra customizar budget.
 
 ---
 
@@ -120,6 +123,46 @@ next_step: /jdi-discuss 1
 - `looping` — `/jdi-loop` em execucao (ralph mode), LOOP.md tem detalhe de iter atual
 - `paused` — user escolheu "Ajustar plano" no human gate, edita PLAN.md/CONTEXT.md e re-roda /jdi-loop
 - `blocked` — `/jdi-verify` retornou BLOCKED OU `/jdi-loop` foi escalated/killed (revisao humana necessaria)
+
+---
+
+## config.json
+
+```json
+{
+  "$schema_version": "1.1",
+  "context_window": 200000,
+  "thresholds": {
+    "warn_pct": 60,
+    "critical_pct": 70
+  },
+  "budgets": {
+    "max_context_chars": 6000,
+    "max_plan_chars": 12000,
+    "max_summary_chars": 8192
+  },
+  "compaction": {
+    "keep_phases": 2,
+    "archive_after": 5
+  },
+  "coverage_min": 80
+}
+```
+
+**Quem edita:** `/jdi-new` escreve direto via Write se ausente (default inline no prompt do comando). `templates-jdi-folder/config.json` eh a referencia canonica do default, shipped pelo pacote npm. User edita manualmente apos. Comandos so leem.
+
+**Campos:**
+- `context_window` — janela do model em uso. 200k = default (Claude Sonnet/Opus). 1_000_000 pra 1M-window models.
+- `thresholds.warn_pct` — quando orchestrator avisa "context aquecendo". Default 60%.
+- `thresholds.critical_pct` — quando orchestrator sugere `/jdi-thread`. Default 70% (zona de fracture, baseado em pesquisa de context rot).
+- `budgets.max_*_chars` — caps usados por commands ao truncar artefatos antes de inline. Heuristica: ~4 chars/token.
+- `compaction.keep_phases` — quantas phases anteriores ficam ativas em `.jdi/phases/`. Resto vai pra `.jdi/archive/`.
+- `compaction.archive_after` — phases acima deste delta movem pra archive (executado por `/jdi-ship`).
+- `coverage_min` — overrideavel por PROJECT.md. Reviewer usa.
+
+**Lifespan:** vida do projeto. Versionado em git.
+
+**Lido por:** `/jdi-do`, `/jdi-plan`, `/jdi-verify`, `/jdi-ship` (para compaction). Specialists (doer/reviewer) leem `coverage_min`.
 
 ---
 
@@ -393,6 +436,7 @@ escalated|paused → running (re-rodar /jdi-loop retoma)
 |---|---|---|
 | Projeto | `PROJECT.md` | Vida do projeto (immutable apos /jdi-new) |
 | Roadmap | `ROADMAP.md` | Vida do projeto (atualiza com /jdi-ship) |
+| Config | `config.json` | Vida do projeto, editavel manual |
 | Decisao | `DECISIONS.md` | Append-only, nunca apaga |
 | Routing | `specialists.md`, `reviewers.md` | Append-only |
 | Audit | `registry.md` | Append-only |
@@ -406,3 +450,22 @@ escalated|paused → running (re-rodar /jdi-loop retoma)
 - registry.md (criacoes de agents/specialists)
 - SUMMARY.md por phase (aprendizado de execucao)
 - REVIEW.md por phase (warns/blockers como aprendizado)
+
+---
+
+## Read-depth por nivel (token budget)
+
+Regra dura — referencia em `ARCHITECTURE.md > Read-depth scaling`. Resumo aqui pra quem le so MEMORY.md:
+
+| Distancia da phase atual | Read permitido |
+|---|---|
+| Phase atual (`current_phase`) | Corpo inteiro |
+| Phase anterior (`current_phase - 1`) | Frontmatter + veredict do REVIEW apenas |
+| `<= current_phase - 2` | Nao ler corpo. Listar/`head` apenas |
+| `.jdi/archive/` | Tratar como phase distante. Nao ler corpo |
+
+PROJECT.md, ROADMAP.md, DECISIONS.md, config.json: leitura full **permitida** sempre — sao curtos por design e estaveis (bons candidatos a prompt cache prefix).
+
+Excecoes:
+- `jdi-asker` le ate 2 CONTEXT.md anteriores (regra do agent)
+- `jdi-verify N` le PLAN.md de phase N-1 se task atual referencia `D-XX` daquela phase (rastreabilidade)
