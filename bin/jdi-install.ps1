@@ -144,3 +144,11 @@ switch ($Runtime) {
 }
 
 Install-GitHooks
+
+# Escreve .jdi/VERSION pra rastreio em updates futuros
+if ($Scope -eq 'project' -or $Scope -eq 'user') {
+  if (Test-Path (Join-Path $ProjectDir '.jdi')) {
+    $pkgJson = Get-Content (Join-Path $Root 'package.json') -Raw | ConvertFrom-Json
+    Set-Content -Path (Join-Path $ProjectDir '.jdi/VERSION') -Value $pkgJson.version -Encoding UTF8 -NoNewline
+  }
+}

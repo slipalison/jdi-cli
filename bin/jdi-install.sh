@@ -124,3 +124,9 @@ case "$RUNTIME" in
 esac
 
 install_githooks
+
+# Escreve .jdi/VERSION pra rastreio em updates futuros
+if [[ -d "$PWD/.jdi" ]]; then
+  pkg_version=$(grep -oE '"version":\s*"[^"]+"' "$ROOT/package.json" | head -1 | sed 's/.*"\([^"]*\)"/\1/')
+  printf '%s' "$pkg_version" > "$PWD/.jdi/VERSION"
+fi

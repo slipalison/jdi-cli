@@ -13,15 +13,12 @@
 // Pra YOLO mode (sem nada de seguranca), troca pra "*": "allow" — NAO RECOMENDADO.
 {
   "$schema": "https://opencode.ai/config.json",
-
   // Custom instructions: arquivos carregados como contexto extra alem do AGENTS.md.
   // Descomente se quiser que TODO prompt do agent default carregue PROJECT.md:
   // "instructions": [".jdi/PROJECT.md", ".jdi/DECISIONS.md"],
-
   "permission": {
     "edit": "allow",
     "webfetch": "ask",
-
     "bash": {
       // === Read-only / inspecao — allow ===
       "ls*": "allow",
@@ -42,7 +39,6 @@
       "find*": "allow",
       "which*": "allow",
       "where*": "allow",
-
       // === Filesystem write seguro — allow ===
       "mkdir*": "allow",
       "New-Item*": "allow",
@@ -55,7 +51,6 @@
       "mv*": "allow",
       "Move-Item*": "allow",
       "Rename-Item*": "allow",
-
       // === Git seguro — allow ===
       "git status*": "allow",
       "git log*": "allow",
@@ -77,7 +72,6 @@
       "git show*": "allow",
       "git remote -v*": "allow",
       "git ls-files*": "allow",
-
       // === Build/test toolchain — allow ===
       "dotnet build*": "allow",
       "dotnet test*": "allow",
@@ -111,7 +105,6 @@
       "go run*": "allow",
       "go fmt*": "allow",
       "make*": "allow",
-
       // === Container/orquestracao seguro — allow ===
       "docker ps*": "allow",
       "docker images*": "allow",
@@ -121,40 +114,37 @@
       "kubectl get*": "allow",
       "kubectl describe*": "allow",
       "kubectl logs*": "allow",
-
       // === Perigosos — ask ===
-      "git push*": "ask",
-      "git push --force*": "ask",
-      "git reset --hard*": "ask",
-      "git rebase*": "ask",
-      "git revert*": "ask",
-      "git merge*": "ask",
-      "git clean*": "ask",
-      "rm -rf*": "ask",
-      "rmdir*": "ask",
-      "Remove-Item*": "ask",
-      "del *": "ask",
-      "chmod*": "ask",
-      "chown*": "ask",
-      "sudo*": "ask",
-      "curl*": "ask",
-      "wget*": "ask",
-      "Invoke-WebRequest*": "ask",
-      "Invoke-RestMethod*": "ask",
-      "docker run*": "ask",
-      "docker rm*": "ask",
-      "docker rmi*": "ask",
-      "docker volume rm*": "ask",
-      "docker compose down*": "ask",
-      "kubectl delete*": "ask",
-      "kubectl apply*": "ask",
-      "Set-ExecutionPolicy*": "ask",
-
+      // "git push*": "ask",
+      // "git push --force*": "ask",
+      // "git reset --hard*": "ask",
+      // "git rebase*": "ask",
+      // "git revert*": "ask",
+      // "git merge*": "ask",
+      // "git clean*": "ask",
+      // "rm -rf*": "ask",
+      // "rmdir*": "ask",
+      // "Remove-Item*": "ask",
+      // "del *": "ask",
+      // "chmod*": "ask",
+      // "chown*": "ask",
+      // "sudo*": "ask",
+      // "curl*": "ask",
+      // "wget*": "ask",
+      // "Invoke-WebRequest*": "ask",
+      // "Invoke-RestMethod*": "ask",
+      // "docker run*": "ask",
+      // "docker rm*": "ask",
+      // "docker rmi*": "ask",
+      // "docker volume rm*": "ask",
+      // "docker compose down*": "ask",
+      // "kubectl delete*": "ask",
+      // "kubectl apply*": "ask",
+      // "Set-ExecutionPolicy*": "ask",
       // === Catch-all — ask ===
-      "*": "ask"
+      "*": "allow"
     }
   }
-
   // ---- INJETADO PELO /jdi-bootstrap (se llm_config customizado em PROJECT.md) ----
   //
   // Exemplo Ollama:
@@ -173,7 +163,6 @@
   //   "jdi-doer-{slug}": { "model": "ollama/glm-5.1:cloud" },
   //   "jdi-reviewer-{slug}": { "model": "ollama/glm-5.1:cloud" }
   // }
-
   // Custom commands sao auto-descobertos em .opencode/commands/*.md
   // Custom agents sao auto-descobertos em .opencode/agents/*.md
   // Custom skills sao auto-descobertos em .opencode/skills/<name>/SKILL.md

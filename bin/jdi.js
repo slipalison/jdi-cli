@@ -188,6 +188,63 @@ function cmdBuild({ flags }) {
   }
 }
 
+function cmdUpdate({ flags }) {
+  ui.banner();
+
+  ui.header('JDI Update');
+  ui.info(`Diretorio: ${c.dim}${process.cwd()}${c.reset}`);
+  console.log('');
+
+  const args = [];
+  if (isWindows) {
+    if (flags['force-specialists']) args.push('-ForceSpecialists');
+    if (flags['skip-specialists']) args.push('-SkipSpecialists');
+    if (flags['dry-run']) args.push('-DryRun');
+  } else {
+    if (flags['force-specialists']) args.push('--force-specialists');
+    if (flags['skip-specialists']) args.push('--skip-specialists');
+    if (flags['dry-run']) args.push('--dry-run');
+  }
+
+  const { code } = runShellScript('jdi-update', args);
+
+  if (code !== 0) {
+    process.exit(code);
+  }
+}
+
+function cmdUninstall({ positional, flags }) {
+  ui.banner();
+
+  ui.header('JDI Uninstall');
+  ui.info(`Diretorio: ${c.dim}${process.cwd()}${c.reset}`);
+  console.log('');
+
+  const runtime = positional[0] || 'all';
+  ensureRuntime(runtime);
+
+  const args = [];
+  if (isWindows) {
+    args.push('-Runtime', runtime);
+    if (flags.scope) args.push('-Scope', flags.scope);
+    if (flags.purge) args.push('-Purge');
+    if (flags.yes) args.push('-Yes');
+    if (flags['dry-run']) args.push('-DryRun');
+  } else {
+    args.push('--runtime', runtime);
+    if (flags.scope) args.push('--scope', flags.scope);
+    if (flags.purge) args.push('--purge');
+    if (flags.yes) args.push('--yes');
+    if (flags['dry-run']) args.push('--dry-run');
+  }
+
+  const { code } = runShellScript('jdi-uninstall', args);
+
+  if (code !== 0) {
+    process.exit(code);
+  }
+}
+
 function cmdDoctor({ flags }) {
   ui.banner();
 
@@ -212,6 +269,8 @@ function cmdHelp() {
 
   console.log(`${c.bold}Comandos:${c.reset}`);
   console.log(`  ${c.cyan}install${c.reset} ${c.gray}<runtime>${c.reset}      Instala JDI no projeto atual`);
+  console.log(`  ${c.cyan}update${c.reset}                 Atualiza JDI ja instalado (preserva state)`);
+  console.log(`  ${c.cyan}uninstall${c.reset} ${c.gray}[runtime]${c.reset}    Remove JDI do projeto (preserva .jdi/ por default)`);
   console.log(`  ${c.cyan}build${c.reset}                  Re-builda runtimes/ a partir de core/`);
   console.log(`  ${c.cyan}doctor${c.reset}                 Diagnostico do projeto + JDI`);
   console.log(`  ${c.cyan}help${c.reset}                   Mostra esta ajuda`);
@@ -227,21 +286,35 @@ function cmdHelp() {
   console.log('');
 
   console.log(`${c.bold}Opcoes:${c.reset}`);
-  console.log(`  ${c.cyan}--scope${c.reset} ${c.gray}<user|project>${c.reset}   Escopo da instalacao (default: project)`);
+  console.log(`  ${c.cyan}--scope${c.reset} ${c.gray}<user|project|both>${c.reset}  Escopo (default install: project; default uninstall: both)`);
   console.log(`  ${c.cyan}--verbose${c.reset}              Output detalhado (so doctor)`);
+  console.log(`  ${c.cyan}--dry-run${c.reset}              Mostra o que faria sem aplicar (update, uninstall)`);
+  console.log(`  ${c.cyan}--purge${c.reset}                Uninstall: remove tambem .jdi/ (DESTRUTIVO)`);
+  console.log(`  ${c.cyan}--yes${c.reset}                  Uninstall: pula confirmacoes interativas`);
+  console.log(`  ${c.cyan}--force-specialists${c.reset}    Update: regenera specialists sem perguntar`);
+  console.log(`  ${c.cyan}--skip-specialists${c.reset}     Update: nao mexe em specialists`);
   console.log(`  ${c.cyan}--no-color${c.reset}             Desabilita cores ANSI`);
   console.log(`  ${c.cyan}-h, --help${c.reset}             Esta ajuda`);
   console.log('');
 
   console.log(`${c.bold}Exemplos:${c.reset}`);
   console.log(`  ${c.dim}# Instalacao no projeto atual${c.reset}`);
-  console.log(`  ${c.cyan}npx jdi-cli install opencode${c.reset}`);
+  console.log(`  ${c.cyan}npx jdi-cli@latest install opencode${c.reset}`);
   console.log('');
-  console.log(`  ${c.dim}# Instalacao global (user-scope)${c.reset}`);
-  console.log(`  ${c.cyan}npx jdi-cli install claude --scope user${c.reset}`);
+  console.log(`  ${c.dim}# Atualizar projeto ja instalado pra versao mais recente${c.reset}`);
+  console.log(`  ${c.cyan}npx jdi-cli@latest update${c.reset}`);
+  console.log('');
+  console.log(`  ${c.dim}# Preview do que update faria${c.reset}`);
+  console.log(`  ${c.cyan}npx jdi-cli@latest update --dry-run${c.reset}`);
+  console.log('');
+  console.log(`  ${c.dim}# Desinstalar (preserva .jdi/ state)${c.reset}`);
+  console.log(`  ${c.cyan}npx jdi-cli@latest uninstall${c.reset}`);
+  console.log('');
+  console.log(`  ${c.dim}# Desinstalar tudo, incluindo state files${c.reset}`);
+  console.log(`  ${c.cyan}npx jdi-cli@latest uninstall --purge --yes${c.reset}`);
   console.log('');
   console.log(`  ${c.dim}# Diagnostico${c.reset}`);
-  console.log(`  ${c.cyan}npx jdi-cli doctor${c.reset}`);
+  console.log(`  ${c.cyan}npx jdi-cli@latest doctor${c.reset}`);
   console.log('');
 
   console.log(`${c.bold}Saiba mais:${c.reset} ${c.cyan}https://github.com/<owner>/jdi${c.reset}`);
@@ -271,6 +344,14 @@ function main() {
   switch (parsed.cmd) {
     case 'install':
       cmdInstall(parsed);
+      break;
+    case 'update':
+    case 'upgrade':
+      cmdUpdate(parsed);
+      break;
+    case 'uninstall':
+    case 'remove':
+      cmdUninstall(parsed);
       break;
     case 'build':
       cmdBuild(parsed);

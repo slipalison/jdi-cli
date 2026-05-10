@@ -81,12 +81,37 @@ Depois disso `jdi` funciona direto sem `npx`.
 
 ### Update pra versao mais recente
 
+Comando dedicado — detecta runtimes ja instalados, sobrescreve runtime files, preserva state, oferece regenerar specialists se template mudou:
+
 ```bash
 cd /path/to/seu/projeto
-npx jdi-cli@latest install <runtime>
+npx jdi-cli@latest update
 ```
 
-State em `.jdi/` eh preservado. Specialists em `.jdi/agents/` tambem.
+Preview do que faria sem aplicar:
+
+```bash
+npx jdi-cli@latest update --dry-run
+```
+
+Forcar regenerar specialists (sem perguntar):
+
+```bash
+npx jdi-cli@latest update --force-specialists
+```
+
+Pular regen de specialists mesmo se template mudou:
+
+```bash
+npx jdi-cli@latest update --skip-specialists
+```
+
+**O que update mexe:**
+- Sobrescreve agents, commands, skills nos runtimes detectados
+- Preserva `.jdi/PROJECT.md`, `DECISIONS.md`, `ROADMAP.md`, `STATE.md`, `phases/`, `registry.md`
+- Preserva config customizada (`opencode.jsonc`, `settings.json`)
+- Atualiza `.jdi/VERSION` com versao nova
+- Detecta specialists antigos (sem `<skills_to_load>`) e oferece regenerar via `/jdi-bootstrap`
 
 ### Primeiro projeto
 
@@ -347,12 +372,49 @@ Roda 9 secoes de verificacao:
 
 ## Desinstalar
 
+Comando dedicado — remove arquivos JDI dos runtimes detectados, preserva `.jdi/` por default (state files com decisoes locked sao destrutivos de perder):
+
 ```bash
-rm -rf .claude/ .github/ .gemini/antigravity/ .opencode/ .jdi/ .githooks/ CLAUDE.md AGENTS.md
-git checkout -- .gitattributes  # ou rm se voce criou so pra JDI
+cd /path/to/seu/projeto
+npx jdi-cli@latest uninstall
 ```
 
-State files em `.jdi/` removidos perdem decisoes locked. Faca backup se importante.
+Pra cada arquivo template (CLAUDE.md, AGENTS.md, copilot-instructions.md, opencode.jsonc) que pode ter sido editado, pergunta antes de remover.
+
+**Especifico por runtime:**
+
+```bash
+npx jdi-cli@latest uninstall claude
+npx jdi-cli@latest uninstall opencode --scope user
+```
+
+**Preview (dry-run):**
+
+```bash
+npx jdi-cli@latest uninstall --dry-run
+```
+
+**Skip prompts:**
+
+```bash
+npx jdi-cli@latest uninstall --yes
+```
+
+**PURGE — remove TUDO incluindo `.jdi/` (DESTRUTIVO):**
+
+```bash
+npx jdi-cli@latest uninstall --purge --yes
+```
+
+`--purge` apaga decisoes locked permanentemente. Faca backup de `.jdi/DECISIONS.md` e `.jdi/ROADMAP.md` se importante.
+
+**Manual (sem CLI):**
+
+```bash
+rm -rf .claude/ .github/ .gemini/antigravity/ .opencode/ .githooks/ CLAUDE.md AGENTS.md
+# .jdi/ separado — destrutivo
+rm -rf .jdi/
+```
 
 ## Reset total (apaga tudo + reinicia)
 
