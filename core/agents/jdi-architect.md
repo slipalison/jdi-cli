@@ -373,28 +373,58 @@ A maioria dos comandos `.NET CLI` / `pnpm` / `npm` rodam identicos em bash e Pow
 
 Write em `.jdi/agents/jdi-reviewer-{slug}.md`.
 
-### S5.5: Injeta `<skills_to_load>` condicional (novo)
+### S5.5: Injeta `<skills_to_load>` (sempre + condicional)
 
-Se `has_frontend=true`, injeta bloco no doer e reviewer apos `</role>` via Edit:
+Apos Write do doer/reviewer, injeta bloco `<skills_to_load>` apos `</role>` via Edit.
+
+**Estrategia (hibrido — minimiza overhead, maximiza ROI):**
+
+- **Sempre injeta** (independente de has_frontend) — skills universais de programacao loaded eagerly por terem alto valor em todo project:
+  - `solid` no doer (escolhas de design importam ao criar)
+  - `dry`, `kiss`, `yagni`, `clean-code` no reviewer (gate 5 = quality review eh onde esses principios pegam pra valer)
+- **Condicional** (`has_frontend=true`) — frontend skills loaded eagerly:
+  - `frontend-rules` no doer + reviewer
+  - `frontend-validator` no reviewer (gate 7)
+- **Discoverable only** (sem `<skills_to_load>`) — modelo descobre por description quando relevante:
+  - `dry`, `kiss`, `yagni`, `clean-code` no doer (modelo invoca quando topa em duplicacao/over-engineering durante implementacao)
+  - `solid` no reviewer (descoberta on-demand quando review topa em design issue)
 
 **No doer (`.jdi/agents/jdi-doer-{slug}.md`):**
 
+Bloco SEMPRE injetado:
 ```markdown
 <skills_to_load>
-- jdi-frontend-rules — quando task toca files de frontend (.tsx, .vue, .svelte, .razor, .cshtml, *.html, *.twig, *.erb, *.blade.php, etc). Aplica regras WCAG 2.2 AA + heuristicas de UX antes de escrever codigo.
+- solid — antes de criar classes/modulos/interfaces, aplica SRP/OCP/LSP/ISP/DIP. Heuristicas de detecao de god class, switch grandes, heranca profunda, dependencia em concretudes.
 </skills_to_load>
+```
+
+Se `has_frontend=true`, append na lista existente:
+```markdown
+- frontend-rules — quando task toca files de frontend (.tsx, .vue, .svelte, .razor, .cshtml, *.html, *.twig, *.erb, *.blade.php, etc). Aplica regras WCAG 2.2 AA + heuristicas de UX antes de escrever codigo.
 ```
 
 **No reviewer (`.jdi/agents/jdi-reviewer-{slug}.md`):**
 
+Bloco SEMPRE injetado:
 ```markdown
 <skills_to_load>
-- jdi-frontend-rules — checklist de UI/UX em gate 5. Greps especificos por anti-pattern.
-- jdi-frontend-validator — gate 7 (UI live). Detecta Playwright, instala se ausente com consent, spawna dev server, navega rotas, captura console/network/a11y/layout findings.
+- dry — gate 5: detecta knowledge duplication via greps de constantes/regex/strings repetidas em 3+ files. Distingue de code coincidence.
+- kiss — gate 5: detecta over-engineering — interface com 1 impl, factory pra new(), config nunca mudada, pass-through layers, heranca profunda.
+- yagni — gate 5: detecta codigo especulativo — params opcionais nunca passados, plugin sem subscribers, TODO sem ticket, generic com 1 tipo.
+- clean-code: nomes ruins, funcoes longas, magic numbers, catch silencioso, boolean params, comentarios redundantes. Smells classicos com greps especificos.
 </skills_to_load>
 ```
 
-Se `has_frontend=false`, NAO injeta nada — skills nem aparecem nos specialists.
+Se `has_frontend=true`, append na lista existente:
+```markdown
+- frontend-rules — gate 5 frontend: greps por <input> sem label, button sem aria-label, localStorage com token, outline removido, etc.
+- frontend-validator — gate 7 (UI live). Detecta Playwright, instala se ausente com consent, spawna dev server, navega rotas, captura console/network/a11y/layout findings.
+```
+
+**Token math (referencia):**
+- Doer: ~3-4k tokens overhead (solid sempre + frontend-rules condicional)
+- Reviewer: ~12-15k tokens overhead (4 universais sempre + 2 frontend condicional)
+- Skills NAO injetadas (discoverable only) somam ~50 tokens cada na descoberta — body so sobe quando modelo invoca.
 
 ### S5.6: Adicionar `.jdi/cache/` ao .gitignore (se has_frontend=true)
 

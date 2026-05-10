@@ -1,6 +1,6 @@
 {
   "name": "jdi-cli",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "JDI (Just Do It) — workflow enxuto pra Claude Code, GitHub Copilot, Antigravity e OpenCode. 6 comandos no loop, 5 agents core, 2 specialists per-project.",
   "bin": {
     "jdi": "bin/jdi.js"
@@ -57,6 +57,6 @@
   "scripts": {
     "build": "node bin/jdi.js build",
     "doctor": "node bin/jdi.js doctor",
-    "test:local": "npm pack && echo 'Package generated. Test with: npx ./jdi-cli-1.2.0.tgz install <runtime>'"
+    "test:local": "npm pack && echo 'Package generated. Test with: npx ./jdi-cli-1.2.1.tgz install <runtime>'"
   }
 }
