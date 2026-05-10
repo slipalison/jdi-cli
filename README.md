@@ -72,43 +72,114 @@ Done. Swap `opencode` for `claude`, `copilot`, `antigravity`, or `all` depending
 
 ## CLI subcommands
 
+Quick reference of every flag per subcommand:
+
+### `install <runtime>` — install JDI into the project
+
+| Flag | Values | Default | Purpose |
+|---|---|---|---|
+| `--scope` / `-s` | `user` \| `project` | `project` | `project` writes `.claude/`/`.opencode/`/etc into the project; `user` writes to `~/.claude/`, `~/.config/opencode/`, `~/.gemini/antigravity/` |
+| `--no-color` | flag | false | Disable ANSI colors |
+
 ```bash
-# Install JDI into your project
 npx jdi-cli@latest install claude
 npx jdi-cli@latest install copilot
 npx jdi-cli@latest install antigravity --scope user
 npx jdi-cli@latest install opencode
 npx jdi-cli@latest install all                       # all 4 runtimes at once
+```
 
-# Optional: Playwright + MCP for all 4 CLIs (one shot)
-npx jdi-cli@latest install-playwright                # all detected runtimes
-npx jdi-cli@latest install-playwright --skip-browser # don't download chromium
+### `install-playwright` — Playwright dev dep + chromium browser + MCP config
+
+| Flag | Values | Default | Purpose |
+|---|---|---|---|
+| `--skip-browser` | flag | false | Skip `npx playwright install chromium` (~170MB) |
+| `--skip-mcp` | flag | false | Only install dep + browser, skip injecting MCP configs |
+| `--runtime` | `claude` \| `opencode` \| `copilot` \| `antigravity` \| `all` | `all` | Limit MCP injection to one runtime |
+| `--antigravity-scope` | `user` \| `project` | `user` | `~/.gemini/settings.json` vs `.gemini/settings.json` |
+
+Injects MCP into all 4 detected runtimes (see Playwright section above for paths).
+
+```bash
+npx jdi-cli@latest install-playwright
+npx jdi-cli@latest install-playwright --skip-browser
 npx jdi-cli@latest install-playwright --runtime claude
 npx jdi-cli@latest install-playwright --runtime copilot
+npx jdi-cli@latest install-playwright --skip-mcp                 # just dep + browser
+npx jdi-cli@latest install-playwright --antigravity-scope project
+```
 
-# Optional: Caveman plugin (~75% token compression via output style)
-npx jdi-cli@latest install-caveman                   # user scope (default)
+### `install-caveman` — clone Caveman plugin
+
+| Flag | Values | Default | Purpose |
+|---|---|---|---|
+| `--repo` | git URL | `https://github.com/JuliusBrussee/caveman.git` | Override caveman source repo (fork support) |
+| `--scope` | `user` \| `project` | `user` | `~/.claude/plugins/caveman/` vs `.claude/plugins/caveman/` |
+| `--force` | flag | false | Overwrite existing install without prompt |
+
+```bash
+npx jdi-cli@latest install-caveman                       # user scope, default repo
 npx jdi-cli@latest install-caveman --scope project
-npx jdi-cli@latest install-caveman --repo <url>      # custom fork
+npx jdi-cli@latest install-caveman --repo https://github.com/forked/caveman.git --force
+```
 
-# Diagnostic
-npx jdi-cli@latest doctor
-npx jdi-cli@latest doctor --verbose
+### `update` — refresh runtime files, preserve state
 
-# Update JDI in an installed project
+| Flag | Values | Default | Purpose |
+|---|---|---|---|
+| `--dry-run` | flag | false | Show what would change without applying |
+| `--force-specialists` | flag | false | Regenerate specialists without asking (assumes Yes) |
+| `--skip-specialists` | flag | false | Leave specialists alone even if template changed |
+
+```bash
 npx jdi-cli@latest update
 npx jdi-cli@latest update --dry-run
 npx jdi-cli@latest update --force-specialists
+npx jdi-cli@latest update --skip-specialists
+```
 
-# Uninstall JDI (preserves .jdi/ by default)
-npx jdi-cli@latest uninstall
+Update does NOT refresh Playwright dep, MCP configs, or Caveman plugin. Re-run their respective subcommands to refresh.
+
+### `uninstall [runtime]` — remove JDI files
+
+| Flag | Values | Default | Purpose |
+|---|---|---|---|
+| `--scope` | `user` \| `project` \| `both` | `both` | Limit removal scope |
+| `--dry-run` | flag | false | Preview without applying |
+| `--yes` | flag | false | Skip all interactive prompts |
+| `--purge` | flag | false | **DESTRUCTIVE:** also wipe `.jdi/` (locked decisions lost) |
+
+```bash
+npx jdi-cli@latest uninstall                          # all detected runtimes, preserves .jdi/
 npx jdi-cli@latest uninstall claude
-npx jdi-cli@latest uninstall --purge --yes           # destructive: also wipes .jdi/
+npx jdi-cli@latest uninstall opencode --scope user
+npx jdi-cli@latest uninstall --dry-run                # preview
+npx jdi-cli@latest uninstall --yes                    # skip prompts
+npx jdi-cli@latest uninstall --purge --yes            # WIPE EVERYTHING including .jdi/
+```
 
-# Build runtimes (contributors only)
+### `doctor` — environment diagnostic
+
+| Flag | Values | Default | Purpose |
+|---|---|---|---|
+| `--verbose` / `-v` | flag | false | Show note-level (debug) lines |
+
+```bash
+npx jdi-cli@latest doctor
+npx jdi-cli@latest doctor --verbose
+```
+
+### `build` — regenerate runtimes/ from core/ (contributors only)
+
+No flags. Used inside the JDI source repo after editing `core/`.
+
+```bash
 npx jdi-cli@latest build
+```
 
-# Version + help
+### Misc
+
+```bash
 npx jdi-cli@latest --version
 npx jdi-cli@latest help
 ```
@@ -445,15 +516,92 @@ See [AGENTS.md](AGENTS.md) for full details.
 
 ## Commands inventory
 
-**Main loop (7):** `jdi-new`, `jdi-bootstrap`, `jdi-discuss`, `jdi-plan`, `jdi-do`, `jdi-verify`, `jdi-ship`
+**Main loop (7):**
 
-**Brownfield entry (1):** `jdi-adopt`
+| Command | Args | Flags | Purpose |
+|---|---|---|---|
+| `/jdi-new <description>` | description (optional) | `--reset` (wipes `.jdi/` first, asks confirm) | Greenfield entry: researcher + PROJECT.md + ROADMAP.md |
+| `/jdi-bootstrap` | — | — (idempotent: prompts Recreate/Keep/Cancel if specialists exist) | Generate doer + reviewer per project. Multi-stack opt-in via interactive question |
+| `/jdi-discuss <N>` | phase number | — | Adaptive question loop → CONTEXT.md |
+| `/jdi-plan <N>` | phase number | `--review` (preview PLAN.md before save, ask approve/edit/cancel) | Decompose phase into tasks + waves → PLAN.md |
+| `/jdi-do <N>` | phase number | `--sequential` (force sequential execution even if waves permit parallel) | Execute tasks via doer specialist(s) → SUMMARY.md |
+| `/jdi-verify <N>` | phase number | — | Run reviewer specialist gates → REVIEW.md (verdict APPROVED / APPROVED_WITH_WARNINGS / BLOCKED) |
+| `/jdi-ship <N>` | phase number | — | Update ROADMAP, advance phase. Gates: verdict must not be BLOCKED |
 
-**Ralph mode (1):** `jdi-loop`
+**Brownfield entry (1):**
 
-**Meta (1, contributors only):** `jdi-create`
+| Command | Args | Flags | Purpose |
+|---|---|---|---|
+| `/jdi-adopt <description>` | description (optional override; defaults to README/inferred) | — | Scan existing repo, infer stack/code-design, confirm with user, mark `adopted: true` + D-2 boundary commit |
+
+**Ralph mode (1):**
+
+| Command | Args | Flags | Purpose |
+|---|---|---|---|
+| `/jdi-loop <N>` | phase number | `--max-iter=N` (default 5), `--max-resets=N` (default 3) | Auto-iterate `/jdi-do` ↔ `/jdi-verify` until APPROVED. Oscillation detection, human gate between rounds |
+
+**Meta (1, contributors only):**
+
+| Command | Args | Flags | Purpose |
+|---|---|---|---|
+| `/jdi-create <description>` | description (optional) | — | Generate new generic agent/skill in `core/`. For contributors editing JDI source, not consumers |
 
 See [COMMANDS.md](COMMANDS.md) for full details.
+
+### Adding a specialist mid-project
+
+`/jdi-bootstrap` is idempotent but its current "Recreate" mode wipes ALL specialists and regenerates. There is no `--add` mode yet (planned). To add a specialist to an existing multi-stack project today:
+
+**Option A — Re-run bootstrap (nukes manual edits):**
+
+```
+/jdi-bootstrap
+```
+
+When asked "Specialist already exists. Recreate / Keep / Cancel?":
+1. Pick **Recreate**
+2. At the multi-stack question, pick the new total count (e.g. was single → now "Multi 2 pairs")
+3. Provide `stack_label` + `file_glob` for each (existing + new)
+
+**Caveat:** any hand-edits in `.jdi/agents/jdi-doer-{slug}.md` or `jdi-reviewer-{slug}.md` get overwritten. If you have customizations, back them up first.
+
+**Option B — Manual edit (preserves customizations):**
+
+1. Copy an existing specialist as a template:
+   ```bash
+   cp .jdi/agents/jdi-doer-myapp.md      .jdi/agents/jdi-doer-myapp-newstack.md
+   cp .jdi/agents/jdi-reviewer-myapp.md  .jdi/agents/jdi-reviewer-myapp-newstack.md
+   ```
+2. Edit both:
+   - Rename inside `name:` and references
+   - Update `scope.file_glob` + `scope.stack_label` frontmatter
+   - Update `<role>` block (stack scope + STACK + TEST_FRAMEWORK + COVERAGE_MIN)
+   - Update build/test/lint/coverage commands in reviewer gates
+3. Append rows to `.jdi/specialists.md` and `.jdi/reviewers.md`:
+   ```markdown
+   | NewStack | jdi-doer-myapp-newstack | **/*.{ext1,ext2} | executor for files matching glob |
+   | jdi-reviewer-myapp-newstack | **/*.{ext1,ext2} | /jdi-verify | yes, if BLOCKED |
+   ```
+4. Append to `.jdi/registry.md` (audit trail):
+   ```markdown
+   ## R-{N+1} ({date})
+   **Type:** specialist (doer + reviewer, manual add)
+   **Slug:** myapp-newstack
+   **Stack:** NewStack
+   ```
+5. Commit:
+   ```bash
+   git add .jdi/agents/ .jdi/specialists.md .jdi/reviewers.md .jdi/registry.md
+   git commit -m "chore(jdi): add NewStack specialist (manual)"
+   ```
+
+From the next `/jdi-plan`, the new specialist routes automatically based on its glob.
+
+**Option C — Wait for `/jdi-bootstrap --add`** (planned next minor):
+
+```
+/jdi-bootstrap --add    # asks 1 new specialist only, preserves existing
+```
 
 ## Runtimes supported
 
