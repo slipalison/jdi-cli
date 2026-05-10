@@ -62,10 +62,7 @@ git commit -m "chore(state): phase {NN} discussed"
 
 ### Passo 5: Confirma
 ```
-CONTEXT.md: .jdi/phases/{NN-slug}/CONTEXT.md ({lines} linhas)
-Decisoes capturadas: {count}
-Scope creep: {count} item em todos.md
-
+CONTEXT.md ok ({lines} linhas, {count} decisoes, {creep} em todos.md).
 Proximo: /jdi-plan {N}
 ```
 

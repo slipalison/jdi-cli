@@ -88,24 +88,42 @@ Sem batch. Sem chain. Uma por vez.
 ### Passo 4: Escreve CONTEXT.md
 Path: `.jdi/phases/{NN-slug}/CONTEXT.md`
 
-Template em [templates/CONTEXT.md](../templates/CONTEXT.md).
+```markdown
+# Phase {N}: {name} — Context
+
+## Goal
+{do ROADMAP, 1 linha}
+
+## Decisoes locked
+- D-{X}: {decisao}
+- D-{Y}: {decisao}
+
+## Canonical refs
+- {path/url citado pelo user}
+
+## Out of scope
+- {item movido pra todos.md}
+
+## Notas
+{contexto extra que ajuda planner, opcional}
+```
+
+Max 1500 token. Se passar, sugere split de phase.
 
 ### Passo 5: Confirma
-Imprime resumo:
 ```
-CONTEXT.md criado: .jdi/phases/{NN-slug}/CONTEXT.md
-Decisoes: D-{X}, D-{Y}, D-{Z}
-Proximo passo: /jdi-plan {N}
+CONTEXT.md ok. Decisoes: D-{X}, D-{Y}, D-{Z}.
+Proximo: /jdi-plan {N}
 ```
 
 </process>
 
 <rules>
 - Nunca decida pelo user. So pergunta.
-- Nunca expanda escopo. Scope creep -> todos.md.
-- Nunca repergunte algo ja decidido em DECISIONS.md anterior.
-- Nunca crie mais de 5 D-XX por sessao.
-- CONTEXT.md max 1500 token. Se passar, sugere split de phase.
+- Scope creep -> todos.md, redireciona.
+- Nunca repergunte algo ja em DECISIONS.md.
+- Max 5 D-XX por sessao.
+- CONTEXT.md max 1500 token. Passou -> sugere split.
 </rules>
 
 <fallbacks>

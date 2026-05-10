@@ -91,19 +91,17 @@ Sequential dispatch — UM `Agent()` por message com `run_in_background: true`:
 ```
 Agent(
   subagent_type="{DOER}",
-  description="Execute T-{X}.{Y} of phase {N}",
-  prompt="
-    Execute task T-{X}.{Y} from .jdi/phases/{NN-slug}/PLAN.md.
-    Le PLAN.md, le PROJECT.md, executa task isolada, commita atomico, atualiza status.
-    Nao modifica files fora de files_modified da task.
-  ",
+  description="Execute T-{X}.{Y} phase {N}",
+  prompt="phase={N}, task=T-{X}.{Y}, mode=single_task",
   run_in_background: true
 )
 ```
 
 Aguarda todos retornarem antes da proxima wave.
 
-**Se sequencial:** dispara um doer por task, espera, dispara proximo.
+**Se sequencial:** mesmo prompt, sem `run_in_background`, um por vez.
+
+Doer le PLAN.md/PROJECT.md/CONTEXT.md sozinho — convencao do specialist.
 
 ### Passo 6: Apos cada wave
 
@@ -137,13 +135,8 @@ git commit -m "chore(state): phase {N} executed"
 ### Passo 9: Confirma
 
 ```
-Phase {N} executed:
-- Tasks: {done}/{total} completed, {blocked} blocked
-- Waves rodadas: {W}
-- Files modified: {count}
-
+Phase {N}: {done}/{total} tasks ({blocked} blocked), {W} waves, {count} files.
 SUMMARY: .jdi/phases/{NN-slug}/SUMMARY.md
-
 Proximo: /jdi-verify {N}
 ```
 

@@ -95,89 +95,43 @@ test -f .jdi/agents/jdi-reviewer-*.md || { echo "reviewer nao foi criado"; exit 
 grep -q "jdi-doer-" .jdi/specialists.md || echo "warn: routing nao atualizado"
 ```
 
-### Passo 4.5: Merge `.opencode/opencode.jsonc` (se OpenCode em uso e LLM provider custom)
+### Passo 4.5: Merge `.opencode/opencode.jsonc` (se OpenCode + provider custom)
 
-Le `llm_config` do PROJECT.md. Se:
-- `llm_config.provider` ausente OU `default_model_opencode` comeca com `anthropic/` -> SKIP (Anthropic eh nativo no OpenCode)
-- `llm_config.provider` presente -> faz merge no `.opencode/opencode.jsonc`
+Le `llm_config` do PROJECT.md.
 
-**Procedure de merge:**
+**Skip merge se:**
+- `llm_config.provider` ausente, OU
+- `default_model_opencode` comeca com `anthropic/` (nativo no OpenCode), OU
+- `.opencode/` nao existe
 
-1. Verifica `.opencode/` existe. Se nao: SKIP (OpenCode nao instalado).
+**Senao, merge:**
 
-2. Le `.opencode/opencode.jsonc`. Se ausente, cria:
-   ```jsonc
-   {
-     "$schema": "https://opencode.ai/config.json"
-   }
-   ```
+1. Le `.opencode/opencode.jsonc`. Cria com `{ "$schema": "https://opencode.ai/config.json" }` se ausente.
+2. Append em `provider.<name>` cada entry de `llm_config.provider`. Se ja existe: warn + mantem existente.
+3. Set `agent["jdi-doer-{slug}"].model` e `agent["jdi-reviewer-{slug}"].model` = `default_model_opencode`. Conflito: pergunta overwrite/skip.
+4. Set `model:` global = `default_model_opencode` se ausente.
+5. Write preservando comentarios.
 
-3. Parse JSONC (preserva comentarios). Identifica:
-   - `provider` existe?
-   - `agent` existe?
+**Tooling JSONC:** usa `comment-json` (npm) ou regex strip + JSON parse + serializer com header fixo. Inline comments perdem-se (aceitavel pra MVP).
 
-4. **Merge `provider`:**
-   - Pra cada provider em `llm_config.provider`:
-     - Se ja existe em `provider.<name>`: warn "provider {name} ja configurado, mantendo existente"
-     - Senao: append entry com `npm`, `name`, `options.baseURL`, `models`
-
-   Exemplo apos merge:
-   ```jsonc
-   "provider": {
-     "ollama": {
-       "npm": "@ai-sdk/openai-compatible",
-       "name": "Ollama",
-       "options": { "baseURL": "http://localhost:11434/v1" },
-       "models": {
-         "glm-5.1:cloud": { "name": "GLM 5.1 Cloud", "tools": true }
-       }
-     }
-   }
-   ```
-
-5. **Merge `agent.<jdi-doer-{slug}>.model` e `agent.<jdi-reviewer-{slug}>.model`:**
-   - Aponta pro `default_model_opencode`
-   - Se ja existe agent override: pergunta overwrite ou skip
-
-   Exemplo:
-   ```jsonc
-   "agent": {
-     "jdi-doer-todo-app": { "model": "ollama/glm-5.1:cloud" },
-     "jdi-reviewer-todo-app": { "model": "ollama/glm-5.1:cloud" }
-   }
-   ```
-
-6. **Set `model:` global (default do project)** se ausente:
-   ```jsonc
-   "model": "ollama/glm-5.1:cloud"
-   ```
-
-7. Write back preservando comentarios + ordering.
-
-**Implementation note:** preferir tooling JSONC-aware (jq nao serve direto pq jsonc tem comentarios). Workaround pratico:
-- Le file como string
-- Parse JSONC -> JSON (strip comments) via regex simples ou parser dedicado
-- Modifica em memoria
-- Re-escreve com comentarios preservados como header explicativo (perde comentarios inline — aceitavel)
-
-Alternativa robusta: usar `comment-json` (npm) ou parser JSONC nativo da extensao VS Code. Pra MVP, regex strip + JSON parse + custom serializer com comentario fixo no topo.
-
-**Output esperado** (caso Ollama):
+**Output exemplo (Ollama):**
 ```jsonc
-// OpenCode config — JDI managed
-// Manual edits abaixo desta linha sao preservados quando bootstrap rodar de novo
-// (provider e agent.jdi-* sao gerenciados pelo JDI; outros campos sao seus)
+// OpenCode config — JDI managed (provider + agent.jdi-* gerenciados; resto eh seu)
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
-    "ollama": { ... }
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama",
+      "options": { "baseURL": "http://localhost:11434/v1" },
+      "models": { "glm-5.1:cloud": { "name": "GLM 5.1 Cloud", "tools": true } }
+    }
   },
   "model": "ollama/glm-5.1:cloud",
   "agent": {
     "jdi-doer-{slug}": { "model": "ollama/glm-5.1:cloud" },
     "jdi-reviewer-{slug}": { "model": "ollama/glm-5.1:cloud" }
-  },
-  "permission": { ... }
+  }
 }
 ```
 
@@ -197,13 +151,10 @@ git commit -m "chore(state): specialists ready for {slug}"
 
 ### Passo 6: Confirma
 
-```
-Specialists prontos pro {project_name}:
-- jdi-doer-{slug}     (executor)
-- jdi-reviewer-{slug} (reviewer)
+Architect ja imprimiu confirmacao no S8. Bootstrap emite apenas:
 
-Routing: .jdi/specialists.md, .jdi/reviewers.md
-Proximo: /jdi-discuss 1
+```
+Bootstrap ok. Proximo: /jdi-discuss 1
 ```
 
 </process>

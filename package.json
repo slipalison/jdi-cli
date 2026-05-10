@@ -1,6 +1,6 @@
 {
   "name": "jdi-cli",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "JDI (Just Do It) — workflow enxuto pra Claude Code, GitHub Copilot, Antigravity e OpenCode. 9 comandos (7 loop + ralph + meta), 5 agents core, 2 specialists per-project.",
   "bin": {
     "jdi": "bin/jdi.js"

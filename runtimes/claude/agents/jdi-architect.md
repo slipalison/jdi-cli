@@ -344,58 +344,37 @@ A maioria dos comandos `.NET CLI` / `pnpm` / `npm` rodam identicos em bash e Pow
 
 Write em `.jdi/agents/jdi-reviewer-{slug}.md`.
 
-### S5.5: Injeta `<skills_to_load>` (sempre + condicional)
+### S5.5: Injeta `<skills_to_load>`
 
 Apos Write do doer/reviewer, injeta bloco `<skills_to_load>` apos `</role>` via Edit.
 
-**Estrategia (hibrido — minimiza overhead, maximiza ROI):**
-
-- **Sempre injeta** (independente de has_frontend) — skills universais de programacao loaded eagerly por terem alto valor em todo project:
-  - `solid` no doer (escolhas de design importam ao criar)
-  - `dry`, `kiss`, `yagni`, `clean-code` no reviewer (gate 5 = quality review eh onde esses principios pegam pra valer)
-- **Condicional** (`has_frontend=true`) — frontend skills loaded eagerly:
-  - `frontend-rules` no doer + reviewer
-  - `frontend-validator` no reviewer (gate 7)
-- **Discoverable only** (sem `<skills_to_load>`) — modelo descobre por description quando relevante:
-  - `dry`, `kiss`, `yagni`, `clean-code` no doer (modelo invoca quando topa em duplicacao/over-engineering durante implementacao)
-  - `solid` no reviewer (descoberta on-demand quando review topa em design issue)
-
-**No doer (`.jdi/agents/jdi-doer-{slug}.md`):**
-
-Bloco SEMPRE injetado:
+**Doer — bloco sempre:**
 ```markdown
 <skills_to_load>
-- solid — antes de criar classes/modulos/interfaces, aplica SRP/OCP/LSP/ISP/DIP. Heuristicas de detecao de god class, switch grandes, heranca profunda, dependencia em concretudes.
+- solid — antes de criar classes/modulos/interfaces. Detecta god class, switch grandes, heranca profunda, dep em concretudes.
 </skills_to_load>
 ```
 
-Se `has_frontend=true`, append na lista existente:
+Se `has_frontend=true`, append:
 ```markdown
-- frontend-rules — quando task toca files de frontend (.tsx, .vue, .svelte, .razor, .cshtml, *.html, *.twig, *.erb, *.blade.php, etc). Aplica regras WCAG 2.2 AA + heuristicas de UX antes de escrever codigo.
+- frontend-rules — quando task toca .tsx/.vue/.svelte/.razor/.cshtml/.html/.twig/.erb/.blade.php. WCAG 2.2 AA + UX.
 ```
 
-**No reviewer (`.jdi/agents/jdi-reviewer-{slug}.md`):**
-
-Bloco SEMPRE injetado:
+**Reviewer — bloco sempre:**
 ```markdown
 <skills_to_load>
-- dry — gate 5: detecta knowledge duplication via greps de constantes/regex/strings repetidas em 3+ files. Distingue de code coincidence.
-- kiss — gate 5: detecta over-engineering — interface com 1 impl, factory pra new(), config nunca mudada, pass-through layers, heranca profunda.
-- yagni — gate 5: detecta codigo especulativo — params opcionais nunca passados, plugin sem subscribers, TODO sem ticket, generic com 1 tipo.
-- clean-code: nomes ruins, funcoes longas, magic numbers, catch silencioso, boolean params, comentarios redundantes. Smells classicos com greps especificos.
+- dry — gate 5: knowledge duplication via greps de constantes/regex/strings em 3+ files.
+- kiss — gate 5: over-engineering — interface com 1 impl, factory pra new(), pass-through, heranca profunda.
+- yagni — gate 5: codigo especulativo — params opcionais nunca passados, TODO sem ticket, generic com 1 tipo.
+- clean-code — nomes ruins, funcoes longas, magic numbers, catch silencioso, boolean params, comentarios redundantes.
 </skills_to_load>
 ```
 
-Se `has_frontend=true`, append na lista existente:
+Se `has_frontend=true`, append:
 ```markdown
-- frontend-rules — gate 5 frontend: greps por <input> sem label, button sem aria-label, localStorage com token, outline removido, etc.
-- frontend-validator — gate 7 (UI live). Detecta Playwright, instala se ausente com consent, spawna dev server, navega rotas, captura console/network/a11y/layout findings.
+- frontend-rules — gate 5 frontend: <input> sem label, button sem aria-label, localStorage com token, outline removido.
+- frontend-validator — gate 7 (UI live). Playwright auto-install consent, dev server, rotas, console/network/a11y/layout.
 ```
-
-**Token math (referencia):**
-- Doer: ~3-4k tokens overhead (solid sempre + frontend-rules condicional)
-- Reviewer: ~12-15k tokens overhead (4 universais sempre + 2 frontend condicional)
-- Skills NAO injetadas (discoverable only) somam ~50 tokens cada na descoberta — body so sobe quando modelo invoca.
 
 ### S5.6: Adicionar `.jdi/cache/` ao .gitignore (se has_frontend=true)
 
@@ -450,13 +429,7 @@ git commit -m "chore(jdi): bootstrap specialists for {project_name}"
 ### S8: Confirma
 
 ```
-Specialists do {project_name} criados:
-- doer:     .jdi/agents/jdi-doer-{slug}.md
-- reviewer: .jdi/agents/jdi-reviewer-{slug}.md
-
-Roteados em .jdi/specialists.md e .jdi/reviewers.md.
-
-Proximo: /jdi-discuss 1
+Specialists {project_name}: doer + reviewer criados em .jdi/agents/. Routing ok.
 ```
 
 ---
@@ -723,26 +696,13 @@ Detecta runtime ativo:
 
 ### Passo 11: Smoke test
 
-Mostra ao user **como invocar** o que foi criado:
+Mostra como invocar:
 
-#### Agent
-```
-Criado: jdi-{nome}
-Como invocar:
-- Claude:      Spawn via Agent tool com subagent_type=jdi-{nome}
-- Copilot:     @jdi-{nome} no chat
-- Antigravity: descobre por trigger ou peca explicitamente
-```
+**Agent:** `Criado jdi-{nome}. Claude: Agent tool subagent_type=jdi-{nome}. Copilot: @jdi-{nome}. Antigravity: trigger words.`
 
-#### Skill
-```
-Criado: skill {nome}
-Sera carregada automaticamente por: {agents listados}
-Para forcar uso: pedir ao agent "use skill {nome}"
-```
+**Skill:** `Skill {nome} ok. Carregada por: {agents}. Forcar: "use skill {nome}".`
 
-#### Composite
-ambos.
+**Composite:** ambos.
 
 ### Passo 12: Commit
 

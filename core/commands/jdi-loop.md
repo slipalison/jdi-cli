@@ -102,47 +102,20 @@ loop:
   iter++
 
   # --- Step A: dispatch doer ---
-  Le LOOP.md history pra detectar last_review_path
-  Le PLAN.md, CONTEXT.md, last REVIEW.md (se existe)
-
   Agent(
     subagent_type=$DOER,
     description="Loop iter {iter} doer phase {N}",
-    prompt="
-      Execute phase {N} (doer mode em loop iter {iter}).
-
-      Le:
-      - .jdi/PROJECT.md
-      - .jdi/DECISIONS.md
-      - .jdi/phases/{NN-slug}/CONTEXT.md
-      - .jdi/phases/{NN-slug}/PLAN.md
-      - .jdi/phases/{NN-slug}/LOOP.md (history de iter anteriores — failed approaches)
-      - .jdi/phases/{NN-slug}/REVIEW.md (se existe — findings do reviewer iter anterior)
-
-      Se REVIEW.md existe e veredicto == BLOCKED:
-        Foca em corrigir os blockers listados.
-        Nao re-implementa tasks ja completed sem razao.
-
-      Se nao existe REVIEW.md (primeira iter):
-        Comporta-se como /jdi-do normal — implementa tasks pendentes do PLAN.
-
-      Apos execucao:
-        Atualiza/append SUMMARY.md
-        Commit atomico (Conventional Commits, scope = {phase-slug})
-    "
+    prompt="phase={N}, mode=ralph_loop, iter={iter}"
   )
+
+  # Doer detecta ralph mode pela presenca de LOOP.md + REVIEW.md (Passo 1 do specialist).
+  # Se REVIEW.md veredicto=BLOCKED, foca em corrigir blockers.
 
   # --- Step B: dispatch reviewer ---
   Agent(
     subagent_type=$REVIEWER,
     description="Loop iter {iter} reviewer phase {N}",
-    prompt="
-      Verifica phase {N} (review mode em loop iter {iter}).
-
-      Roda gates 1-7 normalmente.
-      Escreve REVIEW.md com veredicto.
-      Read-only — nao edita codigo.
-    "
+    prompt="phase={N}, mode=verify, iter={iter}"
   )
 
   # --- Step C: parse veredicto ---
@@ -152,8 +125,6 @@ loop:
   VERDICT=$(grep -oE 'Veredicto:\*\* (APPROVED|APPROVED_WITH_WARNINGS|BLOCKED)' "$REVIEW_FILE" | awk '{print $2}')
 
   # --- Step D: hash dos findings (oscillation detection) ---
-  # Extrai bloco de Blockers + Warnings (entre "## Blockers" e proximo "## ", exclusivo)
-  # Range awk simples colapsa quando A e B compartilham padrao — flag-based eh confiavel:
   FINDING_BODY=$(awk '
     /^## Blockers/ { flag=1; next }
     /^## Warnings/ { flag=1; next }
@@ -161,10 +132,7 @@ loop:
     flag { print }
   ' "$REVIEW_FILE")
 
-  # Normaliza: lowercase, trim, sort, remove linhas vazias e timestamps
   FINDING_HASH=$(echo "$FINDING_BODY" | sed 's/[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[^ ]*//g' | tr '[:upper:]' '[:lower:]' | grep -v '^[[:space:]]*$' | sort -u | sha256sum | cut -c1-12)
-
-  # Se nenhum blocker/warning extraido, hash de string vazia (consistente)
   [ -z "$FINDING_HASH" ] && FINDING_HASH=$(echo -n "" | sha256sum | cut -c1-12)
 
   # --- Step E: append history em LOOP.md ---
@@ -287,17 +255,11 @@ pause_logic:
   exit 0
 ```
 
-### Passo 7: Confirmacao final (caso de convergencia)
+### Passo 7: Confirmacao final (convergencia)
 
 ```
-Phase {N} convergiu apos $iter iter (resets: $total_resets).
-
-Veredicto: $VERDICT
-Total commits no loop: $(git log --oneline | grep -c "{phase-slug}")
-
-LOOP.md: .jdi/phases/{NN-slug}/LOOP.md (audit trail completo)
-REVIEW.md: .jdi/phases/{NN-slug}/REVIEW.md (gates finais)
-
+Phase {N}: convergiu em $iter iter (resets: $total_resets). Veredicto: $VERDICT.
+LOOP.md + REVIEW.md em .jdi/phases/{NN-slug}/
 Proximo: /jdi-ship {N}
 ```
 

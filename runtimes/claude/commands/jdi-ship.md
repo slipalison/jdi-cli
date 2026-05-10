@@ -93,12 +93,8 @@ git tag "phase-{N}-{slug}"
 
 ```
 Phase {N} shipped.
-
-ROADMAP atualizado.
-{Se mais phases:}
-  Proximo: /jdi-discuss {N+1}
-{Se ultima:}
-  Projeto entregue. Tag final: phase-{N}-{slug}.
+{se mais phases:} Proximo: /jdi-discuss {N+1}
+{se ultima:} Projeto entregue. Tag: phase-{N}-{slug}
 ```
 
 </process>

@@ -178,44 +178,20 @@ Decidido em /jdi-new. Nao mudar.
 
 ```yaml
 llm_config:
-  # Default Anthropic (skip se nao for OpenCode user):
-  default_model_opencode: anthropic/claude-sonnet-4-20250514
-
-  # Ou Ollama local (Q5 = b):
-  # default_model_opencode: ollama/glm-5.1:cloud
+  default_model_opencode: {modelo escolhido na Q5}
+  # se Q5 != Anthropic, append provider:
   # provider:
-  #   name: ollama
-  #   npm: "@ai-sdk/openai-compatible"
-  #   display_name: Ollama
-  #   baseURL: http://localhost:11434/v1
+  #   name: {ollama|openai|custom}
+  #   npm: {pacote}
+  #   display_name: {nome}
+  #   baseURL: {url}
   #   models:
-  #     - id: "glm-5.1:cloud"
-  #       name: "GLM 5.1 Cloud"
-  #       tools: true
-
-  # Ou OpenAI direto (Q5 = c):
-  # default_model_opencode: openai/gpt-5
-  # provider:
-  #   name: openai
-  #   npm: "@ai-sdk/openai"
-  #   display_name: OpenAI
-  #   models:
-  #     - id: "gpt-5"
-
-  # Ou Custom (Q5 = d):
-  # default_model_opencode: together/meta-llama-3-70b
-  # provider:
-  #   name: together
-  #   npm: "@ai-sdk/openai-compatible"
-  #   display_name: Together AI
-  #   baseURL: https://api.together.xyz/v1
-  #   models:
-  #     - id: "meta-llama-3-70b"
-  #       name: "Llama 3 70B"
-  #       tools: true
+  #     - id: {model_id}
+  #       name: {label}
+  #       tools: {true|false}
 ```
 
-Aplicado pelo `/jdi-bootstrap` quando gera specialists e merge no `.opencode/opencode.jsonc`. Outros runtimes (Claude Code, Copilot, Antigravity) usam configuracao do proprio CLI — sem secao extra.
+Aplicado pelo `/jdi-bootstrap` no `.opencode/opencode.jsonc`. Outros runtimes ignoram.
 ```
 
 ### Passo 5: Gera ROADMAP.md
@@ -291,19 +267,9 @@ git commit -m "chore(jdi): initialize {project_name}"
 ### Passo 9: Confirma
 
 ```
-Projeto inicializado: {project_name}
-Slug: {slug}
-Stack: {stack}
-Code design: {design}
-Phases: {N}
-
-Files:
-- .jdi/PROJECT.md
-- .jdi/ROADMAP.md
-- .jdi/STATE.md
-- .jdi/DECISIONS.md
-
-Proximo: /jdi-bootstrap (cria specialists do projeto)
+{project_name} ({slug}) ok. Stack: {stack}. Design: {design}. Phases: {N}.
+Files: .jdi/{PROJECT,ROADMAP,STATE,DECISIONS}.md
+Proximo: /jdi-bootstrap
 ```
 
 </process>

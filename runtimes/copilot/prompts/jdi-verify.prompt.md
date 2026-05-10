@@ -57,16 +57,11 @@ REVIEWER=$(grep -oE 'jdi-reviewer-[a-z0-9-]+' .jdi/reviewers.md | head -1)
 Agent(
   subagent_type="{REVIEWER}",
   description="Verify phase {N}",
-  prompt="
-    Verifica phase {N} (.jdi/phases/{NN-slug}/).
-    Roda gates 1-6: build, tests, coverage, lint, security, plan consistency.
-    Escreve REVIEW.md com veredicto.
-    Read-only — nao modifica codigo.
-  "
+  prompt="phase={N}, mode=verify"
 )
 ```
 
-Aguarda.
+Reviewer roda gates 1-7 sozinho (definidos no specialist). Read-only. Aguarda.
 
 ### Passo 4: Le veredicto
 
@@ -92,38 +87,22 @@ git commit -m "docs({NN-slug}): verify phase ({VERDICT})"
 
 ### Passo 6: Confirma
 
-**Se APPROVED:**
+**APPROVED:**
 ```
-Phase {N}: APPROVED
-
-Todos os gates passaram. REVIEW.md em .jdi/phases/{NN-slug}/
-
-Proximo: /jdi-ship {N}
+Phase {N}: APPROVED. Proximo: /jdi-ship {N}
 ```
 
-**Se APPROVED_WITH_WARNINGS:**
+**APPROVED_WITH_WARNINGS:**
 ```
-Phase {N}: APPROVED_WITH_WARNINGS
-
-{count} warnings (nao bloqueiam, mas vale conferir).
+Phase {N}: APPROVED_WITH_WARNINGS ({count} warnings).
 REVIEW.md: .jdi/phases/{NN-slug}/REVIEW.md
-
-Proximo: /jdi-ship {N} (ou corrige warnings antes)
+Proximo: /jdi-ship {N} (ou corrige antes)
 ```
 
-**Se BLOCKED:**
+**BLOCKED:**
 ```
-Phase {N}: BLOCKED
-
-{count} blockers:
-{lista resumida}
-
-REVIEW.md: .jdi/phases/{NN-slug}/REVIEW.md
-
-Acoes:
-1. Corrigir blockers
-2. Re-executar tasks afetadas (/jdi-do {N})
-3. Re-verificar (/jdi-verify {N})
+Phase {N}: BLOCKED ({count} blockers). REVIEW.md: .jdi/phases/{NN-slug}/REVIEW.md
+Fix → /jdi-do {N} → /jdi-verify {N}
 ```
 
 </process>

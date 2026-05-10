@@ -165,5 +165,5 @@ Imprime path do SUMMARY.md + status.
 - Codigo modificado, commitado atomicamente
 - `.jdi/phases/{NN-slug}/PLAN.md` atualizado (status das tasks)
 - `.jdi/phases/{NN-slug}/SUMMARY.md` criado
-- Mensagem final: `phase {N} done: {X}/{Y} tasks, {Z} blocked. SUMMARY: {path}`
+- Mensagem final: `phase {N}: {X}/{Y} tasks, {Z} blocked. SUMMARY: {path}`
 </output>

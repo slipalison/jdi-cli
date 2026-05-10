@@ -56,18 +56,12 @@ Architect retorna 1 de 3 status:
 - **cancelled** — user cancelou. Comando sai limpo, sem commit.
 - **failed** — algo deu errado (template ausente, conflito de nome, build falhou). Mostra erro, sugere retry.
 
-### Passo 4: Confirma e ensina
+### Passo 4: Confirma
 
-Em caso de **created**, comando mostra:
-
+Se **created**:
 ```
-{Tipo} criado: jdi-{nome}
-
-Como invocar:
-{instrucoes runtime-especificas}
-
-Audit: .jdi/registry.md (R-{N})
-Commit: {sha}
+jdi-{nome} ({tipo}) ok. Audit: R-{N}. Commit: {sha}.
+Invocar: {instrucoes runtime}
 ```
 
 </process>

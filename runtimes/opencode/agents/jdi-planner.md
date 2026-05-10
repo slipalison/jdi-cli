@@ -161,11 +161,7 @@ git commit -m "docs({NN-slug}): generate plan ({M} tasks, {W} waves)"
 ### Passo 8: Confirma
 
 ```
-PLAN.md: .jdi/phases/{NN-slug}/PLAN.md
-Tasks: {M} ({W} waves, max paralelo: {P})
-Files modified: {count}
-
-Proximo: /jdi-do {N}
+PLAN.md ok. {M} tasks, {W} waves, {count} files. Proximo: /jdi-do {N}
 ```
 
 </process>

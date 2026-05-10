@@ -56,15 +56,11 @@ test -f .jdi/ROADMAP.md || { echo "ROADMAP.md nao criado"; exit 1; }
 test -f .jdi/STATE.md || { echo "STATE.md nao criado"; exit 1; }
 ```
 
-### Passo 4: Confirma e mostra proximo passo
+### Passo 4: Confirma
 
 ```
-Projeto JDI iniciado: {project_name}
-
-Files: .jdi/PROJECT.md, ROADMAP.md, STATE.md, DECISIONS.md
-Phases planejadas: {N}
-
-Proximo: /jdi-bootstrap (cria specialists per-project)
+{project_name} iniciado. {N} phases planejadas em .jdi/.
+Proximo: /jdi-bootstrap
 ```
 
 </process>
