@@ -278,6 +278,45 @@ if ($LASTEXITCODE -eq 0) {
 }
 
 # ---------------------------------------------------------------------------
+Write-Section '10. Playwright + MCP (optional)'
+
+$pkgPath = Join-Path $ProjectDir 'package.json'
+$hasPwDep = $false
+if (Test-Path $pkgPath) {
+  try {
+    $pkg = Get-Content $pkgPath -Raw | ConvertFrom-Json
+    $allDeps = @{}
+    if ($pkg.dependencies)    { $pkg.dependencies.PSObject.Properties    | ForEach-Object { $allDeps[$_.Name] = $_.Value } }
+    if ($pkg.devDependencies) { $pkg.devDependencies.PSObject.Properties | ForEach-Object { $allDeps[$_.Name] = $_.Value } }
+    if ($allDeps.ContainsKey('@playwright/test')) { $hasPwDep = $true }
+  } catch { }
+}
+
+if ($hasPwDep) {
+  Write-OK '@playwright/test in package.json'
+} else {
+  Write-Note '@playwright/test not installed (run: npx jdi-cli install-playwright)'
+}
+
+$claudeMcp = Join-Path $ProjectDir '.claude\settings.local.json'
+if (Test-Path $claudeMcp) {
+  if ((Get-Content $claudeMcp -Raw) -match '"playwright"\s*:') {
+    Write-OK 'Claude Code MCP playwright configured'
+  } else {
+    Write-Note 'Claude Code settings.local.json present but no MCP playwright entry'
+  }
+}
+
+$opencodeMcp = Join-Path $ProjectDir '.opencode\opencode.jsonc'
+if (Test-Path $opencodeMcp) {
+  if ((Get-Content $opencodeMcp -Raw) -match '"playwright"\s*:') {
+    Write-OK 'OpenCode MCP playwright configured'
+  } else {
+    Write-Note 'OpenCode opencode.jsonc present but no MCP playwright entry'
+  }
+}
+
+# ---------------------------------------------------------------------------
 Write-Section 'Resumo'
 
 if ($script:Fails -gt 0) {

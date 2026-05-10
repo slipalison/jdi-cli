@@ -444,6 +444,52 @@ git commit -m "chore(jdi): bootstrap specialists for {project_name}"
 Specialists {project_name}: doer + reviewer created in .jdi/agents/. Routing ok.
 ```
 
+### S9: Optional Playwright + MCP install (only if has_frontend=true)
+
+Only run if `frontend.has_frontend: true` in PROJECT.md. Otherwise skip.
+
+**AskUserQuestion:**
+
+> "Install Playwright + MCP server for live browser interaction during dev?
+>  - **Pros:** LLM can drive a real browser via MCP (navigate, click, screenshot). Gate 7 frontend-validator skill also benefits.
+>  - **Cons:** ~250MB browser download + 1 dep added (`@playwright/test`).
+>  - **Idempotent:** safe to run later via `npx jdi-cli install-playwright`."
+>
+> Options:
+> - [Yes, install now (recommended)]
+> - [Skip — install later if needed]
+
+If "Yes", invoke shell script:
+
+**bash:**
+```bash
+JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/.."
+# Or, if running inside a project that has jdi installed via npx:
+PW_SCRIPT="$(npm root)/jdi-cli/bin/jdi-install-playwright.sh"
+[ -f "$PW_SCRIPT" ] || PW_SCRIPT="$(npm root -g)/jdi-cli/bin/jdi-install-playwright.sh"
+[ -f "$PW_SCRIPT" ] && bash "$PW_SCRIPT" || echo "  [warn] jdi-install-playwright not found in node_modules. Run: npx jdi-cli install-playwright"
+```
+
+**PowerShell:**
+```powershell
+$PWScript = Join-Path (npm root) 'jdi-cli\bin\jdi-install-playwright.ps1'
+if (-not (Test-Path $PWScript)) { $PWScript = Join-Path (npm root -g) 'jdi-cli\bin\jdi-install-playwright.ps1' }
+if (Test-Path $PWScript) {
+  & $PWScript
+} else {
+  Write-Warning "jdi-install-playwright not found. Run: npx jdi-cli install-playwright"
+}
+```
+
+Script installs `@playwright/test`, chromium browser, and injects MCP config in `.claude/settings.local.json` and/or `.opencode/opencode.jsonc` based on detected runtimes.
+
+If "Skip", append to `.jdi/STATE.md`:
+```yaml
+playwright_mcp: skipped_at_bootstrap
+```
+
+User can run `npx jdi-cli install-playwright` anytime later.
+
 ---
 
 ## `create` mode (generic agent or skill)

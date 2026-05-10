@@ -304,6 +304,31 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+section "10. Playwright + MCP (optional)"
+
+if [ -f "$PROJECT_DIR/package.json" ] && grep -q '"@playwright/test"' "$PROJECT_DIR/package.json" 2>/dev/null; then
+  ok "@playwright/test in package.json"
+else
+  note "@playwright/test not installed (run: npx jdi-cli install-playwright)"
+fi
+
+if [ -f "$PROJECT_DIR/.claude/settings.local.json" ]; then
+  if grep -q '"playwright"' "$PROJECT_DIR/.claude/settings.local.json" 2>/dev/null; then
+    ok "Claude Code MCP playwright configured"
+  else
+    note "Claude Code settings.local.json present but no MCP playwright entry"
+  fi
+fi
+
+if [ -f "$PROJECT_DIR/.opencode/opencode.jsonc" ]; then
+  if grep -q '"playwright"' "$PROJECT_DIR/.opencode/opencode.jsonc" 2>/dev/null; then
+    ok "OpenCode MCP playwright configured"
+  else
+    note "OpenCode opencode.jsonc present but no MCP playwright entry"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 section "Resumo"
 
 if [[ "$FAILS" -gt 0 ]]; then

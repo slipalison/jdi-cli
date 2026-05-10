@@ -245,6 +245,43 @@ function cmdUninstall({ positional, flags }) {
   }
 }
 
+function cmdInstallPlaywright({ flags }) {
+  ui.banner();
+
+  ui.header('JDI: Install Playwright + MCP');
+  ui.info(`Directory: ${c.dim}${process.cwd()}${c.reset}`);
+  console.log('');
+
+  const args = [];
+  if (isWindows) {
+    if (flags['skip-browser']) args.push('-SkipBrowser');
+    if (flags['skip-mcp'])     args.push('-SkipMcp');
+    if (flags.runtime)         args.push('-Runtime', flags.runtime);
+  } else {
+    if (flags['skip-browser']) args.push('--skip-browser');
+    if (flags['skip-mcp'])     args.push('--skip-mcp');
+    if (flags.runtime)         args.push('--runtime', flags.runtime);
+  }
+
+  const { code } = runShellScript('jdi-install-playwright', args);
+
+  if (code === 0) {
+    ui.successSummary('Playwright + MCP ready', [
+      `${sym.success} @playwright/test installed`,
+      `${sym.success} chromium browser ${flags['skip-browser'] ? 'skipped' : 'installed'}`,
+      `${sym.success} MCP config ${flags['skip-mcp'] ? 'skipped' : 'injected (where runtime present)'}`,
+    ]);
+    ui.nextSteps([
+      `Restart your runtime to pick up MCP changes`,
+      `Claude Code: ${c.cyan}/mcp${c.reset} to verify`,
+      `OpenCode: ${c.cyan}opencode reload${c.reset}`,
+    ]);
+  } else {
+    ui.errorSummary('Playwright install failed', [`${sym.error} Exit code: ${code}`]);
+    process.exit(code);
+  }
+}
+
 function cmdDoctor({ flags }) {
   ui.banner();
 
@@ -273,6 +310,7 @@ function cmdHelp() {
   console.log(`  ${c.cyan}uninstall${c.reset} ${c.gray}[runtime]${c.reset}    Remove JDI do projeto (preserva .jdi/ por default)`);
   console.log(`  ${c.cyan}build${c.reset}                  Re-builda runtimes/ a partir de core/`);
   console.log(`  ${c.cyan}doctor${c.reset}                 Diagnostico do projeto + JDI`);
+  console.log(`  ${c.cyan}install-playwright${c.reset}     Instala @playwright/test + chromium + MCP config`);
   console.log(`  ${c.cyan}help${c.reset}                   Mostra esta ajuda`);
   console.log(`  ${c.cyan}--version${c.reset}              Mostra versao`);
   console.log('');
@@ -355,6 +393,10 @@ function main() {
       break;
     case 'build':
       cmdBuild(parsed);
+      break;
+    case 'install-playwright':
+    case 'playwright':
+      cmdInstallPlaywright(parsed);
       break;
     case 'doctor':
       cmdDoctor(parsed);
