@@ -1,169 +1,169 @@
 ---
 name: kiss
-description: KISS (Keep It Simple, Stupid). A solucao mais simples que resolve o problema vence. Complexidade so se justifica por dor real medida. Cada layer/abstracao precisa pagar o proprio custo. Aplica em qualquer linguagem.
+description: KISS (Keep It Simple, Stupid). The simplest solution that solves the problem wins. Complexity only justified by real measured pain. Each layer/abstraction must pay its own cost. Applies in any language.
 triggers:
   - "KISS"
-  - "manter simples"
+  - "keep simple"
   - "over-engineering"
-  - "simplicidade"
+  - "simplicity"
 ---
 
 # Skill: KISS
 
-> A simplicidade eh o melhor design. Toda complexidade precisa pagar o proprio custo.
+> Simplicity is the best design. Every complexity must pay its own cost.
 
-KISS nao eh "codigo idiota". Eh **rejeitar complexidade nao-justificada**. Cada interface, cada layer, cada abstracao tem custo de manutencao — so vale se resolve dor real.
+KISS is not "dumb code". It's **rejecting unjustified complexity**. Every interface, every layer, every abstraction has maintenance cost — only worth it if it solves real pain.
 
-## Regras
+## Rules
 
-### 1. Default eh o mais simples
+### 1. Default is the simplest
 
-Pergunta antes de adicionar:
-- **Funcao** vs classe vs framework?
-- **Variavel** vs config vs feature flag?
+Ask before adding:
+- **Function** vs class vs framework?
+- **Variable** vs config vs feature flag?
 - **If/else** vs strategy pattern vs plugin system?
 - **Sync** vs async vs queue vs event bus?
 - **Inline** vs helper vs lib?
 
-Comeca pelo mais a esquerda. So sobe se tiver requisito real.
+Start with the leftmost. Only step up if there is a real requirement.
 
-### 2. Complexidade precisa justificar dor
+### 2. Complexity must justify pain
 
-**Permitido:**
-- Padrao novo se tem 3+ casos reais usando
-- Layer de abstracao se tem 2+ implementacoes que existem hoje
-- Cache se medicao mostra hot path
-- Async se tem latencia inaceitavel sincrono
-- Plugin system se tem extensores externos confirmados
+**Allowed:**
+- New pattern if it has 3+ real cases using it
+- Abstraction layer if it has 2+ implementations that exist today
+- Cache if measurement shows hot path
+- Async if there's unacceptable latency synchronous
+- Plugin system if there are confirmed external extenders
 
-**Proibido:**
-- "Vai escalar mais tarde" sem requisito atual
-- "Outras pessoas podem precisar" sem outras pessoas
-- "Pra ficar generico" sem 2o caso de uso
-- "Vai ficar mais limpo" trocando 5 linhas claras por 50 linhas elegantes
-- Pattern enterprise em codebase pequeno (Repository + UoW + Mediator + CQRS pra app de 10 controllers)
+**Forbidden:**
+- "Will scale later" without current requirement
+- "Other people might need it" without other people
+- "To make it generic" without 2nd use case
+- "Will look cleaner" trading 5 clear lines for 50 elegant ones
+- Enterprise pattern in small codebase (Repository + UoW + Mediator + CQRS for 10-controller app)
 
-### 3. Cognitive load eh metrica real
+### 3. Cognitive load is a real metric
 
-Codigo que voce le 10x e escreve 1x. Otimize pra leitura:
-- **Variaveis nomeadas** > expressao composta
-- **Early return** > if/else aninhado
-- **Funcao linear** > pulos entre callbacks
-- **Tipos explicitos** > inferencia magica em codebase grande
-- **Codigo procedural simples** > OOP rebuscado pra 50 linhas
+Code you read 10x and write 1x. Optimize for reading:
+- **Named variables** > composite expression
+- **Early return** > nested if/else
+- **Linear function** > jumps between callbacks
+- **Explicit types** > magical inference in large codebase
+- **Simple procedural code** > fancy OOP for 50 lines
 
-Regra: codigo que precisa de comentario explicando "por que tao complexo" eh complexo demais.
+Rule: code that needs a comment explaining "why so complex" is too complex.
 
-### 4. Indicadores de over-engineering
+### 4. Indicators of over-engineering
 
-Sinais que o codigo passou da conta:
+Signs the code went over the line:
 
-- Interface com 1 implementacao
-- Factory/Builder pra coisa instanciada 1x
-- Generic <T> que so eh usado com 1 tipo
-- Config com chave que nunca mudou
-- Layer de abstracao que so encapsula chamada de outra layer (pass-through)
-- Hierarquia de heranca > 2 niveis
-- Arquivo com mais setup do que logica
-- Test que precisa de 30 linhas de mock pra rodar 5 linhas de logica
+- Interface with 1 implementation
+- Factory/Builder for something instantiated 1x
+- Generic <T> only used with 1 type
+- Config with a key that never changed
+- Abstraction layer that only encapsulates a call to another layer (pass-through)
+- Inheritance hierarchy > 2 levels
+- File with more setup than logic
+- Test that needs 30 lines of mock to run 5 lines of logic
 
-### 5. Refactor eh ao contrario
+### 5. Refactor is the opposite direction
 
-Tendencia natural: codigo cresce em complexidade. Refatorar = REMOVER complexidade que nao paga mais.
+Natural tendency: code grows in complexity. Refactoring = REMOVE complexity that no longer pays.
 
-Pergunte:
-- Esse layer ainda existe pra resolver problema, ou virou tradicao?
-- Essa abstracao tem 2+ implementacoes hoje?
-- Se eu deletar isso, o que quebra?
-- Da pra resolver com 5 linhas em vez de 50?
+Ask:
+- Does this layer still exist to solve a problem, or did it become tradition?
+- Does this abstraction have 2+ implementations today?
+- If I delete this, what breaks?
+- Can I solve it with 5 lines instead of 50?
 
 ## Anti-patterns
 
-| Anti-pattern | Sintoma |
+| Anti-pattern | Symptom |
 |---|---|
-| Interface + 1 implementacao | `IUserService` + `UserService` (so 1) — deleta a interface, usa a classe |
-| Generic `<T>` usado com 1 tipo | `Repository<User>` mas nunca `Repository<Order>` — concretiza |
-| Factory pra new() | `UserFactory.create()` que so faz `return new User()` |
-| Config string que nunca mudou | `MAX_RETRIES: 3` em config + ngm nunca mudou — hardcoda |
-| Heranca > 2 niveis | `BaseEntity -> AuditableEntity -> SoftDeletableEntity -> User` — flatten via composition |
-| Pass-through layer | `Controller -> Service -> Repository -> DbContext` onde Service so chama Repository sem logica — deleta Service |
-| Pattern enterprise sem demanda | Mediator/CQRS em app pequeno — substitui por chamada direta |
-| Comentario explicando o "por que tao complexo" | Codigo perdeu a guerra — refatora |
-| Mock setup > logic test | Test fica frageil; codigo testado eh acoplado demais |
-| Future-proof params nao usados | `(opts?: { future?: boolean })` sem caller passando — remove |
+| Interface + 1 implementation | `IUserService` + `UserService` (only 1) — delete the interface, use the class |
+| Generic `<T>` used with 1 type | `Repository<User>` but never `Repository<Order>` — concretize |
+| Factory for new() | `UserFactory.create()` that only does `return new User()` |
+| Config string that never changed | `MAX_RETRIES: 3` in config + nobody ever changed it — hardcode |
+| Inheritance > 2 levels | `BaseEntity -> AuditableEntity -> SoftDeletableEntity -> User` — flatten via composition |
+| Pass-through layer | `Controller -> Service -> Repository -> DbContext` where Service only calls Repository without logic — delete Service |
+| Enterprise pattern without demand | Mediator/CQRS in small app — replace with direct call |
+| Comment explaining "why so complex" | Code lost the war — refactor |
+| Mock setup > logic test | Test gets fragile; code under test is over-coupled |
+| Unused future-proof params | `(opts?: { future?: boolean })` without caller passing — remove |
 
 ## Procedure
 
-### Doer (antes de escrever)
+### Doer (before writing)
 
-1. Pergunta: "Qual a versao **mais simples** que resolve o requisito atual?"
-2. Escreve essa versao.
-3. So sobe complexidade se topar em dor real.
-4. Apos escrever, pergunta: "Da pra deletar alguma layer/parametro/abstracao sem perder funcionalidade?"
+1. Ask: "What is the **simplest** version that meets the current requirement?"
+2. Write that version.
+3. Only step up complexity if you hit real pain.
+4. After writing, ask: "Can I delete any layer/parameter/abstraction without losing functionality?"
 
 ### Reviewer (gate 5)
 
-Heuristicas de over-engineering:
+Over-engineering heuristics:
 
 ```bash
-# Interfaces com 1 implementacao
+# Interfaces with 1 implementation
 grep -RnE '^(public |export )?interface I?[A-Z]\w+' src/ | while read iface; do
   name=$(echo "$iface" | grep -oE '[A-Z]\w+\b' | head -1)
   count=$(grep -RnE "class \w+\s*:\s*$name|implements $name" src/ | wc -l)
-  [[ $count -eq 1 ]] && echo "WARN: $iface tem so 1 implementacao"
+  [[ $count -eq 1 ]] && echo "WARN: $iface has only 1 implementation"
 done
 
-# Heranca profunda (> 2 niveis)
-# (depende de stack — heuristica especifica)
+# Deep inheritance (> 2 levels)
+# (depends on stack — specific heuristic)
 
-# Funcoes muito grandes ou aninhadas
-grep -cE '^\s{20,}\S' src/**/*  # linhas com 20+ espacos = aninhamento profundo
+# Very large or nested functions
+grep -cE '^\s{20,}\S' src/**/*  # lines with 20+ spaces = deep nesting
 ```
 
-Match -> WARN com sugestao de simplificar.
+Match -> WARN with suggestion to simplify.
 
 ## Inputs
 
-- Diff/conteudo do file
-- Context: tamanho do codebase (over-engineering eh relativo)
+- Diff/content of the file
+- Context: codebase size (over-engineering is relative)
 
 ## Outputs
 
-NAO produz arquivo. Modifica julgamento.
+Does NOT produce a file. Modifies judgement.
 
 ## Examples
 
-### Exemplo 1: Interface com 1 impl
+### Example 1: Interface with 1 impl
 
-Errado:
+Wrong:
 ```typescript
 interface ILogger { log(msg: string): void }
 class ConsoleLogger implements ILogger { log(msg) { console.log(msg) } }
 const logger: ILogger = new ConsoleLogger()
 ```
 
-Certo (KISS):
+Right (KISS):
 ```typescript
 function log(msg: string) { console.log(msg) }
-// ou
+// or
 class Logger { static log(msg: string) { console.log(msg) } }
 ```
 
-Adiciona interface quando 2a impl chegar, nao antes.
+Add interface when 2nd impl arrives, not before.
 
-### Exemplo 2: Pass-through service
+### Example 2: Pass-through service
 
-Errado:
+Wrong:
 ```csharp
 public class UserService {
-  public User GetById(int id) => _repo.GetById(id);  // so chama repo
+  public User GetById(int id) => _repo.GetById(id);  // only calls repo
 }
 ```
 
-Certo: usa o `_repo` direto no controller. Adiciona Service quando tiver logica real (validacao, multi-step, transacao, evento).
+Right: use `_repo` directly in the controller. Add Service when there is real logic (validation, multi-step, transaction, event).
 
-### Exemplo 3: Config hardcodavel
+### Example 3: Hardcodable config
 
-Errado: `appsettings.json -> "MaxItemsPerPage": 50` que ngm nunca mudou em 2 anos.
+Wrong: `appsettings.json -> "MaxItemsPerPage": 50` that nobody ever changed in 2 years.
 
-Certo: `const MAX_ITEMS_PER_PAGE = 50` no codigo. Volta pra config se algum cliente realmente precisar customizar.
+Right: `const MAX_ITEMS_PER_PAGE = 50` in the code. Move back to config if some client actually needs to customize.

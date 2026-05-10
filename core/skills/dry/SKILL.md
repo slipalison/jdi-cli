@@ -1,10 +1,10 @@
 ---
 name: dry
-description: DRY (Don't Repeat Yourself). 1 fonte de verdade por conhecimento. Detecta duplicacao real (mesma decisao em 2+ lugares) e separa de duplicacao aparente (mesmo codigo, motivos diferentes). Aplica em qualquer linguagem.
+description: DRY (Don't Repeat Yourself). 1 source of truth per piece of knowledge. Detects real duplication (same decision in 2+ places) and separates from apparent duplication (same code, different reasons). Applies in any language.
 type: skill
 applies_to: |
-  Carregada por doer antes de escrever codigo novo.
-  Carregada por reviewer no gate 5 pra detectar duplicacao em diff.
+  Loaded by doer before writing new code.
+  Loaded by reviewer at gate 5 to detect duplication in diff.
 loaded_by:
   - jdi-doer-{slug}
   - jdi-reviewer-{slug}
@@ -12,139 +12,139 @@ runtime_overrides:
   antigravity:
     triggers:
       - "DRY"
-      - "duplicacao de codigo"
+      - "code duplication"
       - "Don't Repeat Yourself"
-      - "refactor duplicado"
+      - "duplicate refactor"
 ---
 
 # Skill: DRY
 
-> Cada conhecimento tem **uma** representacao autoritativa, nao-ambigua, no sistema.
+> Every piece of knowledge has **one** authoritative, unambiguous representation in the system.
 
-DRY nao eh sobre copiar codigo. Eh sobre **conhecimento duplicado** — regra de negocio, formula, formato, decisao, presentes em 2+ lugares e que mudam **juntos** quando o requisito muda.
+DRY is not about copying code. It's about **duplicated knowledge** — business rule, formula, format, decision, present in 2+ places and that change **together** when the requirement changes.
 
-## Regras
+## Rules
 
 ### 1. Knowledge duplication != code coincidence
 
-**Knowledge duplication (DRY viola):**
-- Calculo de imposto em 2 lugares
-- Validacao de CPF em 3 services
-- Schema de date format espalhado pelo app
-- Mesma constante de timeout em 4 arquivos
+**Knowledge duplication (violates DRY):**
+- Tax calculation in 2 places
+- CPF validation in 3 services
+- Date format schema scattered across the app
+- Same timeout constant in 4 files
 
-Quando regra muda, voce muda em N lugares — esquece um, sistema fica inconsistente.
+When the rule changes, you change in N places — miss one, system becomes inconsistent.
 
-**Code coincidence (DRY NAO viola):**
-- 2 funcoes com 5 linhas iguais mas dominios diferentes
-- Boilerplate de framework repetido (cada controller tem `[Authorize]`)
-- Loop de iteracao parecido em 2 contextos sem relacao
+**Code coincidence (does NOT violate DRY):**
+- 2 functions with 5 identical lines but different domains
+- Framework boilerplate repeated (every controller has `[Authorize]`)
+- Similar iteration loop in 2 unrelated contexts
 
-Forcar abstracao aqui acopla coisas que nao deviam estar acopladas.
+Forcing abstraction here couples things that shouldn't be coupled.
 
-### 2. Regra dos 3
+### 2. Rule of 3
 
-- 1 ocorrencia: deixe
-- 2 ocorrencias: preste atencao, mas nao abstraia ainda
-- 3 ocorrencias: abstrai (provavelmente eh knowledge duplication real)
+- 1 occurrence: leave it
+- 2 occurrences: pay attention, but don't abstract yet
+- 3 occurrences: abstract (probably real knowledge duplication)
 
-Pular essa regra produz **abstracao prematura** — pior que duplicacao porque ja tem callers acoplados a interface errada.
+Skipping this rule produces **premature abstraction** — worse than duplication because callers are already coupled to the wrong interface.
 
-### 3. Tipos de DRY
+### 3. Types of DRY
 
-**Code DRY:** funcoes/classes reusaveis pra logica repetida
-**Data DRY:** 1 schema fonte (gera DTO + validator + DB + docs)
-**Process DRY:** 1 build script que serve dev + CI + prod
-**Documentation DRY:** docs geradas de codigo, nao escritas em paralelo
+**Code DRY:** reusable functions/classes for repeated logic
+**Data DRY:** 1 source schema (generates DTO + validator + DB + docs)
+**Process DRY:** 1 build script that serves dev + CI + prod
+**Documentation DRY:** docs generated from code, not written in parallel
 
 ### 4. Single Source of Truth (SSoT)
 
-Pra cada peca de conhecimento, identifique:
-- **Onde mora a verdade** (DB schema, env config, business rule)
-- **Quem deriva dela** (DTOs, types, docs, UI)
-- **Ferramenta de derivacao** (codegen, schema migration, type inference)
+For each piece of knowledge, identify:
+- **Where the truth lives** (DB schema, env config, business rule)
+- **Who derives from it** (DTOs, types, docs, UI)
+- **Derivation tool** (codegen, schema migration, type inference)
 
-Nunca: editar manualmente tanto a fonte quanto o derivado.
+Never: manually edit both the source and the derived.
 
-### 5. Quando NAO aplicar DRY
+### 5. When NOT to apply DRY
 
-- **Premature abstraction**: 2 callers parecidos mas com evolucoes futuras divergentes -> deixa duplicado
-- **Cross-boundary**: duplicar entre microservicos > acoplar via lib compartilhada
-- **Test setup**: testes redundantes legiveis > helpers magicos compartilhados
-- **Wrong abstraction**: melhor duplicar que extrair errado (Sandi Metz: "duplication is far cheaper than the wrong abstraction")
+- **Premature abstraction**: 2 similar callers but with diverging future evolutions -> leave duplicated
+- **Cross-boundary**: duplicating across microservices > coupling via shared lib
+- **Test setup**: readable redundant tests > shared magical helpers
+- **Wrong abstraction**: better duplicate than extract wrong (Sandi Metz: "duplication is far cheaper than the wrong abstraction")
 
 ## Anti-patterns
 
-| Anti-pattern | Por que viola |
+| Anti-pattern | Why it violates |
 |---|---|
-| Copy-paste sem extracao apos 3a ocorrencia | Knowledge duplicado, cada caller diverge silenciosamente |
-| Helper utilitario com 15 funcoes nao-relacionadas | "DRY" virou ball of mud — junta coisas sem relacao |
-| Abstracao apos 2a duplicacao com hooks de extensao "pra caso" | Premature abstraction + YAGNI violado junto |
-| Mesma constante hardcoded em 4 arquivos | Single source of truth ausente — extrai pra config |
-| Logica de validacao duplicada client + server | Code OK, mas devia compartilhar schema (Zod, Pydantic, JSON Schema) |
-| Comentario explicando o que codigo faz | Doc duplica codigo, vai dessincronizar |
+| Copy-paste without extraction after 3rd occurrence | Duplicated knowledge, each caller silently diverges |
+| Utility helper with 15 unrelated functions | "DRY" became ball of mud — bundles unrelated things |
+| Abstraction after 2nd duplication with extension hooks "just in case" | Premature abstraction + YAGNI violated together |
+| Same constant hardcoded in 4 files | Single source of truth absent — extract to config |
+| Validation logic duplicated client + server | Code OK, but should share schema (Zod, Pydantic, JSON Schema) |
+| Comment explaining what code does | Doc duplicates code, will go out of sync |
 
 ## Procedure
 
-### Doer (antes de escrever)
+### Doer (before writing)
 
-1. Tem regra/calculo/constante igual em outro lugar do codebase? Se sim, refer/import. Nao duplique.
-2. Vai criar 2a ocorrencia? OK, mas marca mentalmente.
-3. Vai criar 3a? Para. Refatora primeiro pra abstracao, depois usa.
+1. Is there an identical rule/calculation/constant elsewhere in the codebase? If so, refer/import. Don't duplicate.
+2. Going to create the 2nd occurrence? OK, but mentally mark it.
+3. Going to create the 3rd? Stop. Refactor first into abstraction, then use.
 
 ### Reviewer (gate 5)
 
-Greps especificos por linguagem (exemplos):
+Per-language specific greps (examples):
 
 ```bash
-# Constantes magicas duplicadas
+# Duplicated magic constants
 grep -RnE '\b86400\b|\b3600\b|\b1024\b' src/
 
-# Mesma string em 3+ lugares
-sort src/ | uniq -c | sort -rn | head -20  # heuristica grosseira
+# Same string in 3+ places
+sort src/ | uniq -c | sort -rn | head -20  # coarse heuristic
 
-# Validacao de email/CPF/etc duplicada
+# Duplicated email/CPF/etc validation
 grep -RnE 'regex.*@|EmailRegex|CpfValidator|cpf_pattern' src/
 
 # Hardcoded URLs/endpoints
 grep -RnE 'https?://[a-z0-9.-]+\.[a-z]{2,}' src/ --include='*.ts' --include='*.cs' --include='*.py'
 ```
 
-3+ matches do mesmo pattern em files diferentes -> WARN.
+3+ matches of the same pattern in different files -> WARN.
 
 ## Inputs
 
-- Diff ou conteudo do file modificado
-- Context: stack do projeto pra greps adaptados
+- Diff or content of the modified file
+- Context: project stack for adapted greps
 
 ## Outputs
 
-NAO produz arquivo. Modifica julgamento:
-- Doer escolhe reusar/extrair
-- Reviewer marca WARN com pointer pra refactor
+Does NOT produce a file. Modifies judgement:
+- Doer chooses to reuse/extract
+- Reviewer marks WARN with pointer to refactor
 
 ## Examples
 
-### Exemplo 1: 3 services calculando imposto
+### Example 1: 3 services calculating tax
 
-Errado:
+Wrong:
 ```
 service A: total * 0.18
 service B: amount * 0.18
 service C: value * 0.18
 ```
 
-Certo: extrai `TaxCalculator.applyVat(amount)` ou `const VAT_RATE = 0.18` em config compartilhada.
+Right: extract `TaxCalculator.applyVat(amount)` or `const VAT_RATE = 0.18` in shared config.
 
-Reviewer marca WARN: "imposto 0.18 hardcoded em 3 services. Extrai pra `config/tax.{ts,cs,py}`."
+Reviewer marks WARN: "tax 0.18 hardcoded in 3 services. Extract to `config/tax.{ts,cs,py}`."
 
-### Exemplo 2: Code coincidence (NAO viola DRY)
+### Example 2: Code coincidence (does NOT violate DRY)
 
 ```
 function findUser(id) { return db.query(...) }
 function findOrder(id) { return db.query(...) }
 ```
 
-Estrutura igual, dominios diferentes. **Nao** extrai `findEntity(id, table)` — vai forcar abstracao que vai divergir (user tem soft-delete, order tem cache, etc).
+Same structure, different domains. **Don't** extract `findEntity(id, table)` — will force abstraction that will diverge (user has soft-delete, order has cache, etc).
 
-Reviewer ignora — code coincidence eh OK.
+Reviewer ignores — code coincidence is OK.

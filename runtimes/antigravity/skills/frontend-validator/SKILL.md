@@ -1,21 +1,21 @@
 ---
 name: frontend-validator
-description: Valida UI viva via Playwright + axe-core. Detecta Playwright; instala se ausente (com consent do user). Spawna dev server, navega rotas criticas em mobile+desktop, captura console errors, network failures, a11y violations, screenshots, layout shifts. Output JSON estruturado pro reviewer parsear.
+description: Validates live UI via Playwright + axe-core. Detects Playwright; installs if missing (with user consent). Spawns dev server, navigates critical routes on mobile+desktop, captures console errors, network failures, a11y violations, screenshots, layout shifts. Structured JSON output for the reviewer to parse.
 triggers:
-  - "validar UI"
-  - "rodar playwright"
-  - "checar acessibilidade"
+  - "validate UI"
+  - "run playwright"
+  - "check accessibility"
   - "smoke test frontend"
-  - "validar interface viva"
+  - "validate live interface"
 ---
 
 # Skill: jdi-frontend-validator
 
-Roda validacao UI em browser real. Sem Playwright instalado, instala com consent. Output sempre JSON em `.jdi/cache/ui-findings.json` pro reviewer pai consumir.
+Runs UI validation in a real browser. Without Playwright installed, installs with consent. Output always JSON in `.jdi/cache/ui-findings.json` for the parent reviewer to consume.
 
-## Quando aplicar
+## When to apply
 
-Reviewer chama no gate 7. Pre-condicoes em PROJECT.md:
+Reviewer calls at gate 7. Preconditions in PROJECT.md:
 
 ```yaml
 frontend:
@@ -28,31 +28,31 @@ frontend:
     - /dashboard
 ```
 
-Sem alguma chave -> aborta com erro descritivo.
+Missing any key -> abort with descriptive error.
 
 ## Procedure
 
-### Passo 1: Pre-flight
+### Step 1: Pre-flight
 
 ```bash
 # bash
-test -d .jdi/ || { echo "Sem .jdi/. Rode /jdi-new"; exit 1; }
-test -f .jdi/PROJECT.md || { echo "PROJECT.md ausente"; exit 1; }
+test -d .jdi/ || { echo "No .jdi/. Run /jdi-new"; exit 1; }
+test -f .jdi/PROJECT.md || { echo "PROJECT.md missing"; exit 1; }
 
-# Le frontend.has_frontend, frontend_url, dev_command, critical_paths
-# (parse YAML simples - assume formato bem-definido)
+# Read frontend.has_frontend, frontend_url, dev_command, critical_paths
+# (simple YAML parse - assume well-defined format)
 
-# Cria cache
+# Create cache
 mkdir -p .jdi/cache/screenshots
 
-# .gitignore garantia
+# .gitignore guarantee
 grep -q '^\.jdi/cache/' .gitignore 2>/dev/null || echo '.jdi/cache/' >> .gitignore
 ```
 
 ```powershell
 # PowerShell
-if (-not (Test-Path .jdi)) { Write-Error "Sem .jdi/. Rode /jdi-new"; exit 1 }
-if (-not (Test-Path .jdi/PROJECT.md)) { Write-Error "PROJECT.md ausente"; exit 1 }
+if (-not (Test-Path .jdi)) { Write-Error "No .jdi/. Run /jdi-new"; exit 1 }
+if (-not (Test-Path .jdi/PROJECT.md)) { Write-Error "PROJECT.md missing"; exit 1 }
 
 New-Item -ItemType Directory -Force -Path .jdi/cache/screenshots | Out-Null
 
@@ -61,9 +61,9 @@ if (-not (Test-Path .gitignore) -or -not (Select-String -Path .gitignore -Patter
 }
 ```
 
-### Passo 2: Detecta gerenciador de pacote
+### Step 2: Detect package manager
 
-Lockfile detection (mais confiavel que `which`):
+Lockfile detection (more reliable than `which`):
 
 ```bash
 # bash
@@ -84,16 +84,16 @@ elseif (Test-Path package-lock.json) { $PKG_MGR = "npm" }
 else { $PKG_MGR = "npm" }
 ```
 
-Comando install correspondente:
+Corresponding install command:
 
-| Pkg mgr | Install dev dep | Run binario |
+| Pkg mgr | Install dev dep | Run binary |
 |---|---|---|
 | npm | `npm install --save-dev <pkg>` | `npx <bin>` |
-| pnpm | `pnpm add -D <pkg>` | `pnpm exec <bin>` ou `pnpm dlx <bin>` |
+| pnpm | `pnpm add -D <pkg>` | `pnpm exec <bin>` or `pnpm dlx <bin>` |
 | yarn | `yarn add -D <pkg>` | `yarn <bin>` |
 | bun | `bun add -d <pkg>` | `bunx <bin>` |
 
-### Passo 3: Detecta Playwright
+### Step 3: Detect Playwright
 
 ```bash
 # bash
@@ -106,14 +106,14 @@ if ! $PW_BIN --version >/dev/null 2>&1; then
   PLAYWRIGHT_MISSING=1
 fi
 
-# Verifica axe-core/playwright separado
+# Check axe-core/playwright separately
 if [ -f package.json ] && ! grep -q '@axe-core/playwright' package.json; then
   AXE_MISSING=1
 fi
 ```
 
 ```powershell
-# PowerShell - simplificado
+# PowerShell - simplified
 $pwExists = $false
 try {
   $null = & npx --no-install playwright --version 2>$null
@@ -128,50 +128,50 @@ if (Test-Path package.json) {
 if (-not $axeExists) { $env:AXE_MISSING = "1" }
 ```
 
-### Passo 4: Se ausente, pede consent + instala
+### Step 4: If missing, ask consent + install
 
-Use AskUserQuestion (ou prompt fallback se runtime sem suporte):
+Use AskUserQuestion (or prompt fallback if runtime doesn't support it):
 
 ```
-Playwright nao instalado neste projeto.
+Playwright not installed in this project.
 
-Instalar agora?
-- [Sim, instalar com Chromium] (~150MB, 2-5min, recomendado)
-- [Sim, instalar com todos browsers] (~500MB, 5-10min)
-- [Nao, pular gate 7 desta vez] (gate retorna SKIPPED)
-- [Cancelar review inteiro]
+Install now?
+- [Yes, install with Chromium] (~150MB, 2-5min, recommended)
+- [Yes, install with all browsers] (~500MB, 5-10min)
+- [No, skip gate 7 this time] (gate returns SKIPPED)
+- [Cancel entire review]
 ```
 
-Mapeamento de escolha:
+Choice mapping:
 
-**Sim, Chromium:**
+**Yes, Chromium:**
 ```bash
 $INSTALL_CMD @playwright/test @axe-core/playwright
 $PLAYWRIGHT_INSTALL chromium
 ```
 
-Onde:
-- `$INSTALL_CMD` = `pnpm add -D` / `npm install --save-dev` / etc baseado no PKG_MGR
+Where:
+- `$INSTALL_CMD` = `pnpm add -D` / `npm install --save-dev` / etc based on PKG_MGR
 - `$PLAYWRIGHT_INSTALL` = `$PW_BIN install`
 
-**Sim, todos browsers:**
+**Yes, all browsers:**
 ```bash
 $INSTALL_CMD @playwright/test @axe-core/playwright
 $PLAYWRIGHT_INSTALL
 ```
 
-**Nao, pular:**
-Retorna `{ "status": "SKIPPED", "reason": "user declined Playwright install" }` - reviewer marca gate 7 como SKIPPED (nao BLOCK).
+**No, skip:**
+Returns `{ "status": "SKIPPED", "reason": "user declined Playwright install" }` - reviewer marks gate 7 as SKIPPED (not BLOCK).
 
-**Cancelar review:**
-Retorna codigo de erro, reviewer aborta.
+**Cancel review:**
+Returns error code, reviewer aborts.
 
-### Passo 5: Gera spec Playwright temporario
+### Step 5: Generate temporary Playwright spec
 
-Cria `.jdi/cache/playwright-check.spec.js` (gitignored). Conteudo:
+Creates `.jdi/cache/playwright-check.spec.js` (gitignored). Content:
 
 ```javascript
-// Auto-gerado pelo jdi-frontend-validator. NAO edite manualmente.
+// Auto-generated by jdi-frontend-validator. DO NOT edit manually.
 // @ts-check
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
@@ -302,7 +302,7 @@ for (const route of ROUTES) {
           });
         }
       } catch (err) {
-        // axe-core falha nao bloqueia run
+        // axe-core failure doesn't block run
         findings.a11y.push({
           route,
           viewport: viewport.name,
@@ -324,7 +324,7 @@ test.afterAll(() => {
 });
 ```
 
-E config inline `.jdi/cache/playwright.config.js`:
+And inline config `.jdi/cache/playwright.config.js`:
 
 ```javascript
 module.exports = {
@@ -341,18 +341,18 @@ module.exports = {
 };
 ```
 
-### Passo 6: Spawna dev server
+### Step 6: Spawn dev server
 
 ```bash
 # bash
 DEV_LOG=.jdi/cache/dev-server.log
 DEV_PID_FILE=.jdi/cache/dev-server.pid
 
-# Spawna em background, redirecionando log
+# Spawn in background, redirecting log
 nohup $DEV_COMMAND > $DEV_LOG 2>&1 &
 echo $! > $DEV_PID_FILE
 
-# Aguarda ready (poll URL, timeout 60s)
+# Wait ready (poll URL, timeout 60s)
 READY=0
 for i in $(seq 1 60); do
   if curl -sSf -o /dev/null --max-time 2 "$FRONTEND_URL"; then
@@ -366,7 +366,7 @@ if [ $READY -eq 0 ]; then
   # Cleanup
   kill $(cat $DEV_PID_FILE) 2>/dev/null
   echo '{"status":"INCONCLUSIVE","reason":"dev server failed to start in 60s","logs":"'$DEV_LOG'"}' > .jdi/cache/ui-findings.json
-  exit 0  # nao falha o reviewer - INCONCLUSIVE eh WARN
+  exit 0  # doesn't fail the reviewer - INCONCLUSIVE is WARN
 fi
 ```
 
@@ -397,7 +397,7 @@ if (-not $ready) {
 }
 ```
 
-### Passo 7: Roda Playwright
+### Step 7: Run Playwright
 
 ```bash
 # bash
@@ -407,7 +407,7 @@ JDI_OUT=".jdi/cache/ui-findings.json" \
 JDI_SCREENSHOT_DIR=".jdi/cache/screenshots" \
   $PW_BIN test --config=.jdi/cache/playwright.config.js 2>&1 | tee .jdi/cache/playwright.log
 
-# Exit code do Playwright nao importa - findings ja escritos pelo afterAll
+# Playwright exit code doesn't matter - findings already written by afterAll
 ```
 
 ```powershell
@@ -420,17 +420,17 @@ $env:JDI_SCREENSHOT_DIR = ".jdi/cache/screenshots"
 & npx playwright test --config=.jdi/cache/playwright.config.js 2>&1 | Tee-Object -FilePath .jdi/cache/playwright.log
 ```
 
-### Passo 8: Mata dev server (sempre, mesmo se falhou)
+### Step 8: Kill dev server (always, even on failure)
 
 ```bash
 # bash
 if [ -f $DEV_PID_FILE ]; then
   PID=$(cat $DEV_PID_FILE)
-  # Kill processo + filhos (dev server geralmente tem children: node, esbuild, vite, etc)
+  # Kill process + children (dev server usually has children: node, esbuild, vite, etc)
   pkill -P $PID 2>/dev/null
   kill $PID 2>/dev/null
-  # Garantia em portas comuns (caso PID errado)
-  # Vite: 5173, Next: 3000, etc - skip cleanup agressiva
+  # Safeguard on common ports (in case wrong PID)
+  # Vite: 5173, Next: 3000, etc - skip aggressive cleanup
   rm $DEV_PID_FILE
 fi
 ```
@@ -439,121 +439,121 @@ fi
 # PowerShell
 if (Test-Path $DEV_PID_FILE) {
   $pid = Get-Content $DEV_PID_FILE
-  # Kill filhos primeiro
+  # Kill children first
   Get-CimInstance Win32_Process -Filter "ParentProcessId=$pid" -ErrorAction SilentlyContinue |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-  # Kill o pai
+  # Kill the parent
   Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
   Remove-Item $DEV_PID_FILE
 }
 ```
 
-### Passo 9: Retorna pra reviewer pai
+### Step 9: Return to parent reviewer
 
-Skill nao escreve REVIEW.md. So escreve `.jdi/cache/ui-findings.json` + screenshots.
+Skill doesn't write REVIEW.md. Only writes `.jdi/cache/ui-findings.json` + screenshots.
 
-Reviewer le o JSON, classifica severities, e escreve secao "UI Validation" no REVIEW.md.
+Reviewer reads the JSON, classifies severities, and writes "UI Validation" section in REVIEW.md.
 
-## Classificacao de findings (referencia pro reviewer)
+## Finding classification (reference for the reviewer)
 
 | Finding | Severity |
 |---|---|
-| `console.error` em qualquer route | BLOCK |
-| `network.5xx` em critical_path | BLOCK |
-| `network.4xx` em critical_path | WARN |
+| `console.error` on any route | BLOCK |
+| `network.5xx` on critical_path | BLOCK |
+| `network.4xx` on critical_path | WARN |
 | `network.requestfailed` (CORS/abort/etc) | WARN |
-| `navigationFailures` (404/timeout/etc em critical_path) | BLOCK |
+| `navigationFailures` (404/timeout/etc on critical_path) | BLOCK |
 | `a11y.impact=critical` | BLOCK |
 | `a11y.impact=serious` | BLOCK |
 | `a11y.impact=moderate` | WARN |
 | `a11y.impact=minor` | INFO |
-| `layout.horizontal_scroll` em mobile | BLOCK |
-| `layout.horizontal_scroll` em desktop | INFO |
-| `axe-core failed` (erro tecnico) | WARN |
+| `layout.horizontal_scroll` on mobile | BLOCK |
+| `layout.horizontal_scroll` on desktop | INFO |
+| `axe-core failed` (technical error) | WARN |
 | `INCONCLUSIVE` (dev server timeout) | WARN |
-| `SKIPPED` (user recusou install) | WARN |
+| `SKIPPED` (user declined install) | WARN |
 
-## Inputs esperados
+## Expected inputs
 
-Do PROJECT.md (passados como variaveis de ambiente pelo reviewer):
+From PROJECT.md (passed as environment variables by the reviewer):
 - `frontend.frontend_url` -> `FRONTEND_URL`
 - `frontend.dev_command` -> `DEV_COMMAND`
-- `frontend.critical_paths` -> `CRITICAL_PATHS` (lista)
+- `frontend.critical_paths` -> `CRITICAL_PATHS` (list)
 
 ## Outputs
 
-Files criados em `.jdi/cache/` (gitignored):
-- `ui-findings.json` - findings estruturados
-- `screenshots/*.png` - 1 por route x viewport
-- `dev-server.log` - log do dev server
-- `playwright.log` - log do Playwright run
-- `playwright-check.spec.js` - spec gerado
-- `playwright.config.js` - config gerado
+Files created in `.jdi/cache/` (gitignored):
+- `ui-findings.json` - structured findings
+- `screenshots/*.png` - 1 per route x viewport
+- `dev-server.log` - dev server log
+- `playwright.log` - Playwright run log
+- `playwright-check.spec.js` - generated spec
+- `playwright.config.js` - generated config
 
-NUNCA commita `.jdi/cache/`.
+NEVER commit `.jdi/cache/`.
 
 ## Anti-patterns
 
-- Rodar contra prod URL - so dev local. Prod fica fora deste gate
-- Testar fluxos que requerem login - MVP nao suporta auth setup. Critical paths devem ser publicos OU pre-autenticados manualmente (cookie/session passado via PROJECT.md em followup)
-- Travar review se Playwright install falhar - degrade pra SKIPPED
-- Deixar dev server vivo apos gate - sempre kill, mesmo em erro
-- Commitar screenshots - .gitignore garantido em pre-flight
-- Rodar paralelo (workers > 1) - dev server local nao escala, e race conditions confundem findings
-- Usar `--headed` em CI - sempre headless
-- Confiar no exit code do Playwright - findings vem do afterAll, mesmo com test failure
+- Running against prod URL - dev local only. Prod is out of scope for this gate
+- Testing flows that require login - MVP doesn't support auth setup. Critical paths must be public OR pre-authenticated manually (cookie/session passed via PROJECT.md in follow-up)
+- Blocking review if Playwright install fails - degrade to SKIPPED
+- Leaving dev server alive after gate - always kill, even on error
+- Committing screenshots - .gitignore guaranteed in pre-flight
+- Running parallel (workers > 1) - local dev server doesn't scale, and race conditions confuse findings
+- Using `--headed` in CI - always headless
+- Trusting Playwright exit code - findings come from afterAll, even with test failure
 
 ## References
 
-- `references/playwright-setup.md` - Install detalhado por package manager + troubleshoot
-- `references/dev-server-detection.md` - Heuristicas de detect ready (curl, wait-on, polling)
-- `references/axe-rules.md` - Mapeamento axe rule IDs -> WCAG -> severity
-- `references/auth-flows.md` - Roadmap pra fluxos autenticados (futuro)
+- `references/playwright-setup.md` - Detailed install per package manager + troubleshoot
+- `references/dev-server-detection.md` - Heuristics for detecting ready (curl, wait-on, polling)
+- `references/axe-rules.md` - Mapping of axe rule IDs -> WCAG -> severity
+- `references/auth-flows.md` - Roadmap for authenticated flows (future)
 
 ## Examples
 
-### Exemplo 1: Vite + React, Playwright ausente, user aceita install
+### Example 1: Vite + React, Playwright missing, user accepts install
 
 ```
-1. Reviewer dispara gate 7
-2. Skill detecta `npx playwright --version` -> exit 1
+1. Reviewer triggers gate 7
+2. Skill detects `npx playwright --version` -> exit 1
 3. Lockfile = pnpm-lock.yaml -> PKG_MGR=pnpm
-4. AskUserQuestion -> user escolhe "Sim, Chromium"
+4. AskUserQuestion -> user picks "Yes, Chromium"
 5. pnpm add -D @playwright/test @axe-core/playwright
 6. pnpm exec playwright install chromium
-7. Spawna `pnpm dev` em bg, PID 12345
-8. Aguarda http://localhost:5173 -> ready em 4s
-9. Roda Playwright em /, /login, /dashboard x mobile + desktop = 6 navegacoes
+7. Spawns `pnpm dev` in bg, PID 12345
+8. Waits http://localhost:5173 -> ready in 4s
+9. Runs Playwright on /, /login, /dashboard x mobile + desktop = 6 navigations
 10. Findings:
-    - 1 console error (uncaught promise) em /dashboard mobile + desktop
+    - 1 console error (uncaught promise) on /dashboard mobile + desktop
     - 0 network errors
-    - 2 a11y serious em /login (label faltando + contraste)
-    - 1 horizontal scroll em /dashboard mobile
-11. Kill PID 12345 + filhos
-12. Escreve .jdi/cache/ui-findings.json
-13. Reviewer le JSON, marca gate 7 = BLOCK (3 issues), escreve REVIEW.md
+    - 2 a11y serious on /login (missing label + contrast)
+    - 1 horizontal scroll on /dashboard mobile
+11. Kill PID 12345 + children
+12. Writes .jdi/cache/ui-findings.json
+13. Reviewer reads JSON, marks gate 7 = BLOCK (3 issues), writes REVIEW.md
 ```
 
-### Exemplo 2: API-only, has_frontend=false
+### Example 2: API-only, has_frontend=false
 
-Skill nem eh carregada. Reviewer pula gate 7 com SKIPPED.
+Skill is not even loaded. Reviewer skips gate 7 with SKIPPED.
 
-### Exemplo 3: Dev server falha em iniciar
-
-```
-1. Spawna `pnpm dev` -> processo morre apos 2s (porta 5173 ocupada)
-2. Poll de 60s expira sem 200 OK
-3. Cleanup do PID
-4. Escreve {"status":"INCONCLUSIVE","reason":"dev server failed to start in 60s"}
-5. Reviewer marca gate 7 = WARN com link pro dev-server.log
-6. Review nao bloqueado, mas usuario alerta
-```
-
-### Exemplo 4: User recusa instalar Playwright
+### Example 3: Dev server fails to start
 
 ```
-1. AskUserQuestion -> "Nao, pular gate 7"
-2. Escreve {"status":"SKIPPED","reason":"user declined Playwright install"}
-3. Reviewer marca gate 7 = SKIPPED (warn nao block)
-4. REVIEW.md anota "UI Validation: SKIPPED - rode /jdi-verify novamente quando aceitar instalar"
+1. Spawns `pnpm dev` -> process dies after 2s (port 5173 occupied)
+2. Poll of 60s expires without 200 OK
+3. Cleanup of PID
+4. Writes {"status":"INCONCLUSIVE","reason":"dev server failed to start in 60s"}
+5. Reviewer marks gate 7 = WARN with link to dev-server.log
+6. Review not blocked, but user alerted
+```
+
+### Example 4: User declines to install Playwright
+
+```
+1. AskUserQuestion -> "No, skip gate 7"
+2. Writes {"status":"SKIPPED","reason":"user declined Playwright install"}
+3. Reviewer marks gate 7 = SKIPPED (warn not block)
+4. REVIEW.md notes "UI Validation: SKIPPED - run /jdi-verify again when you accept installing"
 ```

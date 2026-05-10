@@ -1,7 +1,7 @@
 ---
 name: jdi-adopt
-description: Entry point pra projeto brownfield (codigo ja existe). Roda jdi-adopter — scan + analise + confirmacao + gera .jdi/ com flag adopted=true. Substitui /jdi-new pra projetos existentes.
-argument_hint: "<descricao curta opcional>"
+description: Entry point for brownfield project (code already exists). Runs jdi-adopter — scan + analysis + confirmation + generates .jdi/ with adopted=true flag. Replaces /jdi-new for existing projects.
+argument_hint: "<optional short description>"
 runtime_intent:
   invokes_agent: jdi-adopter
 runtime_overrides:
@@ -16,33 +16,33 @@ runtime_overrides:
   antigravity:
     triggers:
       - "/jdi-adopt"
-      - "adotar projeto"
-      - "projeto existente"
+      - "adopt project"
+      - "existing project"
       - "brownfield"
 ---
 
 <objective>
-Adiciona JDI a projeto que JA TEM CODIGO. Scaneia repo, infere stack/code-design, confirma com user (code-design SEMPRE confirmado), gera PROJECT.md + ROADMAP.md + STATE.md + DECISIONS.md com flag adopted=true.
+Add JDI to project that ALREADY HAS CODE. Scan repo, infer stack/code-design, confirm with user (code-design ALWAYS confirmed), generate PROJECT.md + ROADMAP.md + STATE.md + DECISIONS.md with adopted=true flag.
 </objective>
 
 <arguments>
-- `descricao` (opcional): texto curto override do que o projeto faz. Se omitido, adopter extrai do README.
+- `description` (optional): short text override of what the project does. If omitted, adopter extracts from README.
 
-Exemplos:
+Examples:
 - `/jdi-adopt`
-- `/jdi-adopt "API REST de pedidos, legado, queremos adicionar relatorios"`
+- `/jdi-adopt "Orders REST API, legacy, want to add reporting"`
 </arguments>
 
 <process>
 
-### Passo 1: Validacao
+### Step 1: Validation
 ```bash
 test -d .jdi/ && {
-  echo ".jdi/ ja existe. Use /jdi-bootstrap se nao tem specialists, OU edite manual."
+  echo ".jdi/ already exists. Use /jdi-bootstrap if no specialists, OR edit manually."
   exit 1
 }
 
-# diretorio precisa ter codigo (do contrario use /jdi-new)
+# directory must have code (otherwise use /jdi-new)
 file_count=$(find . -maxdepth 3 -type f \
   -not -path './.git/*' -not -path './node_modules/*' \
   -not -path './.venv/*' -not -path './venv/*' \
@@ -51,7 +51,7 @@ file_count=$(find . -maxdepth 3 -type f \
   2>/dev/null | wc -l)
 
 if [ "$file_count" -lt 3 ]; then
-  echo "Diretorio quase vazio ($file_count files). Use /jdi-new pra greenfield."
+  echo "Directory nearly empty ($file_count files). Use /jdi-new for greenfield."
   exit 1
 fi
 ```
@@ -59,54 +59,54 @@ fi
 PowerShell:
 ```powershell
 if (Test-Path .jdi) {
-  Write-Error ".jdi/ ja existe. Use /jdi-bootstrap se nao tem specialists, OU edite manual."
+  Write-Error ".jdi/ already exists. Use /jdi-bootstrap if no specialists, OR edit manually."
   exit 1
 }
 $files = Get-ChildItem -Recurse -File -Depth 3 -ErrorAction SilentlyContinue |
   Where-Object { $_.FullName -notmatch '\\(\.git|node_modules|\.venv|venv|target|dist|build|bin|obj)\\' }
 if ($files.Count -lt 3) {
-  Write-Error "Diretorio quase vazio ($($files.Count) files). Use /jdi-new pra greenfield."
+  Write-Error "Directory nearly empty ($($files.Count) files). Use /jdi-new for greenfield."
   exit 1
 }
 ```
 
-### Passo 2: Spawn jdi-adopter
-Invoca `jdi-adopter` passando descricao (se houve). Aguarda.
+### Step 2: Spawn jdi-adopter
+Invoke `jdi-adopter` passing description (if any). Wait.
 
-Adopter conduz:
-- Scan automatico (manifests, layout, git log, README)
-- 5 perguntas (stack, code-design, visao, features-novas, LLM)
-- Web research opcional (max 2 lookups)
-- Geracao de `.jdi/` files
-- Commit inicial
+Adopter conducts:
+- Automatic scan (manifests, layout, git log, README)
+- 5 questions (stack, code-design, vision, new-features, LLM)
+- Optional web research (max 2 lookups)
+- Generation of `.jdi/` files
+- Initial commit
 
-### Passo 3: Verifica outputs
+### Step 3: Verify outputs
 ```bash
-test -f .jdi/PROJECT.md  || { echo "PROJECT.md nao criado"; exit 1; }
-test -f .jdi/ROADMAP.md  || { echo "ROADMAP.md nao criado"; exit 1; }
-test -f .jdi/STATE.md    || { echo "STATE.md nao criado"; exit 1; }
-test -f .jdi/DECISIONS.md|| { echo "DECISIONS.md nao criado"; exit 1; }
+test -f .jdi/PROJECT.md  || { echo "PROJECT.md not created"; exit 1; }
+test -f .jdi/ROADMAP.md  || { echo "ROADMAP.md not created"; exit 1; }
+test -f .jdi/STATE.md    || { echo "STATE.md not created"; exit 1; }
+test -f .jdi/DECISIONS.md|| { echo "DECISIONS.md not created"; exit 1; }
 
-grep -q '^adopted: true' .jdi/STATE.md || echo "warn: adopted flag ausente em STATE.md"
-grep -q '^D-2 ' .jdi/DECISIONS.md || echo "warn: D-2 (boundary) ausente em DECISIONS.md"
+grep -q '^adopted: true' .jdi/STATE.md || echo "warn: adopted flag missing in STATE.md"
+grep -q '^D-2 ' .jdi/DECISIONS.md || echo "warn: D-2 (boundary) missing in DECISIONS.md"
 ```
 
 PowerShell:
 ```powershell
 foreach ($f in @('PROJECT.md','ROADMAP.md','STATE.md','DECISIONS.md')) {
-  if (-not (Test-Path ".jdi/$f")) { Write-Error "$f nao criado"; exit 1 }
+  if (-not (Test-Path ".jdi/$f")) { Write-Error "$f not created"; exit 1 }
 }
 if (-not (Select-String -Path .jdi/STATE.md -Pattern '^adopted:\s*true' -Quiet)) {
-  Write-Warning "adopted flag ausente em STATE.md"
+  Write-Warning "adopted flag missing in STATE.md"
 }
 if (-not (Select-String -Path .jdi/DECISIONS.md -Pattern '^D-2 ' -Quiet)) {
-  Write-Warning "D-2 (boundary) ausente em DECISIONS.md"
+  Write-Warning "D-2 (boundary) missing in DECISIONS.md"
 }
 ```
 
-### Passo 4: Cria config.json (token/context budget)
+### Step 4: Create config.json (token/context budget)
 
-Se `.jdi/config.json` ainda nao existe, escreve default identico ao do `/jdi-new`:
+If `.jdi/config.json` does not yet exist, write default identical to `/jdi-new`:
 
 ```json
 {
@@ -129,27 +129,27 @@ Se `.jdi/config.json` ainda nao existe, escreve default identico ao do `/jdi-new
 }
 ```
 
-### Passo 5: Confirma
+### Step 5: Confirm
 
 ```
-{project_name} adopted. {N} phases novas planejadas.
-Existing assets capturados em .jdi/PROJECT.md (contexto, NAO TODO).
-Code design: {design} (LOCKED apos confirm).
-Boundary: codigo legado nao enforce 80% coverage (D-2 em DECISIONS.md).
-Proximo: /jdi-bootstrap
+{project_name} adopted. {N} new phases planned.
+Existing assets captured in .jdi/PROJECT.md (context, NOT TODO).
+Code design: {design} (LOCKED after confirm).
+Boundary: legacy code does not enforce 80% coverage (D-2 in DECISIONS.md).
+Next: /jdi-bootstrap
 ```
 
 </process>
 
 <gates>
-- pre: `.jdi/` ausente + diretorio com >= 3 files de codigo (descontando ignorados)
-- post: PROJECT.md (com `## Existing assets`) + ROADMAP.md (adopted=true) + STATE.md (adopted: true) + DECISIONS.md (D-1 code-design, D-2 boundary) + config.json criados, commit feito
+- pre: `.jdi/` missing + directory with >= 3 code files (excluding ignored)
+- post: PROJECT.md (with `## Existing assets`) + ROADMAP.md (adopted=true) + STATE.md (adopted: true) + DECISIONS.md (D-1 code-design, D-2 boundary) + config.json created, commit made
 </gates>
 
 <errors>
-- `.jdi/` ja existe -> sai com instrucao
-- Diretorio quase vazio -> sugere `/jdi-new` em vez de adopt
-- Adopter cancelou -> sai limpo, sem commit
-- Adopter failed -> mostra erro, sem commit, sugere retry manual
-- Code design nao confirmado pelo user -> aborta (regra: SEMPRE confirma)
+- `.jdi/` already exists -> exit with instruction
+- Directory nearly empty -> suggest `/jdi-new` instead of adopt
+- Adopter cancelled -> exit clean, no commit
+- Adopter failed -> show error, no commit, suggest manual retry
+- Code design not confirmed by user -> abort (rule: ALWAYS confirm)
 </errors>

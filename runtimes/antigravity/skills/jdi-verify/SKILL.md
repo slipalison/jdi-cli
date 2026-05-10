@@ -1,6 +1,6 @@
 ---
 name: jdi-verify
-description: Roda gates de qualidade da phase via reviewer specialist. Build, tests, coverage, lint, security checks. Veredicto APPROVED / APPROVED_WITH_WARNINGS / BLOCKED.
+description: Runs phase quality gates via reviewer specialist. Build, tests, coverage, lint, security checks. Verdict APPROVED / APPROVED_WITH_WARNINGS / BLOCKED.
 argument_hint: "<phase_number>"
 runtime_intent:
   invokes_agent: dynamic
@@ -15,36 +15,36 @@ runtime_overrides:
   antigravity:
     triggers:
       - "/jdi-verify"
-      - "verificar phase {N}"
+      - "verify phase {N}"
 ---
 
 <objective>
-Verifica que a phase foi entregue corretamente. Roda gates definidos no reviewer specialist do projeto. Veredicto bloqueia ou libera o ship.
+Verifies the phase was delivered correctly. Runs gates defined in the project's reviewer specialist. Verdict blocks or releases the ship.
 </objective>
 
 <arguments>
-- `phase_number` (obrigatorio)
+- `phase_number` (required)
 </arguments>
 
 <process>
 
-### Passo 1: Validacao
+### Step 1: Validation
 ```bash
-test -d .jdi/ || { echo "Nao eh projeto JDI."; exit 1; }
+test -d .jdi/ || { echo "Not a JDI project."; exit 1; }
 
-# Verifica reviewer existe
+# Verify reviewer exists
 ls .jdi/agents/jdi-reviewer-*.md 2>/dev/null | head -1 || {
-  echo "Reviewer ausente. /jdi-bootstrap."
+  echo "Reviewer missing. /jdi-bootstrap."
   exit 1
 }
 
-# Verifica phase foi executada
+# Verify phase was executed
 ls .jdi/phases/{NN}*/SUMMARY.md 2>/dev/null || {
-  echo "Phase {N} nao executada. /jdi-do {N}."
+  echo "Phase {N} not executed. /jdi-do {N}."
   exit 1
 }
 
-# Context budget warm-up (nao bloqueia)
+# Context budget warm-up (does not block)
 JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
 if [ -f "$JDI_LIB/jdi-monitor.sh" ]; then
   bash "$JDI_LIB/jdi-monitor.sh" .jdi/PROJECT.md .jdi/DECISIONS.md .jdi/phases/{NN}*/PLAN.md .jdi/phases/{NN}*/SUMMARY.md || true
@@ -52,13 +52,13 @@ fi
 # Windows: pwsh -File "$JDI_LIB/jdi-monitor.ps1" -Paths @(...)
 ```
 
-### Passo 2: Resolve reviewer specialist
+### Step 2: Resolve reviewer specialist
 
 ```bash
 REVIEWER=$(grep -oE 'jdi-reviewer-[a-z0-9-]+' .jdi/reviewers.md | head -1)
 ```
 
-### Passo 3: Spawn reviewer
+### Step 3: Spawn reviewer
 
 ```
 Agent(
@@ -68,23 +68,23 @@ Agent(
 )
 ```
 
-Reviewer roda gates 1-7 sozinho (definidos no specialist). Read-only. Aguarda.
+Reviewer runs gates 1-7 on its own (defined in the specialist). Read-only. Wait.
 
-### Passo 4: Le veredicto
+### Step 4: Read verdict
 
 ```bash
-test -f .jdi/phases/{NN}*/REVIEW.md || { echo "REVIEW.md nao criado"; exit 1; }
+test -f .jdi/phases/{NN}*/REVIEW.md || { echo "REVIEW.md not created"; exit 1; }
 
-VERDICT=$(grep -oE 'Veredicto:\*\* (APPROVED|APPROVED_WITH_WARNINGS|BLOCKED)' .jdi/phases/{NN}*/REVIEW.md | awk '{print $2}')
+VERDICT=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|BLOCKED)' .jdi/phases/{NN}*/REVIEW.md | awk '{print $2}')
 ```
 
-### Passo 5: Atualiza STATE
+### Step 5: Update STATE
 
 ```markdown
 current_phase: {N}
 phase_status: {verified|blocked}
 phase_verdict: {APPROVED|APPROVED_WITH_WARNINGS|BLOCKED}
-next_step: {se APPROVED ou WITH_WARNINGS: /jdi-ship {N}; se BLOCKED: corrige e /jdi-do {N} de novo}
+next_step: {if APPROVED or WITH_WARNINGS: /jdi-ship {N}; if BLOCKED: fix and /jdi-do {N} again}
 ```
 
 ```bash
@@ -92,18 +92,18 @@ git add .jdi/phases/{NN-slug}/REVIEW.md .jdi/STATE.md
 git commit -m "docs({NN-slug}): verify phase ({VERDICT})"
 ```
 
-### Passo 6: Confirma
+### Step 6: Confirm
 
 **APPROVED:**
 ```
-Phase {N}: APPROVED. Proximo: /jdi-ship {N}
+Phase {N}: APPROVED. Next: /jdi-ship {N}
 ```
 
 **APPROVED_WITH_WARNINGS:**
 ```
 Phase {N}: APPROVED_WITH_WARNINGS ({count} warnings).
 REVIEW.md: .jdi/phases/{NN-slug}/REVIEW.md
-Proximo: /jdi-ship {N} (ou corrige antes)
+Next: /jdi-ship {N} (or fix first)
 ```
 
 **BLOCKED:**
@@ -115,12 +115,12 @@ Fix → /jdi-do {N} → /jdi-verify {N}
 </process>
 
 <gates>
-- pre: SUMMARY.md existe + reviewer registrado em .jdi/reviewers.md
-- post: REVIEW.md criado + STATE atualizado
+- pre: SUMMARY.md exists + reviewer registered in .jdi/reviewers.md
+- post: REVIEW.md created + STATE updated
 </gates>
 
 <errors>
-- Reviewer ausente -> /jdi-bootstrap
-- SUMMARY ausente -> /jdi-do
-- Reviewer falha -> mostra erro, mantem state, sugere retry
+- Reviewer missing -> /jdi-bootstrap
+- SUMMARY missing -> /jdi-do
+- Reviewer fails -> show error, keep state, suggest retry
 </errors>

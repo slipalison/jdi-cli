@@ -1,7 +1,7 @@
 ---
 name: jdi-create
-description: Cria novo agent ou skill JDI atraves de loop de perguntas validado e integracao automatica.
-argument_hint: "[descricao curta opcional]"
+description: Creates new JDI agent or skill via validated question loop and automatic integration.
+argument_hint: "[optional short description]"
 runtime_intent:
   invokes_agent: jdi-architect
 runtime_overrides:
@@ -12,69 +12,69 @@ runtime_overrides:
   antigravity:
     triggers:
       - "/jdi-create"
-      - "criar novo agent"
-      - "criar novo skill"
-      - "estender jdi"
+      - "create new agent"
+      - "create new skill"
+      - "extend jdi"
 ---
 
 <objective>
-Criar novo agent ou skill pro JDI atraves de fluxo guiado: loop de perguntas -> classificacao automatica -> validacao com user -> geracao + integracao + smoke test.
+Create new agent or skill for JDI through guided flow: question loop -> automatic classification -> validation with user -> generation + integration + smoke test.
 </objective>
 
 <arguments>
-- `descricao` (opcional): texto livre descrevendo o que se quer criar. Acelera Q1.
+- `description` (optional): free text describing what to create. Speeds up Q1.
 
-Exemplos:
+Examples:
 - `/jdi-create`
-- `/jdi-create "specialist pra Rust com cargo + clippy"`
-- `/jdi-create "reviewer focado em a11y pra UI"`
-- `/jdi-create "skill com convencoes EF Core 9"`
+- `/jdi-create "specialist for Rust with cargo + clippy"`
+- `/jdi-create "reviewer focused on a11y for UI"`
+- `/jdi-create "skill with EF Core 9 conventions"`
 </arguments>
 
 <process>
 
-### Passo 1: Validacao
+### Step 1: Validation
 
 ```bash
-test -d .jdi/ || { echo "Nao eh projeto JDI. Rode /jdi-new."; exit 1; }
-test -d core/  || { echo "Source of truth nao encontrado. Esta no repo do JDI?"; exit 1; }
+test -d .jdi/ || { echo "Not a JDI project. Run /jdi-new."; exit 1; }
+test -d core/  || { echo "Source of truth not found. Are you in the JDI repo?"; exit 1; }
 ```
 
-### Passo 2: Spawn architect
+### Step 2: Spawn architect
 
-Invoca `jdi-architect`:
-- Se argumento livre fornecido, passa como contexto pra Q1
-- Senao, asker comeca do zero
+Invoke `jdi-architect`:
+- If free argument provided, pass as context for Q1
+- Otherwise, asker starts from scratch
 
-Aguarda. Architect roda 12 passos (ver `core/agents/jdi-architect.md`).
+Wait. Architect runs 12 steps (see `core/agents/jdi-architect.md`).
 
-### Passo 3: Verifica resultado
+### Step 3: Verify result
 
-Architect retorna 1 de 3 status:
+Architect returns 1 of 3 statuses:
 
-- **created** — agent/skill criado, integrado, build+install feitos. Comando confirma com user e termina.
-- **cancelled** — user cancelou. Comando sai limpo, sem commit.
-- **failed** — algo deu errado (template ausente, conflito de nome, build falhou). Mostra erro, sugere retry.
+- **created** — agent/skill created, integrated, build+install done. Command confirms with user and ends.
+- **cancelled** — user cancelled. Command exits clean, no commit.
+- **failed** — something went wrong (template missing, name conflict, build failed). Show error, suggest retry.
 
-### Passo 4: Confirma
+### Step 4: Confirm
 
-Se **created**:
+If **created**:
 ```
-jdi-{nome} ({tipo}) ok. Audit: R-{N}. Commit: {sha}.
-Invocar: {instrucoes runtime}
+jdi-{name} ({type}) ok. Audit: R-{N}. Commit: {sha}.
+Invoke: {runtime instructions}
 ```
 
 </process>
 
 <gates>
-- pre: `.jdi/` existe + `core/` existe + clean working tree (sem mudancas nao commitadas em `core/` pra evitar conflitos)
-- post: agent/skill criado + integration points atualizados + build+install feitos + commit atomico
+- pre: `.jdi/` exists + `core/` exists + clean working tree (no uncommitted changes in `core/` to avoid conflicts)
+- post: agent/skill created + integration points updated + build+install done + atomic commit
 </gates>
 
 <errors>
-- Nao eh projeto JDI -> sugere `/jdi-new`
-- Source `core/` ausente -> nao eh repo do JDI, redireciona
-- Working tree dirty em `core/` -> pede commit ou stash antes
-- User cancelou -> sai sem efeito colateral
-- Build falhou -> nao instala, mostra erro do build, mantem core/ atualizado pra retry manual
+- Not a JDI project -> suggest `/jdi-new`
+- Source `core/` missing -> not the JDI repo, redirect
+- Working tree dirty in `core/` -> ask to commit or stash first
+- User cancelled -> exit with no side effects
+- Build failed -> do not install, show build error, keep core/ updated for manual retry
 </errors>

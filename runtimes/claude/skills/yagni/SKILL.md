@@ -1,144 +1,144 @@
 ---
 name: yagni
-description: YAGNI (You Aren't Gonna Need It). Construa apenas o que requisito atual pede. Generalizacao apos 3o caso real, nunca antes. Codigo nao escrito eh codigo sem bug, sem custo de manutencao, sem teste pendente. Aplica em qualquer linguagem.
+description: YAGNI (You Aren't Gonna Need It). Build only what the current requirement asks for. Generalize after the 3rd real case, never before. Code not written is code with no bug, no maintenance cost, no pending test. Applies in any language.
 ---
 
 # Skill: YAGNI
 
-> Voce nao vai precisar disso.
+> You aren't gonna need it.
 
-YAGNI eh disciplina contra **codigo especulativo**: features, abstracoes, parametros, hooks, layers, configs que existem "pra caso precise". Em 90% dos casos, nunca precisa — e quando precisa, o requisito eh diferente do que voce imaginou.
+YAGNI is discipline against **speculative code**: features, abstractions, parameters, hooks, layers, configs that exist "in case it's needed". In 90% of cases, never needed — and when needed, the requirement is different from what you imagined.
 
-## Regras
+## Rules
 
-### 1. Construa apenas o que requisito atual pede
+### 1. Build only what the current requirement asks
 
-Pergunte de cada linha de codigo nova:
-- **Essa funcionalidade tem requisito hoje?**
-- **Quem eh o caller que precisa disso AGORA?**
+Ask of every new line of code:
+- **Does this functionality have a requirement today?**
+- **Who is the caller that needs this NOW?**
 
-Se nao tem caller real, nao escreve. Codigo morto eh **dividido negativo**: bug latente, custo de manutencao, distracao em review, dificulta refactor.
+If there's no real caller, don't write it. Dead code is **net negative**: latent bug, maintenance cost, distraction in review, hinders refactor.
 
-### 2. Generalizacao depois do 3o caso real
+### 2. Generalize after the 3rd real case
 
 Sandi Metz: "Duplication is far cheaper than the wrong abstraction."
 
-- 1 caso: implementa especifico
-- 2 casos: copia ou parametriza minimamente
-- 3 casos: AI extrai padrao real (que voce **viu** acontecer, nao imaginou)
+- 1 case: implement specific
+- 2 cases: copy or minimally parameterize
+- 3 cases: now extract real pattern (one you **saw** happen, not imagined)
 
-Generalizar antes acopla callers a interface errada. Refatorar dps pra interface certa eh barato; quebrar callers pra trocar interface generica errada eh caro.
+Generalizing earlier couples callers to the wrong interface. Refactoring later to the right interface is cheap; breaking callers to swap a wrong generic interface is expensive.
 
-### 3. Custos do codigo especulativo
+### 3. Costs of speculative code
 
-Toda linha "pra caso precise" custa:
+Every "in case it's needed" line costs:
 
-- **Manutencao**: alguem vai tocar quando refatorar vizinhanca
-- **Confusao**: leitor pensa "isso ta sendo usado, deve ser importante"
-- **Testes**: codigo nao testado vira bomba; testado, tempo perdido
-- **Coupling**: callers vao acoplar a interface especulativa, dificultando remover
-- **Scope creep**: feature simples vira feature complexa
-- **Bug surface**: linha que nao existe nao tem bug
+- **Maintenance**: someone will touch it when refactoring the neighborhood
+- **Confusion**: reader thinks "this is being used, must be important"
+- **Tests**: untested code becomes a bomb; tested, wasted time
+- **Coupling**: callers will couple to the speculative interface, making it hard to remove
+- **Scope creep**: simple feature becomes complex feature
+- **Bug surface**: a line that doesn't exist has no bug
 
-### 4. O que NAO eh YAGNI
+### 4. What YAGNI is NOT
 
-YAGNI nao eh desculpa pra:
-- **Hardcoded everywhere**: alguns extension points sao requisito real (i18n, logging, auth)
-- **Cortar requisito real**: se ticket pede X, entrega X completo, nao a metade
-- **Skip de seguranca/error handling**: sao requisitos universais, nao especulativos
-- **Codigo cru e ilegivel**: clareza eh requisito, nao especulacao
-- **Pular testes**: cobertura eh contrato
+YAGNI is not an excuse to:
+- **Hardcoded everywhere**: some extension points are real requirements (i18n, logging, auth)
+- **Cut real requirement**: if ticket asks for X, deliver X complete, not half
+- **Skip security/error handling**: these are universal requirements, not speculative
+- **Raw illegible code**: clarity is a requirement, not speculation
+- **Skip tests**: coverage is a contract
 
-### 5. Sintomas de violacao
+### 5. Symptoms of violation
 
-Codigo tem cheiro de YAGNI quebrado se:
+Code smells of broken YAGNI if:
 
-- Parametros opcionais nunca passados (`fn(a, b, opts?: {...})` com opts sempre `undefined`)
-- Hooks/eventos sem subscribers
-- Plugin system sem plugins
-- Config "pra caso queiramos mudar" que ngm nunca mudou
-- Interface com 1 impl (overlap com KISS)
-- Generic `<T>` usado com 1 tipo so
-- "Future-proof" arquitetura escrita pra escalar 100x antes de validar requisito atual
-- Branches no codigo pra cenarios que ngm consegue descrever
+- Optional parameters never passed (`fn(a, b, opts?: {...})` with opts always `undefined`)
+- Hooks/events without subscribers
+- Plugin system without plugins
+- Config "in case we want to change" that nobody ever changed
+- Interface with 1 impl (overlap with KISS)
+- Generic `<T>` used with only 1 type
+- "Future-proof" architecture written to scale 100x before validating current requirement
+- Branches in code for scenarios nobody can describe
 
-### 6. Como remover
+### 6. How to remove
 
-Apos descobrir codigo especulativo:
-1. Confirma que ngm chama (`grep` nos callers)
-2. Deleta. Sim, deleta direto. Git guarda historia.
-3. Nao deixa "// removido em XX/YY" — mais lixo.
-4. Se descobrir que precisa dps, adiciona quando precisar (aposta certa: dps voce sabe o requisito real, nao imaginado).
+After discovering speculative code:
+1. Confirm nobody calls (`grep` callers)
+2. Delete. Yes, delete directly. Git keeps history.
+3. Don't leave "// removed on XX/YY" — more trash.
+4. If you find out later you need it, add it when you need it (safe bet: later you know the real requirement, not imagined).
 
 ## Anti-patterns
 
-| Anti-pattern | Por que viola |
+| Anti-pattern | Why it violates |
 |---|---|
-| Parametro opcional nunca usado | Adiciona surface area sem benefit |
-| Funcao "generica" usada por 1 caller | Generalizou cedo demais |
-| Plugin/extension point sem extensores | Codigo morto carrega manutencao |
-| Config "configurable" que ngm muda | Falsa flexibilidade — vira hardcode dps |
-| Try/catch pra excecao impossivel | Indica medo, nao requisito |
-| Validacao defensiva pra valor que vem de tipo seguro | TypeScript/C#/Python types ja garantem |
-| `for/while` em lugar de retorno direto pra "futuro looping" | Inventa repeticao especulativa |
-| Layer "pra ficar generico" sem 2a impl | Especulacao com custo de pass-through |
-| Comentario "TODO: extender pra X dps" sem ticket | Mensagem pro nada |
-| Abstracao com 1 implementacao concreta | Generic abstraction sem segundo caso |
-| `enum` com 1 valor "vai crescer" | Adicione valor quando aparecer |
+| Optional parameter never used | Adds surface area without benefit |
+| "Generic" function used by 1 caller | Generalized too early |
+| Plugin/extension point without extenders | Dead code carries maintenance |
+| "Configurable" config nobody changes | False flexibility — becomes hardcode later |
+| Try/catch for impossible exception | Indicates fear, not requirement |
+| Defensive validation for value coming from a safe type | TypeScript/C#/Python types already guarantee |
+| `for/while` instead of direct return for "future looping" | Invents speculative repetition |
+| Layer "to make it generic" without 2nd impl | Speculation with pass-through cost |
+| Comment "TODO: extend to X later" without ticket | Message to nobody |
+| Abstraction with 1 concrete implementation | Generic abstraction without second case |
+| `enum` with 1 value "will grow" | Add value when it appears |
 
 ## Procedure
 
-### Doer (antes/durante implementacao)
+### Doer (before/during implementation)
 
-Antes de adicionar:
+Before adding:
 
-1. **Tem requisito atual?** (ticket, conversa, regra de negocio explicita) Senao, nao adiciona.
-2. **Quem chama isso hoje?** Se ngm, nao adiciona.
-3. **Vou usar essa flexibilidade quando?** Se "nao sei", nao adiciona.
+1. **Is there a current requirement?** (ticket, conversation, explicit business rule) Otherwise, don't add.
+2. **Who calls this today?** If nobody, don't add.
+3. **When will I use that flexibility?** If "don't know", don't add.
 
-Apos escrever, perguntar:
-- Existe parametro/config/branch que poderia sumir sem perder requisito?
+After writing, ask:
+- Is there a parameter/config/branch that could disappear without losing requirement?
 
 ### Reviewer (gate 5)
 
-Heuristicas:
+Heuristics:
 
 ```bash
-# Parametros opcionais nunca passados
-# (depende de stack — exemplos)
+# Optional parameters never passed
+# (depends on stack — examples)
 grep -RnE 'function \w+\([^)]*opts\?:' src/  # TS
-grep -RnE '\([^)]*=\s*null\)' src/            # opcional default null
+grep -RnE '\([^)]*=\s*null\)' src/            # optional default null
 
-# Codigo "TODO: extend"
-grep -RnE 'TODO.*(extend|future|reserved|placeholder|pra caso)' src/
+# "TODO: extend" code
+grep -RnE 'TODO.*(extend|future|reserved|placeholder|in case)' src/
 
-# Try/catch sem motivo claro
+# Try/catch without clear reason
 grep -RnA3 'try\s*{' src/ | grep -B1 'catch.*:.*ignore'
 
-# Variaveis declaradas e nao usadas
-# (linter ja pega — confirma no review)
+# Declared and unused variables
+# (linter already catches — confirm in review)
 
 # Plugin/extension points
 grep -RnE 'register|registerPlugin|EventEmitter|hook(' src/
-# Cross-check: ha callers de fato?
+# Cross-check: are there actually callers?
 ```
 
-3+ matches sem caller real -> WARN.
+3+ matches without real caller -> WARN.
 
 ## Inputs
 
-- Diff do file (foco em adicoes)
-- Lista de callers se houver
+- File diff (focus on additions)
+- List of callers if any
 
 ## Outputs
 
-NAO produz arquivo. Modifica julgamento — doer evita escrever, reviewer marca WARN.
+Does NOT produce a file. Modifies judgement — doer avoids writing, reviewer marks WARN.
 
 ## Examples
 
-### Exemplo 1: Param opcional especulativo
+### Example 1: Speculative optional param
 
-Errado:
+Wrong:
 ```python
 def send_email(to: str, subject: str, body: str,
                cc: list[str] = None,
@@ -150,19 +150,19 @@ def send_email(to: str, subject: str, body: str,
     ...
 ```
 
-Requisito atual eh enviar email simples (`to, subject, body`). Os outros 5 params sao especulativos.
+Current requirement is to send simple email (`to, subject, body`). The other 5 params are speculative.
 
-Certo:
+Right:
 ```python
 def send_email(to: str, subject: str, body: str):
     ...
 ```
 
-Adiciona `cc`, `bcc` etc **quando** chegar requisito real, nao antes.
+Add `cc`, `bcc` etc **when** real requirement arrives, not before.
 
-### Exemplo 2: Plugin system sem plugins
+### Example 2: Plugin system without plugins
 
-Errado:
+Wrong:
 ```typescript
 class PaymentProcessor {
   private plugins: Plugin[] = []
@@ -175,19 +175,19 @@ class PaymentProcessor {
 }
 ```
 
-Tem 0 plugins registrados. Plugin system inteiro eh codigo morto.
+Has 0 plugins registered. Whole plugin system is dead code.
 
-Certo:
+Right:
 ```typescript
 class PaymentProcessor {
   process(...) { /* logic */ }
 }
 ```
 
-Quando 1o plugin real aparecer, ai sim. Nao antes.
+When the 1st real plugin appears, then yes. Not before.
 
-### Exemplo 3: Config string nao usada
+### Example 3: Unused config string
 
-Errado: `config.json -> "DEFAULT_LANGUAGE": "pt-BR"` mas ngm le isso. Codigo usa `"pt-BR"` direto.
+Wrong: `config.json -> "DEFAULT_LANGUAGE": "pt-BR"` but nobody reads it. Code uses `"pt-BR"` directly.
 
-Certo: deleta a config. Adiciona quando a feature de multi-language for de fato implementada.
+Right: delete the config. Add it when the multi-language feature is actually implemented.

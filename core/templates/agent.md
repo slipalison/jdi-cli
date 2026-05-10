@@ -1,72 +1,72 @@
 ---
-name: jdi-{NOME}
-description: {DESCRICAO_1_LINHA}
+name: jdi-{NAME}
+description: {ONE_LINE_DESCRIPTION}
 runtime_intent:
   role: {ROLE}
   reasoning: {cheap|medium|deep}
   privileges: {read|read+write|read+write+edit|read+write+edit+bash}
 tools_canonical:
-  {LISTA_TOOLS}
+  {TOOLS_LIST}
 triggers:
-  {LISTA_TRIGGERS}
+  {TRIGGERS_LIST}
 runtime_overrides:
   claude:
-    model: {MODELO_CLAUDE}
-    tools: {TOOLS_CLAUDE}
+    model: {CLAUDE_MODEL}
+    tools: {CLAUDE_TOOLS}
   copilot:
-    model: {MODELO_COPILOT}
-    tools: {TOOLS_COPILOT}
+    model: {COPILOT_MODEL}
+    tools: {COPILOT_TOOLS}
   antigravity:
     triggers_extra:
-      {LISTA_TRIGGERS_EXTRA}
+      {EXTRA_TRIGGERS_LIST}
 ---
 
 <role>
-{DESCRICAO_DETALHADA_DO_PAPEL}
+{DETAILED_ROLE_DESCRIPTION}
 
-Spawned por: {QUEM_INVOCA}
+Spawned by: {WHO_INVOKES}
 
-Responsabilidades:
-- {LISTA}
+Responsibilities:
+- {LIST}
 
-NAO eh responsabilidade deste agente:
-- {LISTA_DELIMITES}
+NOT this agent's responsibility:
+- {BOUNDARY_LIST}
 </role>
 
 <inputs>
-- {ARGUMENTOS_OBRIGATORIOS}
-- (opcional) {ARGUMENTOS_OPCIONAIS}
-- Read access em: {ARQUIVOS_NECESSARIOS}
+- {REQUIRED_ARGS}
+- (optional) {OPTIONAL_ARGS}
+- Read access on: {REQUIRED_FILES}
 </inputs>
 
 <skills_to_load>
-{SKILLS_QUE_AGENT_USA}
+{SKILLS_AGENT_USES}
 </skills_to_load>
 
 <process>
 
-### Passo 1: {NOME_PASSO}
-{DESCRICAO}
+### Step 1: {STEP_NAME}
+{DESCRIPTION}
 
-### Passo 2: {NOME_PASSO}
-{DESCRICAO}
+### Step 2: {STEP_NAME}
+{DESCRIPTION}
 
-### Passo 3: {NOME_PASSO}
-{DESCRICAO}
+### Step 3: {STEP_NAME}
+{DESCRIPTION}
 
 </process>
 
 <rules>
-- {LISTA_DE_REGRAS_INVIOLAVEIS}
+- {LIST_OF_INVIOLABLE_RULES}
 </rules>
 
 <fallbacks>
-- Sem {TOOL_X}: {ALTERNATIVA}
-- {OUTROS_FALLBACKS}
+- No {TOOL_X}: {ALTERNATIVE}
+- {OTHER_FALLBACKS}
 </fallbacks>
 
 <output>
-- {ARTIFACT_PRODUZIDO}
+- {ARTIFACT_PRODUCED}
 - {SIDE_EFFECTS}
-- Mensagem final pro user: {EXEMPLO}
+- Final message to user: {EXAMPLE}
 </output>

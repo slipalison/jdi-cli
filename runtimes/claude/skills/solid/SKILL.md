@@ -1,200 +1,200 @@
 ---
 name: solid
-description: SOLID. Os 5 principios de design OO de Robert C. Martin - SRP, OCP, LSP, ISP, DIP. Aplicaveis em qualquer linguagem com tipos/classes/interfaces (C#, Java, TS, Python, Go, Rust, Kotlin, Swift, etc). Resumo direto + anti-patterns + heuristicas de detecao.
+description: SOLID. Robert C. Martin's 5 OO design principles - SRP, OCP, LSP, ISP, DIP. Applicable in any language with types/classes/interfaces (C#, Java, TS, Python, Go, Rust, Kotlin, Swift, etc). Direct summary + anti-patterns + detection heuristics.
 ---
 
 # Skill: SOLID
 
-5 principios de design — **S**ingle Responsibility, **O**pen/Closed, **L**iskov Substitution, **I**nterface Segregation, **D**ependency Inversion.
+5 design principles — **S**ingle Responsibility, **O**pen/Closed, **L**iskov Substitution, **I**nterface Segregation, **D**ependency Inversion.
 
-Aplicaveis em qualquer linguagem com classes ou interfaces. Em FP/procedural, principios mapeiam pra modulos e funcoes (SRP: 1 funcao 1 responsabilidade; ISP: parametros minimos; DIP: dependency injection via parametro).
+Applicable in any language with classes or interfaces. In FP/procedural, principles map to modules and functions (SRP: 1 function 1 responsibility; ISP: minimal parameters; DIP: dependency injection via parameter).
 
 ## S - Single Responsibility Principle (SRP)
 
-> Uma classe/modulo deve ter **1 motivo pra mudar**.
+> A class/module must have **1 reason to change**.
 
-**1 motivo = 1 stakeholder ou 1 eixo de mudanca**, nao "1 acao".
+**1 reason = 1 stakeholder or 1 axis of change**, not "1 action".
 
-`UserService` que faz auth + persistencia + envia email viola — sao 3 motivos pra mudar (security team muda auth, DBA muda persistencia, marketing muda email).
+`UserService` that does auth + persistence + sends email violates — there are 3 reasons to change (security team changes auth, DBA changes persistence, marketing changes email).
 
-### Sintomas de violacao
-- Classe com nome generico (`Manager`, `Helper`, `Service`, `Util`)
-- Metodos sem coerencia tematica
-- Multiple imports de bibliotecas sem relacao (DB + email + crypto na mesma classe)
-- Diff de uma classe afeta dominios separados em sprints diferentes
+### Violation symptoms
+- Class with generic name (`Manager`, `Helper`, `Service`, `Util`)
+- Methods without thematic coherence
+- Multiple imports of unrelated libraries (DB + email + crypto in the same class)
+- Diff of one class affects separate domains in different sprints
 
 ### Fix
-Extrai responsabilidades em classes separadas:
+Extract responsibilities into separate classes:
 - `UserAuthenticator` (auth)
-- `UserRepository` (persistencia)
+- `UserRepository` (persistence)
 - `UserNotifier` (email)
 
-Compose numa coordinator se preciso, mas cada peca tem 1 motivo.
+Compose in a coordinator if needed, but each piece has 1 reason.
 
 ## O - Open/Closed Principle (OCP)
 
-> Aberto pra **extensao**, fechado pra **modificacao**.
+> Open for **extension**, closed for **modification**.
 
-Adicionar comportamento novo nao deveria exigir editar codigo testado. Use polimorfismo, strategy, plugins, ou config — nao if/else infinito.
+Adding new behavior shouldn't require editing tested code. Use polymorphism, strategy, plugins, or config — not infinite if/else.
 
-### Sintomas de violacao
-- `switch (type)` que cresce a cada feature nova
+### Violation symptoms
+- `switch (type)` that grows with every new feature
 - `if (provider === "x") ... else if ... else if ...`
-- Cada feature nova edita N classes existentes em vez de adicionar 1 nova
+- Each new feature edits N existing classes instead of adding 1 new one
 
 ### Fix
-- **Strategy pattern**: cada caso vira impl de interface
-- **Polimorfismo**: subclass override em vez de switch externo
-- **Registry**: `registry.register("x", handler)` — feature nova so adiciona
-- **Visitor**: pra hierarquias de tipos fechadas
+- **Strategy pattern**: each case becomes an impl of an interface
+- **Polymorphism**: subclass override instead of external switch
+- **Registry**: `registry.register("x", handler)` — new feature just adds
+- **Visitor**: for closed type hierarchies
 
-### Quando ignorar
-OCP eh aspiracional, nao absoluto. Aplicar em pontos de variacao **conhecida** (estrategias de pagamento sao multiplas), nao especular (KISS + YAGNI).
+### When to ignore
+OCP is aspirational, not absolute. Apply at points of **known** variation (payment strategies are multiple), don't speculate (KISS + YAGNI).
 
 ## L - Liskov Substitution Principle (LSP)
 
-> Subtipo deve ser **substituivel** pelo supertipo sem quebrar comportamento.
+> Subtype must be **substitutable** for the supertype without breaking behavior.
 
-Se `Bird` tem metodo `fly()`, `Penguin extends Bird` viola LSP — penguin nao voa. Caller que recebe `Bird` quebra ao receber `Penguin`.
+If `Bird` has method `fly()`, `Penguin extends Bird` violates LSP — penguin doesn't fly. Caller receiving `Bird` breaks when it receives `Penguin`.
 
-### Sintomas de violacao
-- Subclass que **lanca excecao** em metodo herdado ("not supported")
-- Subclass que **fortalece pre-condicao** (`base aceita >= 0`, sub aceita `> 0`)
-- Subclass que **fraqueja pos-condicao** (base garante "ordenado", sub nao garante)
-- Caller precisa de `if (instanceof Subtype)` pra tratar caso especial
+### Violation symptoms
+- Subclass that **throws exception** on inherited method ("not supported")
+- Subclass that **strengthens precondition** (`base accepts >= 0`, sub accepts `> 0`)
+- Subclass that **weakens postcondition** (base guarantees "sorted", sub doesn't guarantee)
+- Caller needs `if (instanceof Subtype)` to handle a special case
 
 ### Fix
-- Repensa hierarquia: `Penguin` nao eh `Bird` voador, eh `Bird` que anda. Cria `FlyingBird : Bird` e `Penguin : Bird` sem fly.
-- Composition over inheritance: prefira interfaces compostas a hierarquias profundas.
-- Refactor pra capabilities: `Flyable`, `Swimmable`, `Walkable` (overlap com ISP).
+- Rethink hierarchy: `Penguin` isn't a flying `Bird`, it's a `Bird` that walks. Create `FlyingBird : Bird` and `Penguin : Bird` without fly.
+- Composition over inheritance: prefer composed interfaces over deep hierarchies.
+- Refactor to capabilities: `Flyable`, `Swimmable`, `Walkable` (overlap with ISP).
 
 ## I - Interface Segregation Principle (ISP)
 
-> Clients nao deveriam ser forcados a depender de interfaces que **nao usam**.
+> Clients should not be forced to depend on interfaces they **do not use**.
 
-Interfaces grandes ("fat interfaces") forcam impls a stub metodos sem sentido (lancando NotImplemented), e callers a importar dependencias amplas.
+Big interfaces ("fat interfaces") force impls to stub meaningless methods (throwing NotImplemented), and callers to import broad dependencies.
 
-### Sintomas de violacao
-- Interface com 15 metodos, cada caller usa 2-3
-- Impl com varios metodos jogando `throw new NotImplementedException()`
-- Mock de teste enorme pra usar 1 metodo da interface
+### Violation symptoms
+- Interface with 15 methods, each caller uses 2-3
+- Impl with several methods throwing `throw new NotImplementedException()`
+- Huge test mock to use 1 method of the interface
 
 ### Fix
-Quebra em interfaces menores e coesas:
+Split into smaller, cohesive interfaces:
 ```
 IFileReader { read() }
 IFileWriter { write() }
-// callers escolhem o subset que precisam
+// callers pick the subset they need
 ```
 
-Em FP/Go, mesmo principio: parametros minimos, structural typing nao forca implementar tudo.
+In FP/Go, same principle: minimal parameters, structural typing doesn't force implementing everything.
 
 ## D - Dependency Inversion Principle (DIP)
 
-> Modulos de alto nivel **nao** dependem de baixo nivel. Ambos dependem de **abstracoes**.
+> High-level modules **do not** depend on low-level. Both depend on **abstractions**.
 
-Logica de negocio nao importa "PostgreSQL", "AWS S3", "SendGrid". Importa abstracoes (`UserRepository`, `BlobStorage`, `EmailSender`). Implementacoes concretas vivem em camadas externas.
+Business logic doesn't care about "PostgreSQL", "AWS S3", "SendGrid". It cares about abstractions (`UserRepository`, `BlobStorage`, `EmailSender`). Concrete implementations live in outer layers.
 
-### Sintomas de violacao
-- Classe de dominio importa `pg`, `aws-sdk`, `sendgrid`, `axios`
-- Logica de negocio testavel so com infra real (DB up, S3 mockado, etc)
-- Trocar provider exige rewrite de logica de negocio
+### Violation symptoms
+- Domain class imports `pg`, `aws-sdk`, `sendgrid`, `axios`
+- Business logic testable only with real infra (DB up, S3 mocked, etc)
+- Swapping provider requires rewriting business logic
 
 ### Fix
 - **Dependency injection** (constructor / property / parameter)
-- Defina interfaces no modulo de dominio; impls vivem em infra/adapter layer (overlap com Hexagonal/Clean Architecture)
-- Composition root injeta a impl certa
+- Define interfaces in the domain module; impls live in infra/adapter layer (overlap with Hexagonal/Clean Architecture)
+- Composition root injects the right impl
 
 ### DIP != IoC container
-DIP eh principio. IoC container eh **uma** ferramenta. Pode aplicar DIP com construtor manual, factory simples, ou parameter injection — sem framework.
+DIP is a principle. IoC container is **one** tool. You can apply DIP with manual constructor, simple factory, or parameter injection — no framework.
 
-## Resumo dos 5
+## Summary of the 5
 
-| Letra | Foco | Pergunta-chave |
+| Letter | Focus | Key question |
 |---|---|---|
-| **S** | Coesao da unidade | Quantos motivos pra mudar essa classe/modulo? (>1 = viola) |
-| **O** | Estabilidade frente a extensao | Adicionar feature nova edita codigo testado ou adiciona codigo novo? |
-| **L** | Contrato de heranca | Substituir o pai pelo filho quebra algum caller? |
-| **I** | Tamanho de interface | Toda impl/caller usa todos os metodos? |
-| **D** | Direcao de dependencia | Dominio importa infra ou infra importa dominio? |
+| **S** | Unit cohesion | How many reasons to change this class/module? (>1 = violates) |
+| **O** | Stability against extension | Does adding a new feature edit tested code or add new code? |
+| **L** | Inheritance contract | Does replacing parent with child break any caller? |
+| **I** | Interface size | Does every impl/caller use all methods? |
+| **D** | Direction of dependency | Does domain import infra or does infra import domain? |
 
-## Anti-patterns gerais
+## General anti-patterns
 
-| Anti-pattern | Principio violado |
+| Anti-pattern | Principle violated |
 |---|---|
-| `God class` com 30+ metodos heterogeneos | SRP |
-| `switch (kind)` em N callers, cresce a cada feature | OCP |
-| Subclasse com `throw NotSupportedException()` | LSP |
-| `IRepository` com 20 metodos genericos | ISP |
-| Service de dominio importando ORM concreto | DIP |
-| Heranca > 3 niveis | LSP + SRP (geralmente) |
-| Construtor com 8+ parametros | SRP (responsabilidades demais) |
-| Util class com 50 funcoes nao-relacionadas | SRP |
+| `God class` with 30+ heterogeneous methods | SRP |
+| `switch (kind)` in N callers, grows with each feature | OCP |
+| Subclass with `throw NotSupportedException()` | LSP |
+| `IRepository` with 20 generic methods | ISP |
+| Domain service importing concrete ORM | DIP |
+| Inheritance > 3 levels | LSP + SRP (usually) |
+| Constructor with 8+ parameters | SRP (too many responsibilities) |
+| Util class with 50 unrelated functions | SRP |
 
 ## Procedure
 
 ### Doer
 
-Antes de criar classe/modulo/interface:
-- **SRP**: descreve em 1 frase. Se precisar "e", quebra.
-- **ISP**: lista os callers previstos. Cada um precisa de **todos** os metodos? Se nao, quebra.
-- **DIP**: o que isso depende? Concretudes (DB, HTTP, FS) -> injeta como abstracao.
+Before creating class/module/interface:
+- **SRP**: describe in 1 sentence. If you need "and", split.
+- **ISP**: list expected callers. Does each one need **all** methods? If not, split.
+- **DIP**: what does this depend on? Concretions (DB, HTTP, FS) -> inject as abstraction.
 
-Antes de fazer subclass:
-- **LSP**: substituicao pelo pai funciona em todos os callers? Se nao, hierarquia errada.
+Before subclassing:
+- **LSP**: does substitution by parent work in all callers? If not, wrong hierarchy.
 
-Antes de adicionar `if/switch` em ponto que cresce:
-- **OCP**: vale strategy/registry?
+Before adding `if/switch` at a growing point:
+- **OCP**: is strategy/registry worth it?
 
 ### Reviewer (gate 5)
 
 ```bash
-# SRP — classes muito grandes
+# SRP — very large classes
 find src/ -name '*.cs' -o -name '*.ts' -o -name '*.py' | while read f; do
   loc=$(wc -l < "$f")
-  [[ $loc -gt 400 ]] && echo "WARN SRP: $f tem $loc linhas, possivel god class"
+  [[ $loc -gt 400 ]] && echo "WARN SRP: $f has $loc lines, possible god class"
 done
 
-# OCP — switches grandes em hot paths
+# OCP — big switches on hot paths
 grep -RnE 'switch\s*\(' src/ | head
-# (manualmente: avaliar se cresce a cada feature)
+# (manually: evaluate if it grows with each feature)
 
-# LSP — NotImplemented em subclass
+# LSP — NotImplemented in subclass
 grep -RnE 'NotImplemented|UnsupportedOperation|throw new.*not (implemented|supported)' src/
 
-# ISP — interfaces gigantes
+# ISP — giant interfaces
 grep -RnA50 '^(public |export )?interface' src/ | grep -cE '^\s+\w+\s*\(' | sort -rn
-# count > 10 metodos -> WARN
+# count > 10 methods -> WARN
 
-# DIP — modulo de dominio importando concretudes
+# DIP — domain module importing concretions
 grep -RnE 'from.*pg|from.*aws-sdk|using Npgsql|using AWSSDK' src/domain/ src/core/
 ```
 
-Match relevante -> WARN com principio citado.
+Relevant match -> WARN with principle cited.
 
 ## Inputs
 
-- Diff/conteudo do file
-- Estrutura do projeto (pra detectar dominio vs infra)
+- Diff/content of the file
+- Project structure (to detect domain vs infra)
 
 ## Outputs
 
-NAO produz arquivo. Modifica julgamento.
+Does NOT produce a file. Modifies judgement.
 
 ## Examples
 
-### Exemplo 1: SRP violado
+### Example 1: SRP violated
 
-Errado:
+Wrong:
 ```csharp
 public class OrderService {
-  public Order Create(...) { /* validar + salvar + email + log + audit */ }
+  public Order Create(...) { /* validate + save + email + log + audit */ }
 }
 ```
 
-5 motivos pra mudar.
+5 reasons to change.
 
-Certo:
+Right:
 ```csharp
 public class OrderValidator { }
 public class OrderRepository { }
@@ -209,9 +209,9 @@ public class OrderService {
 }
 ```
 
-### Exemplo 2: OCP violado
+### Example 2: OCP violated
 
-Errado:
+Wrong:
 ```typescript
 function calcDiscount(type: string, amount: number) {
   if (type === "vip") return amount * 0.2
@@ -221,9 +221,9 @@ function calcDiscount(type: string, amount: number) {
 }
 ```
 
-Cada novo tipo edita essa funcao.
+Each new type edits this function.
 
-Certo:
+Right:
 ```typescript
 const strategies: Record<string, (amount: number) => number> = {
   vip: a => a * 0.2,
@@ -235,11 +235,11 @@ function calcDiscount(type: string, amount: number) {
 }
 ```
 
-Tipo novo: registra no `strategies`, nao toca `calcDiscount`.
+New type: register in `strategies`, don't touch `calcDiscount`.
 
-### Exemplo 3: DIP violado
+### Example 3: DIP violated
 
-Errado:
+Wrong:
 ```python
 # domain/order.py
 import psycopg2
@@ -249,19 +249,19 @@ class OrderService:
     ...
 ```
 
-Dominio acoplado a Postgres.
+Domain coupled to Postgres.
 
-Certo:
+Right:
 ```python
 # domain/order.py
 class OrderService:
-  def __init__(self, repo: OrderRepository):  # abstracao
+  def __init__(self, repo: OrderRepository):  # abstraction
     self._repo = repo
   def get(self, id): return self._repo.get(id)
 
 # infra/postgres_order_repo.py
 class PostgresOrderRepository(OrderRepository):
-  def get(self, id): ...  # impl concreta
+  def get(self, id): ...  # concrete impl
 ```
 
-Dominio nao sabe que existe Postgres.
+Domain doesn't know Postgres exists.

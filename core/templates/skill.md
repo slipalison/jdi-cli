@@ -1,66 +1,66 @@
 ---
-name: {NOME}
-description: {DESCRICAO_1_LINHA}
+name: {NAME}
+description: {ONE_LINE_DESCRIPTION}
 type: skill
 applies_to:
-  {QUANDO_APLICAR}
+  {WHEN_TO_APPLY}
 loaded_by:
-  {AGENTS_QUE_CARREGAM}
+  {AGENTS_THAT_LOAD}
 runtime_overrides:
   antigravity:
     triggers:
-      {TRIGGERS_PARA_DISCOVERY}
+      {DISCOVERY_TRIGGERS}
 ---
 
-# Skill: {NOME}
+# Skill: {NAME}
 
-{DESCRICAO_DETALHADA}
+{DETAILED_DESCRIPTION}
 
-## Quando aplicar
+## When to apply
 
-{CONDICOES_DE_USO}
+{USAGE_CONDITIONS}
 
 ## Procedure
 
-### Passo 1: {NOME}
-{DESCRICAO}
+### Step 1: {NAME}
+{DESCRIPTION}
 
-### Passo 2: {NOME}
-{DESCRICAO}
+### Step 2: {NAME}
+{DESCRIPTION}
 
-### Passo 3: {NOME}
-{DESCRICAO}
+### Step 3: {NAME}
+{DESCRIPTION}
 
-## Inputs esperados
+## Expected inputs
 
-{O_QUE_O_AGENT_PAI_FORNECE}
+{WHAT_THE_PARENT_AGENT_PROVIDES}
 
 ## Outputs
 
-{O_QUE_VOLTA_PRO_AGENT_PAI}
+{WHAT_GOES_BACK_TO_PARENT_AGENT}
 
-NAO produz arquivos proprios. Modifica trabalho do agent pai.
+Does NOT produce own files. Modifies parent agent's work.
 
 ## References
 
-- `references/{X}.md` — {DESCRICAO}
-- `references/{Y}.md` — {DESCRICAO}
+- `references/{X}.md` — {DESCRIPTION}
+- `references/{Y}.md` — {DESCRIPTION}
 
 ## Anti-patterns
 
-- {COISA_QUE_NAO_DEVE_FAZER}
-- {COISA_QUE_NAO_DEVE_FAZER}
+- {THING_NOT_TO_DO}
+- {THING_NOT_TO_DO}
 
 ## Examples
 
-### Exemplo 1: {CENARIO}
+### Example 1: {SCENARIO}
 
 Input:
 ```
-{EXEMPLO_INPUT}
+{EXAMPLE_INPUT}
 ```
 
-Saida (no contexto do agent pai):
+Output (in parent agent context):
 ```
-{EXEMPLO_OUTPUT}
+{EXAMPLE_OUTPUT}
 ```

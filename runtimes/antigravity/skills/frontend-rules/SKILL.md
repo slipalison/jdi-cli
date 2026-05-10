@@ -1,376 +1,376 @@
 ---
 name: frontend-rules
-description: Regras universais de UI/UX e acessibilidade pra qualquer interface web. Framework-agnostica - vale React, Vue, Svelte, Solid, Angular, Blazor, Razor, Twig, Jinja, ERB, Blade, e qualquer template engine. Baseada em WCAG 2.2 AA, Nielsen heuristics, Material/Apple HIG.
+description: Universal UI/UX and accessibility rules for any web interface. Framework-agnostic - works for React, Vue, Svelte, Solid, Angular, Blazor, Razor, Twig, Jinja, ERB, Blade, and any template engine. Based on WCAG 2.2 AA, Nielsen heuristics, Material/Apple HIG.
 triggers:
-  - "regras de frontend"
-  - "padroes de UI"
-  - "acessibilidade web"
+  - "frontend rules"
+  - "UI patterns"
+  - "web accessibility"
   - "WCAG"
-  - "boas praticas de UX"
-  - "validar interface"
+  - "UX best practices"
+  - "validate interface"
 ---
 
 # Skill: jdi-frontend-rules
 
-Padroes de UI/UX que NAO podem ser violados - independente de stack. Conceitos > sintaxe. Vale pra SPA, SSR, MPA, hybrid, qualquer template engine.
+UI/UX standards that CANNOT be violated - regardless of stack. Concepts > syntax. Works for SPA, SSR, MPA, hybrid, any template engine.
 
-## Quando aplicar
+## When to apply
 
-Sempre que codigo toque interface humana visivel:
+Whenever code touches a visible human interface:
 
-- Arquivos `.tsx, .jsx, .vue, .svelte, .astro, .qwik, .solid` (componentes JS-based)
-- Arquivos `.razor, .cshtml` (Blazor / Razor Pages / MVC)
-- Arquivos `.html, .twig, .jinja, .j2, .erb, .blade.php, .hbs, .liquid, .mustache, .ejs, .pug` (template engines)
-- CSS/Tailwind/SCSS/Less que afetem layout, contraste, foco, ou acessibilidade
-- ARIA / semantic HTML em qualquer linguagem
+- Files `.tsx, .jsx, .vue, .svelte, .astro, .qwik, .solid` (JS-based components)
+- Files `.razor, .cshtml` (Blazor / Razor Pages / MVC)
+- Files `.html, .twig, .jinja, .j2, .erb, .blade.php, .hbs, .liquid, .mustache, .ejs, .pug` (template engines)
+- CSS/Tailwind/SCSS/Less affecting layout, contrast, focus, or accessibility
+- ARIA / semantic HTML in any language
 
-NAO aplica em: API-only backends, CLI tools, servicos sem UI.
+Does NOT apply to: API-only backends, CLI tools, services without UI.
 
-## Regras universais (gates duros)
+## Universal rules (hard gates)
 
-### 1. Acessibilidade - WCAG 2.2 nivel AA
+### 1. Accessibility - WCAG 2.2 level AA
 
-Todas obrigatorias. Violacao = BLOCK no review.
+All mandatory. Violation = BLOCK on review.
 
-- **Contraste de cor**:
-  - Texto normal: minimo 4.5:1 contra fundo
-  - Texto grande (18pt+ ou 14pt+ bold): minimo 3:1
-  - Componentes UI e graficos: minimo 3:1
-  - Verificar em estados hover/focus/disabled tambem
-- **Foco visivel**: nunca `outline: none` ou `outline: 0` sem substituto. Foco precisa ser perceptivel em luz forte e em monitor barato. `:focus-visible` eh o padrao
-- **Keyboard navigation**: 100% das interacoes alcancaveis via teclado. Tab segue ordem visual logica. Sem armadilha (modal sem Esc, dropdown sem Escape/setas)
-- **Semantic HTML primeiro**:
-  - `<button>` pra acao (mesmo se estilizado como link)
-  - `<a href>` pra navegacao (mesmo se estilizado como botao)
-  - `<form>` pra forms (Enter submeter, validacao nativa funcionar)
-  - Headings em ordem (`h1` -> `h2` -> `h3`, sem pular niveis)
-  - `<nav>, <main>, <header>, <footer>, <aside>, <section>, <article>` quando apropriado
-  - `<ul>/<ol>` pra listas, nao `<div>` repetidos
-- **ARIA quando necessario**:
-  - Botao com so icone: `aria-label="acao descritiva"`
-  - Erro de form: `role="alert"` ou `aria-live="assertive"`
-  - Loading regiao: `aria-busy="true"` + `aria-live="polite"`
+- **Color contrast**:
+  - Normal text: minimum 4.5:1 against background
+  - Large text (18pt+ or 14pt+ bold): minimum 3:1
+  - UI components and graphics: minimum 3:1
+  - Verify in hover/focus/disabled states too
+- **Visible focus**: never `outline: none` or `outline: 0` without a replacement. Focus must be perceptible in strong light and on a cheap monitor. `:focus-visible` is the standard
+- **Keyboard navigation**: 100% of interactions reachable via keyboard. Tab follows logical visual order. No trap (modal without Esc, dropdown without Escape/arrows)
+- **Semantic HTML first**:
+  - `<button>` for action (even if styled as a link)
+  - `<a href>` for navigation (even if styled as a button)
+  - `<form>` for forms (Enter submits, native validation works)
+  - Headings in order (`h1` -> `h2` -> `h3`, no level skipping)
+  - `<nav>, <main>, <header>, <footer>, <aside>, <section>, <article>` when appropriate
+  - `<ul>/<ol>` for lists, not repeated `<div>`
+- **ARIA when needed**:
+  - Icon-only button: `aria-label="descriptive action"`
+  - Form error: `role="alert"` or `aria-live="assertive"`
+  - Loading region: `aria-busy="true"` + `aria-live="polite"`
   - Toggle/expand: `aria-expanded="true|false"` + `aria-controls`
   - Modal: `role="dialog"` + `aria-modal="true"` + `aria-labelledby`
   - Tooltip: `aria-describedby`
-  - ARIA NUNCA SUBSTITUI semantic HTML. ARIA so complementa
-- **Skip link**: primeira ordem de tab oferece "Pular pra conteudo principal"
-- **Touch target minimo**: 44x44 CSS px (Apple HIG / WCAG 2.5.5). Aumenta em mobile com `padding`, nao margin
-- **Cor nao eh o unico indicador**:
-  - Erro vermelho precisa icone OU texto explicito
-  - Link colorido precisa underline OU peso visual diferente
-  - Estado ativo de nav precisa borda/peso, nao so cor
-  - Daltonismo afeta 8% homens. Sempre cor + forma + texto
-- **Form labels**: todo `<input>, <textarea>, <select>` com:
-  - `<label htmlFor="id">` associado, OU
-  - `aria-label="..."`, OU
-  - `aria-labelledby="id-de-outro-elemento"`
-  - Placeholder NAO conta como label (some quando user digita)
-- **Erro associado**: erro de campo conectado via `aria-describedby="id-do-erro"`. Texto do erro tem `id` correspondente
-- **Idioma**: `<html lang="pt-BR">` declarado. Sem isso screen reader le ingles pra texto pt-BR
-- **prefers-reduced-motion**: respeitar. Animacoes devem desabilitar via `@media (prefers-reduced-motion: reduce)`
+  - ARIA NEVER REPLACES semantic HTML. ARIA only complements
+- **Skip link**: first tab order offers "Skip to main content"
+- **Minimum touch target**: 44x44 CSS px (Apple HIG / WCAG 2.5.5). Increase on mobile with `padding`, not margin
+- **Color is not the only indicator**:
+  - Red error needs icon OR explicit text
+  - Colored link needs underline OR different visual weight
+  - Active nav state needs border/weight, not just color
+  - Color blindness affects 8% of men. Always color + shape + text
+- **Form labels**: every `<input>, <textarea>, <select>` with:
+  - Associated `<label htmlFor="id">`, OR
+  - `aria-label="..."`, OR
+  - `aria-labelledby="id-of-another-element"`
+  - Placeholder DOES NOT count as label (disappears when user types)
+- **Associated error**: field error connected via `aria-describedby="error-id"`. Error text has matching `id`
+- **Language**: `<html lang="pt-BR">` declared. Without this screen reader reads English for pt-BR text
+- **prefers-reduced-motion**: respect. Animations should disable via `@media (prefers-reduced-motion: reduce)`
 
-### 2. Estados obrigatorios em toda UI surface
+### 2. Mandatory states on every UI surface
 
-Toda tela/componente que carrega ou muta dado precisa cobrir os 5:
+Every screen/component that loads or mutates data must cover all 5:
 
 - **Loading**:
-  - Skeleton com shape igual ao conteudo real (evita layout shift)
-  - OU spinner/progress se shape imprevisivel
-  - Visivel minimo 200ms (evita flash que pisca)
-  - Maximo 10s sem feedback adicional - depois disso explica "quase la" ou oferece cancelar
+  - Skeleton with shape matching real content (avoids layout shift)
+  - OR spinner/progress if shape unpredictable
+  - Visible minimum 200ms (avoids flash that flickers)
+  - Maximum 10s without extra feedback - after that explain "almost there" or offer cancel
 - **Empty**:
-  - Nunca tela vazia. Sempre mensagem + icone + CTA acionavel
-  - Texto orienta proximo passo: "Crie seu primeiro X clicando em Y"
-  - Nao confundir empty com error (empty eh sucesso, error eh falha)
+  - Never empty screen. Always message + icon + actionable CTA
+  - Text orients next step: "Create your first X by clicking Y"
+  - Don't confuse empty with error (empty is success, error is failure)
 - **Error**:
-  - Mensagem especifica: o que falhou + como corrigir
-  - NUNCA "Algo deu errado" / "Erro inesperado" como mensagem final pro user
-  - Acao de recuperacao visivel: retry, voltar, contatar suporte
-  - Erros de validacao inline + mensagem geral se necessario
+  - Specific message: what failed + how to fix
+  - NEVER "Something went wrong" / "Unexpected error" as final message to user
+  - Visible recovery action: retry, go back, contact support
+  - Inline validation errors + general message if needed
 - **Success**:
-  - Confirmacao visivel - toast eh OK pra acoes nao-destrutivas
-  - Acao destrutiva (delete, transferencia) precisa undo OU confirmacao previa
-  - Toast some em 4-6s; acoes destrutivas com undo tem 5-10s
+  - Visible confirmation - toast is OK for non-destructive actions
+  - Destructive action (delete, transfer) needs undo OR prior confirmation
+  - Toast disappears in 4-6s; destructive actions with undo have 5-10s
 - **Disabled**:
-  - SEMPRE com motivo visivel: tooltip, helper text, ou hint
-  - Disabled silencioso = bug ("por que nao consigo clicar?")
-  - Considere alternativa: nao desabilitar, deixar clicar e mostrar erro especifico
+  - ALWAYS with visible reason: tooltip, helper text, or hint
+  - Silent disabled = bug ("why can't I click?")
+  - Consider alternative: don't disable, let click and show specific error
 
-### 3. Feedback timing - heuristicas Nielsen
+### 3. Feedback timing - Nielsen heuristics
 
-- **< 100ms**: parece instantaneo. Sem indicador necessario
-- **100ms a 1s**: aceitavel sem indicador. Cursor pode mudar pra waiting
-- **1s a 10s**: progress indicator obrigatorio. Spinner ou barra
-- **> 10s**: progress + tempo estimado OU permitir cancelar
-- **Indeterminado e > 30s**: oferecer notificacao em background, liberar UI
-- **Optimistic UI**: like/save/toggle - atualizar UI imediato, rollback se falhar
+- **< 100ms**: feels instant. No indicator needed
+- **100ms to 1s**: acceptable without indicator. Cursor may change to waiting
+- **1s to 10s**: progress indicator required. Spinner or bar
+- **> 10s**: progress + estimated time OR allow cancel
+- **Indeterminate and > 30s**: offer background notification, free up UI
+- **Optimistic UI**: like/save/toggle - update UI immediately, rollback if it fails
 
-### 4. Forms - patterns universais
+### 4. Forms - universal patterns
 
-- **Validacao**:
-  - On blur pra campo individual (depois user sair do campo)
-  - On submit pra validacao geral
-  - On change SO pra feedback positivo (ex: forca de senha)
-  - NUNCA on keypress de erro ("falta caractere") - cansa
-- **Erros inline**: ao lado/abaixo do campo errado, COM mensagem geral no topo opcional. Nunca so topo
+- **Validation**:
+  - On blur for individual field (after user leaves field)
+  - On submit for general validation
+  - On change ONLY for positive feedback (e.g., password strength)
+  - NEVER on keypress for error ("missing character") - tiring
+- **Inline errors**: next to/below the wrong field, WITH optional general top-of-form message. Never just top
 - **Required**:
-  - Asterisco vermelho NAO basta - adiciona texto "(obrigatorio)" ou marca clara antes do submit
-  - Indicar required no momento do design, nao depois do erro
-  - Alternativa moderna: indicar opcionais ("Telefone (opcional)")
-- **Autocomplete**: atributo `autocomplete` correto: `email, current-password, new-password, name, given-name, family-name, tel, postal-code, etc`. Habilita autofill do browser
+  - Red asterisk is NOT enough - add text "(required)" or a clear mark before submit
+  - Indicate required at design time, not after the error
+  - Modern alternative: mark optionals ("Phone (optional)")
+- **Autocomplete**: correct `autocomplete` attribute: `email, current-password, new-password, name, given-name, family-name, tel, postal-code, etc`. Enables browser autofill
 - **Inputmode + type**:
-  - `type="email"` mostra teclado com @ em mobile
-  - `inputmode="numeric"` pra OTP/PIN/CEP
-  - `type="tel"` pra telefone
-  - `type="url"` pra URL
-  - `type="date"` pra data (com fallback se browser nao suporta)
+  - `type="email"` shows keyboard with @ on mobile
+  - `inputmode="numeric"` for OTP/PIN/ZIP
+  - `type="tel"` for phone
+  - `type="url"` for URL
+  - `type="date"` for date (with fallback if browser doesn't support)
 - **Submit**:
-  - NAO desabilita o botao antes do user tentar - ensina errado e esconde causa
-  - Desabilitar SO durante request em andamento (evita double submit)
-  - Loading state no botao (texto + spinner inline)
+  - DO NOT disable button before user tries - teaches wrong and hides cause
+  - Disable ONLY during in-flight request (avoids double submit)
+  - Loading state on the button (text + inline spinner)
 - **Password**:
-  - Toggle "mostrar senha" (icone olho)
-  - Forca HTTPS sempre - nunca send password em plain HTTP
-  - Mostra requisitos antes do user digitar (8+ chars, etc)
-- **Confirmacao destrutiva**:
-  - Acoes irreversiveis (delete account, drop data) precisam digitar nome/palavra ou checkbox explicito
-  - Modal "tem certeza?" simples eh insuficiente pra acao realmente destrutiva
+  - "Show password" toggle (eye icon)
+  - Always force HTTPS - never send password in plain HTTP
+  - Show requirements before user types (8+ chars, etc)
+- **Destructive confirmation**:
+  - Irreversible actions (delete account, drop data) require typing name/word or explicit checkbox
+  - Plain "are you sure?" modal is insufficient for truly destructive action
 
-### 5. Navegacao
+### 5. Navigation
 
-- **Localizacao atual**: nav ativo destacado (peso + cor + indicador). Breadcrumbs em hierarquia profunda
-- **Back button do browser**: respeitar historico. Modal nao usa `pushState` sem motivo. Single-page nav usa router que emita historico real
-- **404 customizado**: pagina amigavel com search ou sitemap, nao tela branca
-- **Logo linka home**: convencao universal
-- **Search**: se app tem busca, atalho de teclado `/` ou `Ctrl+K` (convencao)
+- **Current location**: active nav highlighted (weight + color + indicator). Breadcrumbs in deep hierarchy
+- **Browser back button**: respect history. Modal doesn't use `pushState` without reason. Single-page nav uses router that emits real history
+- **Custom 404**: friendly page with search or sitemap, not blank screen
+- **Logo links home**: universal convention
+- **Search**: if app has search, keyboard shortcut `/` or `Ctrl+K` (convention)
 
-### 6. Responsivo - mobile-first
+### 6. Responsive - mobile-first
 
-- **Design comeca em 320px** e cresce - nao o oposto
-- **Breakpoints baseados em conteudo**, nao em devices: ponto onde layout quebra, nao "iPhone 12"
-- **Sem scroll horizontal em mobile** (exceto carrossel intencional). Audita com viewport 375px
-- **Touch-friendly spacing**: minimo 8px entre alvos clicaveis
-- **Hover-only e ruim em mobile**: tudo que precisa hover precisa fallback (long press, tap to reveal)
-- **Densidade**: mobile precisa mais espaco que desktop pra mesma legibilidade
+- **Design starts at 320px** and grows - not the other way around
+- **Breakpoints based on content**, not devices: point where layout breaks, not "iPhone 12"
+- **No horizontal scroll on mobile** (except intentional carousel). Audit with viewport 375px
+- **Touch-friendly spacing**: minimum 8px between clickable targets
+- **Hover-only is bad on mobile**: anything needing hover needs fallback (long press, tap to reveal)
+- **Density**: mobile needs more space than desktop for the same legibility
 
-### 7. Performance UX - Core Web Vitals
+### 7. UX performance - Core Web Vitals
 
 - **CLS < 0.1** (Cumulative Layout Shift):
-  - `width` + `height` em todo `<img>` (evita pulo quando carrega)
-  - `font-display: swap` com fallback metric-compatible
-  - Reserva espaco pra ads/embeds/skeletons
+  - `width` + `height` on every `<img>` (avoids jump on load)
+  - `font-display: swap` with metric-compatible fallback
+  - Reserve space for ads/embeds/skeletons
 - **LCP < 2.5s** (Largest Contentful Paint):
-  - Imagem hero otimizada (WebP/AVIF + responsive `srcset`)
+  - Optimized hero image (WebP/AVIF + responsive `srcset`)
   - Critical CSS inline
-  - Preload de recurso critico (`<link rel="preload">`)
+  - Preload critical resource (`<link rel="preload">`)
 - **INP < 200ms** (Interaction to Next Paint):
-  - Sem JS pesado bloqueando main thread durante interacao
-  - Debounce em input handlers
-  - Web Workers pra computacao pesada
+  - No heavy JS blocking main thread during interaction
+  - Debounce on input handlers
+  - Web Workers for heavy computation
 - **TTFB < 800ms** (Time To First Byte):
-  - Cache estatico, CDN, lazy loading
-- **Optimistic UI**: ja mencionado - atualizar imediato
+  - Static cache, CDN, lazy loading
+- **Optimistic UI**: already mentioned - update immediately
 
-### 8. Hierarquia visual
+### 8. Visual hierarchy
 
-- **1 acao primaria por view**. Multiplas = decisao paralisada (Hicks Law)
-- **Secundaria visualmente menor**: ghost, outline, ou link
-- **Whitespace separa grupos** - sem caixinha (border) pra tudo
-- **Spacing scale fixo**: 4/8/16/24/32/48/64 (multiplos de 4 ou 8). Sem `margin: 13px`
-- **Type scale**: maximo 5-6 tamanhos no app inteiro. Mais que isso = caos visual
+- **1 primary action per view**. Multiple = paralyzed decision (Hicks Law)
+- **Secondary visually smaller**: ghost, outline, or link
+- **Whitespace separates groups** - no little box (border) for everything
+- **Fixed spacing scale**: 4/8/16/24/32/48/64 (multiples of 4 or 8). No `margin: 13px`
+- **Type scale**: max 5-6 sizes in the entire app. More than that = visual chaos
 - **Color palette**:
-  - Regra 60-30-10: 60% neutro (fundo), 30% complementar, 10% accent (CTA)
-  - Maximo 1 cor de marca + 1 ou 2 acentos
-  - Estados (success/warn/error) sao paleta separada
-- **Alinhamento**: todo elemento alinhado a uma grid - nao "olho"
+  - 60-30-10 rule: 60% neutral (background), 30% complementary, 10% accent (CTA)
+  - Max 1 brand color + 1 or 2 accents
+  - States (success/warn/error) are a separate palette
+- **Alignment**: every element aligned to a grid - not "eyeball"
 
 ### 9. i18n + l10n
 
-- **Zero string hardcoded em markup**. Sempre key de traducao
-  - JSX/TSX: nao escrever texto pt-BR direto, usar `t("key")` ou equivalente
-  - Templates: usar tag de translate (`{% trans %}`, `<t>`, `@Localize`)
-  - HTML: separar conteudo de marcacao
-- **RTL ready** (arabe, hebraico):
-  - Logical properties: `margin-inline-start` em vez de `margin-left`
-  - `padding-block` em vez de `padding-top`
-  - `text-align: start/end` em vez de `left/right`
-  - `dir="auto"` em campos que aceitam input em qualquer idioma
-- **Format por locale**:
-  - Datas: `Intl.DateTimeFormat` ou equivalente backend
-  - Numeros: `Intl.NumberFormat`
-  - Moeda: nunca hardcoded "$" - moeda vem do locale + valor
-- **Pluralizacao**: ICU MessageFormat ou equivalente. Linguas tem 1, 2, 3+ ou mais formas (russo tem 4)
+- **Zero hardcoded string in markup**. Always a translation key
+  - JSX/TSX: don't write pt-BR text directly, use `t("key")` or equivalent
+  - Templates: use translate tag (`{% trans %}`, `<t>`, `@Localize`)
+  - HTML: separate content from markup
+- **RTL ready** (Arabic, Hebrew):
+  - Logical properties: `margin-inline-start` instead of `margin-left`
+  - `padding-block` instead of `padding-top`
+  - `text-align: start/end` instead of `left/right`
+  - `dir="auto"` on fields accepting input in any language
+- **Format by locale**:
+  - Dates: `Intl.DateTimeFormat` or backend equivalent
+  - Numbers: `Intl.NumberFormat`
+  - Currency: never hardcoded "$" - currency comes from locale + value
+- **Pluralization**: ICU MessageFormat or equivalent. Languages have 1, 2, 3+ or more forms (Russian has 4)
 
-### 10. Seguranca UI - overlap com regras gerais
+### 10. UI security - overlap with general rules
 
-- **Tokens NUNCA em localStorage/sessionStorage**:
-  - Vulneravel a XSS. Qualquer script malicioso le tudo
-  - Padrao seguro: httpOnly cookie + SameSite=Strict
-  - Token em memoria com refresh via cookie eh OK pra SPAs
-- **CSP estrito**:
-  - `script-src 'self'` no minimo - sem `unsafe-inline`, sem `unsafe-eval`
-  - `frame-ancestors 'none'` ou whitelist - previne clickjacking
+- **Tokens NEVER in localStorage/sessionStorage**:
+  - Vulnerable to XSS. Any malicious script reads everything
+  - Safe pattern: httpOnly cookie + SameSite=Strict
+  - Token in memory with refresh via cookie is OK for SPAs
+- **Strict CSP**:
+  - `script-src 'self'` at minimum - no `unsafe-inline`, no `unsafe-eval`
+  - `frame-ancestors 'none'` or whitelist - prevents clickjacking
 - **HTTPS only**:
-  - Redirect HTTP -> HTTPS no servidor
-  - HSTS header com `includeSubDomains`
-  - Sem mixed content (HTTP em pagina HTTPS)
+  - Redirect HTTP -> HTTPS on the server
+  - HSTS header with `includeSubDomains`
+  - No mixed content (HTTP on HTTPS page)
 - **CSRF**:
-  - Token CSRF em todo form com side-effect autenticado
-  - SameSite=Strict cookie ajuda mas nao basta
+  - CSRF token on every form with authenticated side-effect
+  - SameSite=Strict cookie helps but isn't enough
 - **External links**:
-  - `target="_blank"` SEMPRE com `rel="noopener noreferrer"` (previne tabnabbing)
+  - `target="_blank"` ALWAYS with `rel="noopener noreferrer"` (prevents tabnabbing)
 - **dangerouslySetInnerHTML / v-html / @Html.Raw**:
-  - Nunca com input user sem sanitizacao (DOMPurify ou backend sanitizer)
-  - Preferir parsing semantico (markdown -> AST -> render)
-- **Form action externo**: nunca aceitar `action` URL controlavel por user
+  - Never with user input without sanitization (DOMPurify or backend sanitizer)
+  - Prefer semantic parsing (markdown -> AST -> render)
+- **External form action**: never accept a user-controllable `action` URL
 
-## Anti-patterns - lista BLOCK pra reviewer
+## Anti-patterns - BLOCK list for reviewer
 
-Cada item abaixo eh violacao automatica. Reviewer marca BLOCK + cita regra.
+Each item below is automatic violation. Reviewer marks BLOCK + cites rule.
 
-| Anti-pattern | Por que eh BLOCK |
+| Anti-pattern | Why it is BLOCK |
 |---|---|
-| Botao que parece link / link que parece botao | Confunde modelo mental, viola convencao |
-| `<div onclick>` em vez de `<button>` | Sem keyboard, sem ARIA, sem semantica |
-| `<a href="#">` ou `<a href="javascript:">` pra acao | Vira link sem destino - usar `<button>` |
-| Modal sem fechar com Esc | Armadilha de keyboard - WCAG 2.1.2 |
-| Modal sem botao close visivel | Mesmo motivo |
-| Spinner infinito sem timeout/fallback | User nao sabe se travou |
-| Auto-play media com som | WCAG 1.4.2 |
-| Toast como UNICA confirmacao de acao destrutiva | Toast some - destrutivo precisa persistente |
-| Disabled state sem motivo visivel | "Por que nao funciona?" - bug de UX |
-| Erro generico "Algo deu errado" | Nao acionavel |
-| Cor como UNICO indicador de estado | Daltonismo - WCAG 1.4.1 |
-| Required marcado SO por cor (red border) | Mesmo motivo |
-| Required mostrado SO depois do submit | User nao sabia que era obrigatorio |
-| Form sem `<label>` ou `aria-label` | WCAG 3.3.2 |
-| Placeholder substituindo label | Some quando user digita - WCAG 3.3.2 |
-| Heading skip (h1 -> h3 sem h2) | WCAG 1.3.1 |
-| `<img>` sem `alt` | WCAG 1.1.1 |
-| `<img alt="image">` ou alt redundante "image of X" | Bom alt descreve conteudo, nao midia |
-| Texto sobre imagem sem overlay/contraste garantido | WCAG 1.4.3 |
-| Animacao > 400ms em interacao direta | Lenta percebida |
-| `prefers-reduced-motion` ignorado | WCAG 2.3.3 |
-| Outline removido sem substituto | WCAG 2.4.7 |
-| `tabindex` positivo arbitrario (`tabindex="5"`) | Quebra ordem natural - so usar 0 e -1 |
-| `lang` ausente em `<html>` | Screen reader pronuncia errado |
-| Form action ou href com input user direto | Risco de XSS/redirect aberto |
-| `localStorage.setItem('token', ...)` ou similar pra credencial | Risco XSS - usar httpOnly cookie |
+| Button that looks like a link / link that looks like a button | Confuses mental model, violates convention |
+| `<div onclick>` instead of `<button>` | No keyboard, no ARIA, no semantics |
+| `<a href="#">` or `<a href="javascript:">` for action | Becomes a destinationless link - use `<button>` |
+| Modal without Esc close | Keyboard trap - WCAG 2.1.2 |
+| Modal without visible close button | Same reason |
+| Infinite spinner without timeout/fallback | User doesn't know if it's stuck |
+| Auto-play media with sound | WCAG 1.4.2 |
+| Toast as ONLY confirmation of destructive action | Toast disappears - destructive needs persistent |
+| Disabled state without visible reason | "Why doesn't it work?" - UX bug |
+| Generic error "Something went wrong" | Not actionable |
+| Color as ONLY state indicator | Color blindness - WCAG 1.4.1 |
+| Required marked ONLY by color (red border) | Same reason |
+| Required shown ONLY after submit | User didn't know it was required |
+| Form without `<label>` or `aria-label` | WCAG 3.3.2 |
+| Placeholder replacing label | Disappears when user types - WCAG 3.3.2 |
+| Heading skip (h1 -> h3 without h2) | WCAG 1.3.1 |
+| `<img>` without `alt` | WCAG 1.1.1 |
+| `<img alt="image">` or redundant alt "image of X" | Good alt describes content, not media |
+| Text over image without overlay/guaranteed contrast | WCAG 1.4.3 |
+| Animation > 400ms on direct interaction | Perceived as slow |
+| `prefers-reduced-motion` ignored | WCAG 2.3.3 |
+| Outline removed without replacement | WCAG 2.4.7 |
+| Arbitrary positive `tabindex` (`tabindex="5"`) | Breaks natural order - only use 0 and -1 |
+| `lang` absent on `<html>` | Screen reader pronounces wrong |
+| Form action or href with direct user input | Risk of XSS/open redirect |
+| `localStorage.setItem('token', ...)` or similar for credential | XSS risk - use httpOnly cookie |
 
-## Procedure (uso por agent)
+## Procedure (use by agent)
 
-### Doer (escrita/edicao)
+### Doer (write/edit)
 
-#### Passo 1: Detecta tipo de mudanca
-Se task toca files de UI, carregue checklist em mente antes de escrever.
+#### Step 1: Detect type of change
+If task touches UI files, load checklist in mind before writing.
 
-#### Passo 2: Para cada componente/template novo
-Aplique a checklist de regras 1-10. Em particular:
-- Cobre os 5 estados (loading/empty/error/success/disabled)?
-- Semantic HTML primeiro?
-- Foco visivel mantido?
-- Contraste OK em estados claro/escuro?
+#### Step 2: For each new component/template
+Apply the checklist of rules 1-10. In particular:
+- Does it cover the 5 states (loading/empty/error/success/disabled)?
+- Semantic HTML first?
+- Visible focus maintained?
+- Contrast OK in light/dark states?
 - Strings via i18n key?
 
-#### Passo 3: Em duvida arquitetural
-Consulte references:
-- WCAG completo: `references/wcag-checklist.md`
-- Estados: `references/state-coverage.md`
+#### Step 3: When in architectural doubt
+Consult references:
+- Full WCAG: `references/wcag-checklist.md`
+- States: `references/state-coverage.md`
 - Forms: `references/forms-patterns.md`
-- Anti-patterns explicados: `references/anti-patterns.md`
+- Anti-patterns explained: `references/anti-patterns.md`
 
 ### Reviewer (gate 5)
 
-#### Passo 1: Para cada file modificado em frontend
-Roda greps especificos baseados no tipo:
+#### Step 1: For each modified file in frontend
+Run specific greps based on the type:
 
 **JSX/TSX/Vue/Svelte:**
 ```bash
-# Boto sem aria-label e sem texto interno
+# Button without aria-label and without inner text
 grep -RnE '<button[^>]*>(\s*<[^>]+/?>\s*)+</button>' src/
 
-# Input sem label
+# Input without label
 grep -RnE '<input(?![^>]*aria-label)(?![^>]*id=)' src/
 
-# href="#" pra acao
+# href="#" for action
 grep -RnE 'href="#"' src/
 
-# localStorage com token
+# localStorage with token
 grep -RnE 'localStorage\.(set|get)Item.*[Tt]oken' src/
 
-# Outline removido
+# Outline removed
 grep -RnE 'outline\s*:\s*(none|0)' src/
 ```
 
-**Templates server-side (Razor/Twig/Blade/ERB/Jinja):**
-Greps similares adaptados ao syntax.
+**Server-side templates (Razor/Twig/Blade/ERB/Jinja):**
+Similar greps adapted to the syntax.
 
-#### Passo 2: Classifica
-- Match em violacao listada na tabela acima -> BLOCK
-- Padrao suspeito mas nao certeza -> WARN
-- Sem match -> PASS no gate 5
+#### Step 2: Classify
+- Match on violation listed in the table above -> BLOCK
+- Suspicious pattern but not certain -> WARN
+- No match -> PASS on gate 5
 
-## Inputs esperados
+## Expected inputs
 
-- Path do arquivo modificado
-- Diff ou conteudo completo do arquivo
+- Path of the modified file
+- Diff or complete content of the file
 
 ## Outputs
 
-NAO produz arquivo proprio. Modifica julgamento do agent pai:
-- Doer escolhe NAO introduzir violation - escreve codigo correto desde o inicio
-- Reviewer marca BLOCK/WARN com regra citada
+Does NOT produce its own file. Modifies the parent agent's judgement:
+- Doer chooses NOT to introduce a violation - writes correct code from the start
+- Reviewer marks BLOCK/WARN with rule cited
 
 ## References
 
-- `references/wcag-checklist.md` - WCAG 2.2 AA expandido com exemplos de codigo
-- `references/state-coverage.md` - Padroes pra loading/empty/error/success/disabled em diferentes engines
-- `references/forms-patterns.md` - Patterns universais de validacao e UX de form
-- `references/anti-patterns.md` - Galeria de anti-patterns com exemplo errado + correcao
+- `references/wcag-checklist.md` - WCAG 2.2 AA expanded with code examples
+- `references/state-coverage.md` - Patterns for loading/empty/error/success/disabled across engines
+- `references/forms-patterns.md` - Universal patterns for form validation and UX
+- `references/anti-patterns.md` - Gallery of anti-patterns with wrong example + fix
 
-## Anti-patterns desta skill
+## Anti-patterns of this skill
 
-- Aplicar so a stacks JS - regras valem pra qualquer template engine
-- Tornar regra de framework especifica (ex: "use React.useState") - skill eh agnostica
-- Substituir code review humano de design - skill cobre o tecnicamente quebrado, nao o esteticamente medio
-- Bloquear MVP por minor a11y - severity matters, minor eh INFO/WARN
+- Applying only to JS stacks - rules work for any template engine
+- Making a rule framework-specific (e.g., "use React.useState") - skill is agnostic
+- Replacing human design code review - skill covers the technically broken, not the aesthetically mediocre
+- Blocking MVP for minor a11y - severity matters, minor is INFO/WARN
 
 ## Examples
 
-### Exemplo 1: Doer recebe task "adicionar botao de delete em ItemCard"
+### Example 1: Doer receives task "add delete button to ItemCard"
 
-Aplica skill antes de escrever:
-- Acao destrutiva precisa: confirmacao explicita, foco volta pro botao origin apos modal fechar, label descritivo (`aria-label="Excluir item Pedido #123"`), undo se possivel
-- Estado loading durante request
-- Estado error com retry
-- Estado success com undo (5s timer)
-- Use `<button>`, nao `<a>` ou `<div>`
-- Tab order: botao -> modal abre -> botoes do modal navegaveis -> Esc fecha -> foco volta
+Applies skill before writing:
+- Destructive action needs: explicit confirmation, focus returns to origin button after modal closes, descriptive label (`aria-label="Delete item Order #123"`), undo if possible
+- Loading state during request
+- Error state with retry
+- Success state with undo (5s timer)
+- Use `<button>`, not `<a>` or `<div>`
+- Tab order: button -> modal opens -> modal buttons navigable -> Esc closes -> focus returns
 
-Codigo escrito ja sai conforme.
+Code written comes out compliant.
 
-### Exemplo 2: Reviewer encontra `<input>` sem label
+### Example 2: Reviewer finds `<input>` without label
 
-Marca gate 5 como BLOCK:
+Marks gate 5 as BLOCK:
 ```
 [BLOCK] src/components/LoginForm.tsx:42
-Regra: Forms - Form labels (WCAG 1.3.1, 3.3.2)
-Violacao: <input type="email" /> sem <label>, aria-label, ou aria-labelledby
+Rule: Forms - Form labels (WCAG 1.3.1, 3.3.2)
+Violation: <input type="email" /> without <label>, aria-label, or aria-labelledby
 Fix: <label htmlFor="email">Email</label><input id="email" type="email" />
 ```
 
-### Exemplo 3: Reviewer encontra `localStorage.setItem('access_token', token)`
+### Example 3: Reviewer finds `localStorage.setItem('access_token', token)`
 
-Marca gate 5 como BLOCK:
+Marks gate 5 as BLOCK:
 ```
 [BLOCK] src/auth/store.ts:18
-Regra: Seguranca UI - Tokens em storage
-Violacao: localStorage.setItem com token de autenticacao
-Por que: vulneravel a XSS - qualquer script malicioso na pagina le o token
-Fix: backend seta httpOnly cookie SameSite=Strict; frontend nao toca em token
+Rule: UI Security - Tokens in storage
+Violation: localStorage.setItem with authentication token
+Why: vulnerable to XSS - any malicious script on the page reads the token
+Fix: backend sets httpOnly cookie SameSite=Strict; frontend doesn't touch token
 ```
 
-### Exemplo 4: Backend-only API (Python FastAPI)
+### Example 4: Backend-only API (Python FastAPI)
 
-Skill nao eh carregada. PROJECT.md tem `frontend.has_frontend: false`. Nada acontece.
+Skill is not loaded. PROJECT.md has `frontend.has_frontend: false`. Nothing happens.

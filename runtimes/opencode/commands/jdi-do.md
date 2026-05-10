@@ -1,6 +1,6 @@
 ---
 name: jdi-do
-description: Executa phase. Routing automatico pro doer specialist do projeto. Wave-based parallel se phase tem >=3 tasks independentes.
+description: Executes phase. Automatic routing to project's doer specialist. Wave-based parallel if phase has >=3 independent tasks.
 argument_hint: "<phase_number> [--sequential]"
 runtime_intent:
   invokes_agent: dynamic
@@ -15,38 +15,38 @@ runtime_overrides:
   antigravity:
     triggers:
       - "/jdi-do"
-      - "executar phase {N}"
+      - "execute phase {N}"
 ---
 
 <objective>
-Executa todas as tasks da phase informada. Le PLAN.md, agrupa em waves, dispara doer specialist (jdi-doer-{slug}). Paralelismo wave-based, sequential dispatch (um Agent por message com `run_in_background`).
+Executes all tasks of the given phase. Reads PLAN.md, groups into waves, dispatches doer specialist (jdi-doer-{slug}). Wave-based parallelism, sequential dispatch (one Agent per message with `run_in_background`).
 </objective>
 
 <arguments>
-- `phase_number` (obrigatorio)
-- `--sequential` (opcional): forca execucao sequencial mesmo se waves permitirem paralelo. Util pra debug.
+- `phase_number` (required)
+- `--sequential` (optional): forces sequential execution even if waves allow parallel. Useful for debug.
 </arguments>
 
 <process>
 
-### Passo 1: Validacao
+### Step 1: Validation
 ```bash
-test -d .jdi/ || { echo "Nao eh projeto JDI. /jdi-new."; exit 1; }
-test -f .jdi/STATE.md || { echo "STATE.md ausente."; exit 1; }
+test -d .jdi/ || { echo "Not a JDI project. /jdi-new."; exit 1; }
+test -f .jdi/STATE.md || { echo "STATE.md missing."; exit 1; }
 
-# Verifica specialist existe
+# Verify specialist exists
 ls .jdi/agents/jdi-doer-*.md 2>/dev/null | head -1 || {
-  echo "Specialist doer ausente. Rode /jdi-bootstrap."
+  echo "Doer specialist missing. Run /jdi-bootstrap."
   exit 1
 }
 
-# Verifica PLAN.md existe pra phase
+# Verify PLAN.md exists for phase
 ls .jdi/phases/{NN}*/PLAN.md 2>/dev/null || {
-  echo "PLAN.md ausente pra phase {N}. Rode /jdi-plan {N}."
+  echo "PLAN.md missing for phase {N}. Run /jdi-plan {N}."
   exit 1
 }
 
-# Context budget warm-up (nao bloqueia)
+# Context budget warm-up (does not block)
 JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
 if [ -f "$JDI_LIB/jdi-monitor.sh" ]; then
   bash "$JDI_LIB/jdi-monitor.sh" .jdi/PROJECT.md .jdi/DECISIONS.md .jdi/phases/{NN}*/PLAN.md .jdi/phases/{NN}*/CONTEXT.md || true
@@ -54,46 +54,46 @@ fi
 # Windows: pwsh -File "$JDI_LIB/jdi-monitor.ps1" -Paths @(...)
 ```
 
-### Passo 2: Resolve doer specialist do projeto
+### Step 2: Resolve project's doer specialist
 
-Le `.jdi/specialists.md`. Pega primeiro `jdi-doer-*` listado.
+Read `.jdi/specialists.md`. Take first `jdi-doer-*` listed.
 
 ```bash
 DOER=$(grep -oE 'jdi-doer-[a-z0-9-]+' .jdi/specialists.md | head -1)
 echo "Doer: $DOER"
 ```
 
-Se vazio -> aborta: "Nenhum doer registrado. /jdi-bootstrap."
+If empty -> abort: "No doer registered. /jdi-bootstrap."
 
-### Passo 3: Le PLAN.md, agrupa waves
+### Step 3: Read PLAN.md, group waves
 
-Parse PLAN.md, extrai:
-- Lista de tasks pendentes (`status: pending`)
-- Wave de cada task
+Parse PLAN.md, extract:
+- List of pending tasks (`status: pending`)
+- Each task's wave
 - Files_modified
 
-Se `--sequential` ou phase tem <3 tasks paralelas: usa execucao sequencial (1 doer por vez).
+If `--sequential` or phase has <3 parallel tasks: use sequential execution (1 doer at a time).
 
-Senao: wave-based parallel.
+Otherwise: wave-based parallel.
 
-### Passo 4: Intra-wave overlap check (safety)
+### Step 4: Intra-wave overlap check (safety)
 
-Pra cada wave:
-- Pega lista de files_modified de cada task
-- Checa par-a-par: 2 tasks compartilham file?
-- Se sim -> override pra sequencial nessa wave (warn user)
+For each wave:
+- Get list of files_modified per task
+- Check pair-by-pair: do 2 tasks share a file?
+- If yes -> override to sequential for that wave (warn user)
 
-### Passo 5: Executa waves
+### Step 5: Execute waves
 
-**Pra cada wave em ordem:**
+**For each wave in order:**
 
 ```
 [wave {W}/{total}] starting, {N} tasks
 ```
 
-**Se paralelo (>=2 tasks na wave + sem overlap + nao --sequential):**
+**If parallel (>=2 tasks in wave + no overlap + not --sequential):**
 
-Sequential dispatch — UM `Agent()` por message com `run_in_background: true`:
+Sequential dispatch — ONE `Agent()` per message with `run_in_background: true`:
 
 ```
 Agent(
@@ -104,29 +104,29 @@ Agent(
 )
 ```
 
-Aguarda todos retornarem antes da proxima wave.
+Wait for all to return before next wave.
 
-**Se sequencial:** mesmo prompt, sem `run_in_background`, um por vez.
+**If sequential:** same prompt, no `run_in_background`, one at a time.
 
-Doer le PLAN.md/PROJECT.md/CONTEXT.md sozinho — convencao do specialist.
+Doer reads PLAN.md/PROJECT.md/CONTEXT.md on its own — specialist convention.
 
-### Passo 6: Apos cada wave
+### Step 6: After each wave
 
-Le PLAN.md atualizado (doer atualiza status). Conta:
+Read updated PLAN.md (doer updates status). Count:
 - completed
 - blocked
 - pending
 
-Se algum task `blocked` em wave critica -> para execucao, marca phase `partial`, pula pra Passo 8.
+If any task `blocked` in critical wave -> stop execution, mark phase `partial`, skip to Step 8.
 
-### Passo 7: Apos todas waves
+### Step 7: After all waves
 
-Verifica SUMMARY.md foi criado:
+Verify SUMMARY.md was created:
 ```bash
-test -f .jdi/phases/{NN}*/SUMMARY.md || { echo "warn: SUMMARY ausente"; }
+test -f .jdi/phases/{NN}*/SUMMARY.md || { echo "warn: SUMMARY missing"; }
 ```
 
-### Passo 8: Atualiza STATE
+### Step 8: Update STATE
 
 ```markdown
 current_phase: {N}
@@ -139,40 +139,40 @@ git add .jdi/STATE.md
 git commit -m "chore(state): phase {N} executed"
 ```
 
-### Passo 9: Confirma
+### Step 9: Confirm
 
 ```
 Phase {N}: {done}/{total} tasks ({blocked} blocked), {W} waves, {count} files.
 SUMMARY: .jdi/phases/{NN-slug}/SUMMARY.md
-Proximo: /jdi-verify {N}
+Next: /jdi-verify {N}
 ```
 
 </process>
 
 <gates>
-- pre: PLAN.md existe + doer specialist registrado em .jdi/specialists.md
-- post: tasks executadas (parcial ou total), SUMMARY.md criado, STATE atualizado
+- pre: PLAN.md exists + doer specialist registered in .jdi/specialists.md
+- post: tasks executed (partial or total), SUMMARY.md created, STATE updated
 </gates>
 
 <errors>
-- Doer ausente -> /jdi-bootstrap
-- PLAN ausente -> /jdi-plan
-- Doer falha em task -> task fica `blocked`, segue proximas (nao aborta tudo)
-- Wave inteira blocked -> aborta phase, marca `partial`
+- Doer missing -> /jdi-bootstrap
+- PLAN missing -> /jdi-plan
+- Doer fails on task -> task stays `blocked`, continue with the rest (does not abort all)
+- Entire wave blocked -> abort phase, mark `partial`
 </errors>
 
 <runtime_notes>
 
 **Claude Code:**
-- Sequential dispatch real funciona via `run_in_background: true` em Agent calls separados
-- Aguarda completion via tool result notifications
+- Real sequential dispatch works via `run_in_background: true` in separate Agent calls
+- Wait for completion via tool result notifications
 
 **Copilot:**
-- Subagent spawning nao retorna sinal confiavel
-- Default = `--sequential` automatico em Copilot
-- Loop foreach task, dispara um por vez
+- Subagent spawning does not return reliable signal
+- Default = automatic `--sequential` in Copilot
+- Loop foreach task, dispatch one at a time
 
 **OpenCode/Antigravity:**
-- Usa Task/spawn nativo do runtime
-- Paralelismo se runtime suporta
+- Use runtime's native Task/spawn
+- Parallelism if runtime supports
 </runtime_notes>

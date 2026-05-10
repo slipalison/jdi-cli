@@ -1,7 +1,7 @@
 ---
 name: jdi-new
-description: Entry point pra novo projeto. Roda research + asker, gera PROJECT.md + ROADMAP.md.
-argument_hint: "<descricao curta do projeto>"
+description: Entry point for new project. Runs research + asker, generates PROJECT.md + ROADMAP.md.
+argument_hint: "<short project description>"
 runtime_intent:
   invokes_agent: jdi-researcher
 runtime_overrides:
@@ -16,34 +16,34 @@ runtime_overrides:
   antigravity:
     triggers:
       - "/jdi-new"
-      - "criar projeto"
-      - "novo app"
+      - "create project"
+      - "new app"
 ---
 
 <objective>
-Inicializa novo projeto JDI. Faz research + perguntas chave + gera PROJECT.md, ROADMAP.md, STATE.md, DECISIONS.md.
+Initializes new JDI project. Runs research + key questions + generates PROJECT.md, ROADMAP.md, STATE.md, DECISIONS.md.
 </objective>
 
 <arguments>
-- `descricao` (opcional mas recomendado): texto curto do que se quer construir.
+- `description` (optional but recommended): short text of what to build.
 
-Exemplos:
+Examples:
 - `/jdi-new "TODO app .NET 10 + React 19"`
-- `/jdi-new "API REST de inventario em Python + FastAPI"`
-- `/jdi-new "CLI tool em Go pra parse de logs"`
-- `/jdi-new` (asker comeca do zero)
+- `/jdi-new "Inventory REST API in Python + FastAPI"`
+- `/jdi-new "Go CLI tool for log parsing"`
+- `/jdi-new` (asker starts from scratch)
 </arguments>
 
 <process>
 
-### Passo 1: Validacao
+### Step 1: Validation
 ```bash
 test -d .jdi/ && {
-  echo ".jdi/ ja existe. Use /jdi-new --reset pra recomecar (CUIDADO: apaga state)."
+  echo ".jdi/ already exists. Use /jdi-new --reset to start over (CAUTION: wipes state)."
   exit 1
 }
 
-# Sugere /jdi-adopt se diretorio NAO eh vazio (provavelmente brownfield)
+# Suggest /jdi-adopt if directory is NOT empty (likely brownfield)
 file_count=$(find . -maxdepth 3 -type f \
   -not -path './.git/*' -not -path './node_modules/*' \
   -not -path './.venv/*' -not -path './venv/*' \
@@ -52,40 +52,40 @@ file_count=$(find . -maxdepth 3 -type f \
   2>/dev/null | wc -l)
 
 if [ "$file_count" -ge 3 ]; then
-  # Pergunta antes de continuar — pode ser greenfield em monorepo
-  echo "Diretorio tem $file_count files de codigo. Parece projeto existente."
-  echo "Para projetos brownfield, /jdi-adopt detecta stack/code-design automaticamente."
-  echo "Continuar com /jdi-new mesmo assim? (recomendado: /jdi-adopt)"
-  # AskUserQuestion: [Continuar /jdi-new] / [Mudar pra /jdi-adopt] / [Cancelar]
+  # Ask before continuing — could be greenfield in monorepo
+  echo "Directory has $file_count code files. Looks like existing project."
+  echo "For brownfield projects, /jdi-adopt detects stack/code-design automatically."
+  echo "Continue with /jdi-new anyway? (recommended: /jdi-adopt)"
+  # AskUserQuestion: [Continue /jdi-new] / [Switch to /jdi-adopt] / [Cancel]
 fi
 ```
 
 PowerShell:
 ```powershell
-if (Test-Path .jdi) { Write-Error ".jdi/ ja existe. Use /jdi-new --reset."; exit 1 }
+if (Test-Path .jdi) { Write-Error ".jdi/ already exists. Use /jdi-new --reset."; exit 1 }
 $files = Get-ChildItem -Recurse -File -Depth 3 -ErrorAction SilentlyContinue |
   Where-Object { $_.FullName -notmatch '\\(\.git|node_modules|\.venv|venv|target|dist|build|bin|obj)\\' }
 if ($files.Count -ge 3) {
-  Write-Host "Diretorio tem $($files.Count) files. Considere /jdi-adopt em vez de /jdi-new."
-  # AskUserQuestion sequencial
+  Write-Host "Directory has $($files.Count) files. Consider /jdi-adopt instead of /jdi-new."
+  # Sequential AskUserQuestion
 }
 ```
 
-Se `--reset` passado, AskUserQuestion confirma + apaga `.jdi/`.
+If `--reset` passed, AskUserQuestion confirms + wipes `.jdi/`.
 
-### Passo 2: Spawn researcher
-Invoca `jdi-researcher` passando descricao. Aguarda.
+### Step 2: Spawn researcher
+Invoke `jdi-researcher` passing description. Wait.
 
-### Passo 3: Verifica outputs
+### Step 3: Verify outputs
 ```bash
-test -f .jdi/PROJECT.md || { echo "PROJECT.md nao criado"; exit 1; }
-test -f .jdi/ROADMAP.md || { echo "ROADMAP.md nao criado"; exit 1; }
-test -f .jdi/STATE.md || { echo "STATE.md nao criado"; exit 1; }
+test -f .jdi/PROJECT.md || { echo "PROJECT.md not created"; exit 1; }
+test -f .jdi/ROADMAP.md || { echo "ROADMAP.md not created"; exit 1; }
+test -f .jdi/STATE.md || { echo "STATE.md not created"; exit 1; }
 ```
 
-### Passo 4: Cria config.json (token/context budget)
+### Step 4: Create config.json (token/context budget)
 
-Se `.jdi/config.json` ainda nao existe, escreve o default abaixo. Defaults (200k context, 60/70% warn/critical, coverage 80%) cobrem 95% dos casos. User edita se rodar 1M-window model ou quiser thresholds mais apertados.
+If `.jdi/config.json` does not yet exist, write the default below. Defaults (200k context, 60/70% warn/critical, coverage 80%) cover 95% of cases. User edits if running a 1M-window model or wanting tighter thresholds.
 
 ```json
 {
@@ -108,24 +108,24 @@ Se `.jdi/config.json` ainda nao existe, escreve o default abaixo. Defaults (200k
 }
 ```
 
-Referencia canonica do default tambem fica em `templates-jdi-folder/config.json` (shipped pelo pacote npm) — pra users que queiram regenerar manual.
+Canonical reference for the default also lives in `templates-jdi-folder/config.json` (shipped by npm package) — for users wanting to regenerate manually.
 
-### Passo 5: Confirma
+### Step 5: Confirm
 
 ```
-{project_name} iniciado. {N} phases planejadas em .jdi/.
-Proximo: /jdi-bootstrap
+{project_name} initialized. {N} phases planned in .jdi/.
+Next: /jdi-bootstrap
 ```
 
 </process>
 
 <gates>
-- pre: diretorio sem `.jdi/` existente (ou `--reset`)
-- post: PROJECT.md + ROADMAP.md + STATE.md + DECISIONS.md + config.json criados, commit inicial feito
+- pre: directory without existing `.jdi/` (or `--reset`)
+- post: PROJECT.md + ROADMAP.md + STATE.md + DECISIONS.md + config.json created, initial commit made
 </gates>
 
 <errors>
-- `.jdi/` ja existe -> sugere `--reset` ou usar projeto atual
-- Researcher cancelou -> sai limpo
-- Researcher failed -> mostra erro, sem commit
+- `.jdi/` already exists -> suggest `--reset` or use current project
+- Researcher cancelled -> exit clean
+- Researcher failed -> show error, no commit
 </errors>

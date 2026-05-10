@@ -1,10 +1,10 @@
 ---
 name: clean-code
-description: Clean Code. Codigo legivel pra humano, optimizado pra leitura (10x mais lido que escrito). Nomes que revelam intencao, funcoes pequenas, sem comentarios redundantes, error handling explicito, sem magic numbers. Aplica em qualquer linguagem.
+description: Clean Code. Human-readable code, optimized for reading (read 10x more than written). Names reveal intent, small functions, no redundant comments, explicit error handling, no magic numbers. Applies in any language.
 type: skill
 applies_to: |
-  Carregada por doer ao escrever codigo (sempre que tiver mudanca de codigo).
-  Carregada por reviewer no gate 5 pra detectar code smells.
+  Loaded by doer when writing code (any code change).
+  Loaded by reviewer at gate 5 to detect code smells.
 loaded_by:
   - jdi-doer-{slug}
   - jdi-reviewer-{slug}
@@ -12,210 +12,210 @@ runtime_overrides:
   antigravity:
     triggers:
       - "Clean Code"
-      - "codigo limpo"
+      - "clean code"
       - "code smells"
-      - "legibilidade de codigo"
+      - "code readability"
 ---
 
 # Skill: Clean Code
 
-> Codigo eh lido 10x mais que escrito. Otimize pra leitura.
+> Code is read 10x more than written. Optimize for reading.
 
-Nao eh sobre estilo bonito. Eh sobre **fazer leitor entender em 1 passada**, sem precisar simular execucao mental.
+Not about pretty style. About **making reader understand in 1 pass**, without mentally simulating execution.
 
-## Regras
+## Rules
 
-### 1. Nomes revelam intencao
+### 1. Names reveal intent
 
-- **Variavel**: o que **eh**, nao como esta armazenado (`elapsedSeconds` > `t` > `time`)
-- **Funcao**: o que **faz**, verbo + objeto (`calculateTax(order)`, nao `tax(order)`)
-- **Boolean**: pergunta sim/nao (`isActive`, `hasPermission`, `canSubmit`)
-- **Classe/modulo**: substantivo (`OrderRepository`, `EmailValidator`)
-- **Interface**: papel/capability (`Repository`, `Cacheable`) — nao prefixo `I`/`Abstract` se a linguagem nao exige
+- **Variable**: what it **is**, not how it's stored (`elapsedSeconds` > `t` > `time`)
+- **Function**: what it **does**, verb + object (`calculateTax(order)`, not `tax(order)`)
+- **Boolean**: yes/no question (`isActive`, `hasPermission`, `canSubmit`)
+- **Class/module**: noun (`OrderRepository`, `EmailValidator`)
+- **Interface**: role/capability (`Repository`, `Cacheable`) — no `I`/`Abstract` prefix if language doesn't require
 
-### Anti-nomes
+### Anti-names
 
-| Errado | Certo |
+| Wrong | Right |
 |---|---|
-| `data`, `info`, `value`, `temp`, `result` | algo descritivo do contexto |
+| `data`, `info`, `value`, `temp`, `result` | something descriptive of the context |
 | `processData()` | `parseUserPayload()`, `applyDiscount()`, etc |
-| `Manager`, `Helper`, `Util` | nome da responsabilidade real |
+| `Manager`, `Helper`, `Util` | name of the real responsibility |
 | `flag`, `status` | `isComplete`, `paymentStatus` |
-| `obj`, `item`, `thing` | tipo real |
-| Abreviacoes: `usr`, `ctx`, `mgr`, `cfg` | `user`, `context` (excecao: convencao do dominio bem estabelecida) |
-| Variaveis com `_2`, `_new`, `_old` | refatora ate 1 ficar |
+| `obj`, `item`, `thing` | actual type |
+| Abbreviations: `usr`, `ctx`, `mgr`, `cfg` | `user`, `context` (exception: well-established domain convention) |
+| Variables with `_2`, `_new`, `_old` | refactor until 1 remains |
 
-### 2. Funcoes pequenas
+### 2. Small functions
 
-- **Tamanho**: idealmente < 20 linhas. Se passa de 50, quase certeza esta fazendo coisa demais.
-- **1 nivel de abstracao**: dentro da funcao, todas operacoes no mesmo nivel. Mistura de "abrir conexao" + "calcular imposto" = nao.
-- **3-4 parametros max**: mais que isso indica ou objeto faltando ou responsabilidade demais.
-- **1 saida logica**: early return eh OK; multiplos return em meio a logica complexa eh ruim.
+- **Size**: ideally < 20 lines. If over 50, almost certainly doing too much.
+- **1 abstraction level**: inside function, all operations at same level. Mixing "open connection" + "calculate tax" = no.
+- **3-4 params max**: more than that signals either missing object or too much responsibility.
+- **1 logical exit**: early return is OK; multiple returns mid-complex-logic is bad.
 
-### 3. Funcoes fazem **uma** coisa
+### 3. Functions do **one** thing
 
-Se voce descreve a funcao como "faz X **e** Y", quebra em duas. Nome da funcao deve ser preciso.
+If you describe function as "does X **and** Y", split into two. Function name must be precise.
 
-Exceção: orchestrators (controllers, command handlers) coordenam — esta OK descrever como "valida, salva, notifica" se cada passo eh chamada pra outra funcao.
+Exception: orchestrators (controllers, command handlers) coordinate — OK to describe as "validates, saves, notifies" if each step is a call to another function.
 
-### 4. Comentarios
+### 4. Comments
 
-**Default: NAO escrever**.
+**Default: DON'T write**.
 
-Codigo bem nomeado nao precisa explicar **o que** faz. Se voce sente vontade de escrever comentario, primeira tentativa: renomear funcao/variavel.
+Well-named code doesn't need to explain **what** it does. If you feel like writing a comment, first attempt: rename function/variable.
 
-### Comentario eh OK quando:
+### Comments OK when:
 
-- **Por que** nao-obvio: workaround pra bug especifico, decisao de design surpreendente, constraint externa
-- **Invariante critico**: "este array DEVE estar ordenado pra binary search funcionar"
-- **Marcacao de TODO/FIXME** com link pra ticket: `// TODO(#1234): handle UTF-16 surrogate`
-- **Aviso de pegadinha**: "// dont call this in a loop, O(n^2)"
-- **Doc de API publica**: contrato pro caller (parametros, retornos, exceptions)
+- **Why** non-obvious: workaround for specific bug, surprising design decision, external constraint
+- **Critical invariant**: "this array MUST be sorted for binary search to work"
+- **TODO/FIXME marker** with ticket link: `// TODO(#1234): handle UTF-16 surrogate`
+- **Pitfall warning**: "// don't call this in a loop, O(n^2)"
+- **Public API doc**: contract for caller (params, returns, exceptions)
 
-### Comentario eh ruim quando:
+### Comments bad when:
 
-- Explica o **o que** (o codigo ja diz)
-- Repete o nome da funcao em ingles
-- Comentario fica desatualizado em relacao ao codigo
-- Comentario "removido em XX/YY" deixado na arvore
-- "// hack" sem explicar
-- "// not sure why this works" — investigue, nao adivinhe
+- Explain **what** (code already says)
+- Repeat the function name in English
+- Comment goes stale relative to code
+- "// removed on XX/YY" left in the tree
+- "// hack" without explanation
+- "// not sure why this works" — investigate, don't guess
 
-### 5. Error handling explicito
+### 5. Explicit error handling
 
-- **Nunca silencie excecao**: `try { ... } catch {}` eh **bug latente**
-- **Tratamento explicito**: log estruturado + rethrow OU retorna Result/Either
-- **Erros sao parte do contrato**: documenta o que pode falhar
-- **Boundary**: trata erro na borda (controller, top-level handler), nao em cada chamada interna
-- **Validacao**: na entrada (boundary), nao espalhada
+- **Never silence exception**: `try { ... } catch {}` is **latent bug**
+- **Explicit handling**: structured log + rethrow OR return Result/Either
+- **Errors are part of the contract**: document what can fail
+- **Boundary**: handle error at the boundary (controller, top-level handler), not at every internal call
+- **Validation**: at the entry (boundary), not scattered
 
-### 6. Sem magic numbers/strings
+### 6. No magic numbers/strings
 
-- Numero ou string com significado vira **constante nomeada**
-- `if (status === 3)` vira `if (status === OrderStatus.Shipped)`
-- `setTimeout(fn, 86400000)` vira `setTimeout(fn, MS_PER_DAY)`
-- Excecao: 0, 1, -1, casos universalmente claros
+- Number or string with meaning becomes a **named constant**
+- `if (status === 3)` becomes `if (status === OrderStatus.Shipped)`
+- `setTimeout(fn, 86400000)` becomes `setTimeout(fn, MS_PER_DAY)`
+- Exception: 0, 1, -1, universally clear cases
 
 ### 7. Command-Query Separation (CQS)
 
-- **Query**: retorna info, **nao** muta estado
-- **Command**: muta estado, **nao** retorna (ou retorna void/ack minimo)
+- **Query**: returns info, does **not** mutate state
+- **Command**: mutates state, does **not** return (or returns void/minimal ack)
 
-`function getUser(id)` que **tambem** atualiza last_access viola CQS — caller nao espera side-effect. Separa.
+`function getUser(id)` that **also** updates last_access violates CQS — caller doesn't expect side-effect. Split.
 
 ### 8. Boy Scout Rule
 
-> Deixe o acampamento mais limpo do que encontrou.
+> Leave the campground cleaner than you found it.
 
-Tocou num arquivo? Pequena melhoria de cleanness eh OK no mesmo commit:
-- Renomear variavel obscura
-- Quebrar funcao gigante que voce ja teve que ler
-- Remover comentario desatualizado
-- Apagar codigo morto
+Touched a file? Small cleanness improvement is OK in the same commit:
+- Rename obscure variable
+- Split giant function you already had to read
+- Remove stale comment
+- Delete dead code
 
-Sem refactor pesado nao-relacionado — atomic commit ainda manda.
+No heavy unrelated refactor — atomic commit still rules.
 
-### 9. Formatacao
+### 9. Formatting
 
-- **Auto-format**: linter/formatter no projeto (prettier, dotnet format, ruff format, gofmt) — sem decisoes humanas
-- **Ordem de membros**: convencao consistente (publicos antes de privados, ou agrupar por feature)
-- **Linha em branco**: separa blocos logicos. Funcao toda colada eh dificil de escanear.
-- **Indentacao consistente**: respeita convencao do projeto
+- **Auto-format**: linter/formatter on the project (prettier, dotnet format, ruff format, gofmt) — no human decisions
+- **Member order**: consistent convention (publics before privates, or group by feature)
+- **Blank line**: separates logical blocks. Function all glued together is hard to scan.
+- **Consistent indentation**: respect project convention
 
-### 10. Symmetry e consistencia
+### 10. Symmetry and consistency
 
-- Funcoes do mesmo "nivel" tem assinatura parecida
-- `getUserById, getUserByEmail` — ordem de params consistente
-- Excecao "as` is" vs "throws" vs Result — escolhe **um** estilo no projeto
-- `null` vs `undefined` vs `Option` — escolhe **um**
-- Naming convention consistente (camelCase, PascalCase, snake_case) seguindo a linguagem
+- Functions at same "level" have similar signature
+- `getUserById, getUserByEmail` — consistent param order
+- Exceptions "as is" vs "throws" vs Result — pick **one** style in the project
+- `null` vs `undefined` vs `Option` — pick **one**
+- Consistent naming convention (camelCase, PascalCase, snake_case) following the language
 
-## Code smells classicos
+## Classic code smells
 
-| Smell | Sintoma |
+| Smell | Symptom |
 |---|---|
-| **Long function** | > 50 linhas |
+| **Long function** | > 50 lines |
 | **Long parameter list** | > 4 params |
-| **God class** | 1 classe faz tudo |
-| **Feature envy** | metodo usa mais dados de **outra** classe que da propria |
-| **Data clump** | mesmos 3-4 params juntos em varios lugares -> objeto |
-| **Primitive obsession** | tudo eh string/int, sem value objects |
-| **Switch statements espalhados** | OCP violado |
-| **Shotgun surgery** | mudanca simples toca N arquivos |
-| **Divergent change** | 1 classe muda por 5 motivos diferentes (SRP) |
-| **Dead code** | funcao/parametro/var nunca usado |
-| **Speculative generality** | flexibility sem caller (YAGNI) |
-| **Comments compensando codigo ruim** | refatora codigo, deleta comentario |
-| **Magic numbers** | 86400, 1024 sem nome |
+| **God class** | 1 class does everything |
+| **Feature envy** | method uses more data from **another** class than its own |
+| **Data clump** | same 3-4 params bundled in multiple places -> object |
+| **Primitive obsession** | everything is string/int, no value objects |
+| **Scattered switch statements** | OCP violated |
+| **Shotgun surgery** | simple change touches N files |
+| **Divergent change** | 1 class changes for 5 different reasons (SRP) |
+| **Dead code** | function/parameter/var never used |
+| **Speculative generality** | flexibility without caller (YAGNI) |
+| **Comments compensating bad code** | refactor code, delete comment |
+| **Magic numbers** | 86400, 1024 with no name |
 | **Silenced exceptions** | `catch {}`, `catch (Exception _) { }` |
-| **Long if/else chains** | usa polymorphism/strategy |
-| **Inconsistent naming** | `getUser` aqui, `fetchAccount` ali, `loadOrder` la |
-| **Boolean parameter** | `fn(true)` no caller — ngm sabe o que `true` significa |
+| **Long if/else chains** | use polymorphism/strategy |
+| **Inconsistent naming** | `getUser` here, `fetchAccount` there, `loadOrder` over there |
+| **Boolean parameter** | `fn(true)` at caller — nobody knows what `true` means |
 
 ## Procedure
 
 ### Doer
 
-Apos escrever:
-1. **Revisao de nomes**: cada variavel/funcao tem nome que se sustenta sem comentario? Renomeia se nao.
-2. **Tamanho**: alguma funcao > 30 linhas? Quebra.
-3. **Magic**: algum numero/string sem significado obvio? Constante.
-4. **Comentarios redundantes**: algum comentario que so repete o codigo? Deleta.
-5. **Error handling**: algum `catch {}` silencioso? Loga ou rethrow.
+After writing:
+1. **Name review**: does each variable/function have a name that stands without a comment? Rename if not.
+2. **Size**: any function > 30 lines? Split.
+3. **Magic**: any number/string without obvious meaning? Constant.
+4. **Redundant comments**: any comment that just repeats the code? Delete.
+5. **Error handling**: any silent `catch {}`? Log or rethrow.
 
 ### Reviewer (gate 5)
 
 ```bash
-# Funcoes longas
+# Long functions
 awk '/^(function|def|public |private |protected |async )/ { start=NR; name=$0 }
-     /^}$|^\s{0,2}}\s*$/ { if (NR-start > 50) print FILENAME":"start": funcao com "(NR-start)" linhas: "name }' src/**/*.{ts,cs,py,go,java}
+     /^}$|^\s{0,2}}\s*$/ { if (NR-start > 50) print FILENAME":"start": function with "(NR-start)" lines: "name }' src/**/*.{ts,cs,py,go,java}
 
-# Magic numbers (tipicos suspeitos)
+# Magic numbers (typical suspects)
 grep -RnE '\b(86400|3600|1024|65535|1000000)\b' src/
 
-# Catch silencioso
+# Silent catch
 grep -RnE 'catch\s*(\([^)]*\))?\s*\{\s*\}' src/
 grep -RnE 'except.*:\s*pass\s*$' src/
 grep -RnE 'catch.*:.*ignore' src/
 
-# TODO sem ticket
+# TODO without ticket
 grep -RnE 'TODO(?!.*#\d+)|FIXME(?!.*#\d+)' src/
 
-# Boolean params suspeitos
+# Suspect boolean params
 grep -RnE 'function \w+\([^)]*: bool|: boolean' src/
 
-# Nome generico
+# Generic name
 grep -RnE '\b(data|info|value|temp|tmp|result|obj|item|thing)\b\s*[:=]' src/ | head -20
 
-# Dead code (linter pega — confirma)
+# Dead code (linter catches — confirm)
 
-# Comentarios obvios
+# Obvious comments
 grep -RnE '^\s*//\s*(get|set|return|increment|decrement|loop|iterate)\b' src/
 ```
 
-Match relevante -> WARN ou BLOCK conforme severity.
+Relevant match -> WARN or BLOCK depending on severity.
 
 ## Inputs
 
-- Diff/conteudo do file
-- Convencao do projeto (linter config, naming convention de PROJECT.md)
+- Diff/content of the file
+- Project convention (linter config, naming convention from PROJECT.md)
 
 ## Outputs
 
-NAO produz arquivo. Modifica julgamento.
+Does NOT produce a file. Modifies judgement.
 
 ## Examples
 
-### Exemplo 1: nomes ruins
+### Example 1: bad names
 
-Errado:
+Wrong:
 ```python
 def calc(d, t):
     r = d * t * 0.18
     return r
 ```
 
-Certo:
+Right:
 ```python
 VAT_RATE = 0.18
 
@@ -223,39 +223,39 @@ def calculate_vat(amount: Decimal, qty: int) -> Decimal:
     return amount * qty * VAT_RATE
 ```
 
-### Exemplo 2: funcao gigante
+### Example 2: giant function
 
-Errado: 1 funcao de 120 linhas validando, salvando, enviando email, logando.
+Wrong: 1 function of 120 lines validating, saving, sending email, logging.
 
-Certo: 4 funcoes de 20 linhas cada + 1 orchestrator de 15 linhas que coordena.
+Right: 4 functions of 20 lines each + 1 orchestrator of 15 lines that coordinates.
 
-### Exemplo 3: silenced exception
+### Example 3: silenced exception
 
-Errado:
+Wrong:
 ```typescript
 try {
   await sendNotification(user)
 } catch {}
 ```
 
-Bug latente — falha de notificacao some.
+Latent bug — notification failure disappears.
 
-Certo:
+Right:
 ```typescript
 try {
   await sendNotification(user)
 } catch (err) {
   logger.error("notification failed", { userId: user.id, err })
-  // intencional: notification eh best-effort, nao bloqueia fluxo
+  // intentional: notification is best-effort, doesn't block flow
 }
 ```
 
-Comentario aqui justifica o "por que" do nao-rethrow.
+Comment here justifies the "why" of the no-rethrow.
 
-### Exemplo 4: boolean param
+### Example 4: boolean param
 
-Errado: `createUser("alice", "alice@x.com", true, false)`
+Wrong: `createUser("alice", "alice@x.com", true, false)`
 
-Certo: `createUser({ name: "alice", email: "alice@x.com", admin: true, sendWelcome: false })`
+Right: `createUser({ name: "alice", email: "alice@x.com", admin: true, sendWelcome: false })`
 
-Caller fica auto-documentado.
+Caller becomes self-documented.

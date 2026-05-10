@@ -1,6 +1,6 @@
 ---
 name: jdi-plan
-description: Gera PLAN.md da phase. Decompoe em tasks com files_modified, acceptance, waves de paralelismo.
+description: Generates phase PLAN.md. Decomposes into tasks with files_modified, acceptance, parallelism waves.
 argument_hint: "<phase_number> [--review]"
 runtime_intent:
   invokes_agent: jdi-planner
@@ -16,31 +16,31 @@ runtime_overrides:
   antigravity:
     triggers:
       - "/jdi-plan"
-      - "planejar phase {N}"
+      - "plan phase {N}"
 ---
 
 <objective>
-Gera PLAN.md da phase informada. Decompoe em tasks (max 8), agrupa em waves de paralelismo, mapeia files_modified e acceptance.
+Generates PLAN.md for the given phase. Decomposes into tasks (max 8), groups into parallelism waves, maps files_modified and acceptance.
 </objective>
 
 <arguments>
-- `phase_number` (obrigatorio): numero da phase, ex `1`, `2`
-- `--review` (opcional): mostra preview e pede approve antes de salvar
+- `phase_number` (required): phase number, e.g. `1`, `2`
+- `--review` (optional): show preview and ask for approval before saving
 </arguments>
 
 <process>
 
-### Passo 1: Validacao
+### Step 1: Validation
 ```bash
-test -d .jdi/ || { echo "Nao eh projeto JDI. Rode /jdi-new."; exit 1; }
-test -f .jdi/PROJECT.md || { echo "PROJECT.md ausente."; exit 1; }
+test -d .jdi/ || { echo "Not a JDI project. Run /jdi-new."; exit 1; }
+test -f .jdi/PROJECT.md || { echo "PROJECT.md missing."; exit 1; }
 ```
 
-Verifica CONTEXT.md da phase existe:
+Verify phase CONTEXT.md exists:
 ```bash
-ls .jdi/phases/{NN}*/CONTEXT.md 2>/dev/null || { echo "CONTEXT.md ausente. Rode /jdi-discuss {N}"; exit 1; }
+ls .jdi/phases/{NN}*/CONTEXT.md 2>/dev/null || { echo "CONTEXT.md missing. Run /jdi-discuss {N}"; exit 1; }
 
-# Context budget warm-up (nao bloqueia)
+# Context budget warm-up (does not block)
 JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
 if [ -f "$JDI_LIB/jdi-monitor.sh" ]; then
   bash "$JDI_LIB/jdi-monitor.sh" .jdi/PROJECT.md .jdi/DECISIONS.md .jdi/phases/{NN}*/CONTEXT.md || true
@@ -48,26 +48,26 @@ fi
 # Windows: pwsh -File "$JDI_LIB/jdi-monitor.ps1" -Paths @(...)
 ```
 
-### Passo 2: Spawn planner
-Invoca `jdi-planner` com phase_number. Aguarda.
+### Step 2: Spawn planner
+Invoke `jdi-planner` with phase_number. Wait.
 
-### Passo 3: Verifica
+### Step 3: Verify
 ```bash
-test -f .jdi/phases/{NN}*/PLAN.md || { echo "PLAN.md nao criado"; exit 1; }
+test -f .jdi/phases/{NN}*/PLAN.md || { echo "PLAN.md not created"; exit 1; }
 ```
 
-### Passo 4: Confirma
-Mostra resumo do plan + sugere `/jdi-do {N}`.
+### Step 4: Confirm
+Show plan summary + suggest `/jdi-do {N}`.
 
 </process>
 
 <gates>
-- pre: `.jdi/PROJECT.md` + `.jdi/phases/{NN-slug}/CONTEXT.md` existem
-- post: PLAN.md criado + STATE.md atualizado + commit
+- pre: `.jdi/PROJECT.md` + `.jdi/phases/{NN-slug}/CONTEXT.md` exist
+- post: PLAN.md created + STATE.md updated + commit
 </gates>
 
 <errors>
-- CONTEXT.md ausente -> sugere `/jdi-discuss {N}`
-- Phase nao existe no ROADMAP -> erro
-- Planner cancelou -> sai limpo
+- CONTEXT.md missing -> suggest `/jdi-discuss {N}`
+- Phase does not exist in ROADMAP -> error
+- Planner cancelled -> exit clean
 </errors>
