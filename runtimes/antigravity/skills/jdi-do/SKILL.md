@@ -54,16 +54,33 @@ fi
 # Windows: pwsh -File "$JDI_LIB/jdi-monitor.ps1" -Paths @(...)
 ```
 
-### Step 2: Resolve project's doer specialist
+### Step 2: Resolve doer specialist(s)
 
-Read `.jdi/specialists.md`. Take first `jdi-doer-*` listed.
+Read `.jdi/specialists.md`. Detect single vs multi-stack.
 
 ```bash
-DOER=$(grep -oE 'jdi-doer-[a-z0-9-]+' .jdi/specialists.md | head -1)
-echo "Doer: $DOER"
+DOER_COUNT=$(grep -cE 'jdi-doer-[a-z0-9-]+' .jdi/specialists.md)
+echo "Specialists registered: $DOER_COUNT"
+
+if [ "$DOER_COUNT" -eq 0 ]; then
+  echo "No doer registered. Run /jdi-bootstrap."
+  exit 1
+fi
 ```
 
-If empty -> abort: "No doer registered. /jdi-bootstrap."
+**Single-stack** (`DOER_COUNT == 1`): take that doer, ignore task.specialist.
+```bash
+DOER=$(grep -oE 'jdi-doer-[a-z0-9-]+' .jdi/specialists.md | head -1)
+```
+
+**Multi-stack** (`DOER_COUNT > 1`): for each task in PLAN.md, read its `**Specialist:**` field (planner set this). Dispatch to that specialist. Tasks in same wave can spawn DIFFERENT specialists in parallel.
+
+```bash
+# Per task, extract specialist from PLAN.md
+TASK_SPEC=$(awk -v t="$task_id" '/^#### '"$task_id"':/{flag=1} flag && /^\*\*Specialist:\*\*/{print $2; exit}' .jdi/phases/{NN}*/PLAN.md)
+```
+
+If task lacks specialist field (legacy PLAN.md pre-1.12) → fallback to first doer registered.
 
 ### Step 3: Read PLAN.md, group waves
 
@@ -93,16 +110,21 @@ For each wave:
 
 **If parallel (>=2 tasks in wave + no overlap + not --sequential):**
 
-Sequential dispatch — ONE `Agent()` per message with `run_in_background: true`:
+Sequential dispatch — ONE `Agent()` per message with `run_in_background: true`. Each task resolves its OWN `subagent_type` from task.specialist (multi-stack):
 
 ```
+# For each task in wave, resolve specialist:
+TASK_SPECIALIST = <task.specialist field from PLAN.md> OR <single doer fallback>
+
 Agent(
-  subagent_type="{DOER}",
+  subagent_type="${TASK_SPECIALIST}",   # may differ per task in multi-stack
   description="Execute T-{X}.{Y} phase {N}",
   prompt="phase={N}, task=T-{X}.{Y}, mode=single_task",
   run_in_background: true
 )
 ```
+
+Within a wave, multi-stack projects may spawn DIFFERENT specialists in parallel (e.g. `jdi-doer-myapp-backend` and `jdi-doer-myapp-frontend` simultaneously — different file scopes, disjoint `files_modified`).
 
 Wait for all to return before next wave.
 

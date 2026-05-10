@@ -108,9 +108,38 @@ if ($adopted) {
 
 Pass `adopted=$ADOPTED` and `boundary_commit=$BOUNDARY` to the architect in Step 3.
 
+### Step 2.7: Multi-stack? (multi-specialist support)
+
+AskUserQuestion:
+
+> "Project stack count?
+>  - **Single-stack:** 1 doer + 1 reviewer (90% of projects)
+>  - **Multi-stack:** multiple doer/reviewer pairs, each owning a file glob (fullstack: backend + frontend, mobile: iOS + Android, etc.)"
+>
+> Options:
+> - [Single (1 specialist pair)]
+> - [Multi (2 pairs — e.g. backend + frontend)]
+> - [Multi (3 pairs — e.g. backend + frontend + infra)]
+> - [Multi (custom count)]
+
+If single: `SPECIALIST_COUNT=1`. Standard flow.
+If multi: `SPECIALIST_COUNT=N`. Architect loops S1-S8 N times.
+
+For multi-stack, ask glob+label per specialist BEFORE architect S1:
+
+> "Specialist {i}/{N}: stack label + file glob?"
+> Examples:
+> - Backend C#: `**/*.{cs,csproj,sln}`
+> - Frontend React: `**/*.{ts,tsx,jsx,css,scss}`
+> - Infra Terraform: `**/*.{tf,tfvars}`
+> - Mobile Swift: `**/*.{swift}`
+> - Mobile Kotlin: `**/*.{kt,kts}`
+
+Validate globs don't overlap (warn if they do — overlap = ambiguous routing).
+
 ### Step 3: Spawn architect in specialist mode
 
-Invoke `jdi-architect` with `mode=specialist`, passing `adopted` + `boundary_commit`.
+Invoke `jdi-architect` with `mode=specialist`, passing `adopted` + `boundary_commit` + `specialist_count=N` + array of `{stack_label, file_glob}` per specialist.
 
 Architect runs its S1-S8 flow:
 - Reads PROJECT.md

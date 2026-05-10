@@ -91,10 +91,33 @@ Every task MUST have:
 - acceptance criteria (1-3 bullets, measurable)
 - dependencies (IDs of other tasks)
 - test requirement (which test covers it)
+- **specialist** (auto-assigned via file glob match — see Step 2.5)
 
 Limits:
 - Max 8 tasks per phase. More than 8 = phase too large, suggest split.
 - Each task <= 1 commit. If task needs multiple commits, it's 2+ tasks.
+
+### Step 2.5: Specialist routing (multi-stack support)
+
+Read `.jdi/specialists.md`. For each row, capture `(agent_name, file_glob)`.
+
+For each task, match `files_modified` against globs:
+- All files match ONE glob → assign that specialist
+- All files match same single specialist → assign it
+- Files span 2+ specialists → **split task**:
+  - Original task becomes 2+ sub-tasks (T-{N}.M-a, T-{N}.M-b)
+  - Each sub-task gets its own specialist + filtered `files_modified`
+  - Sub-task dependencies preserved
+- No glob matches → assign default specialist (first row in specialists.md) OR error if globs are restrictive
+- Multiple globs match same file (overlap) → warn, pick first row in specialists.md (registry order = priority)
+
+**Single-stack shortcut:** if `.jdi/specialists.md` has 1 row, skip matching — all tasks get that specialist.
+
+**Glob matching:** standard glob semantics:
+- `**/*.cs` matches any `.cs` anywhere
+- `**/*.{ts,tsx,jsx}` matches multi-extension
+- `**/*` matches everything (catch-all)
+- Specialist order in specialists.md = priority (top wins on overlap)
 
 ### Step 3: Wave grouping (parallelization)
 
@@ -128,6 +151,7 @@ Path: `.jdi/phases/{NN-slug}/PLAN.md`
 ### Wave 1 (parallel-eligible)
 
 #### T-{N}.1: {short objective}
+- **Specialist:** jdi-doer-{slug}    <!-- auto-assigned via file glob, Step 2.5 -->
 - **Files modified:** `{path1}`, `{path2}`
 - **Acceptance:**
   - {criterion 1}

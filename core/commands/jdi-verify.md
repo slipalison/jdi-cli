@@ -52,30 +52,63 @@ fi
 # Windows: pwsh -File "$JDI_LIB/jdi-monitor.ps1" -Paths @(...)
 ```
 
-### Step 2: Resolve reviewer specialist
+### Step 2: Resolve reviewer specialist(s)
 
 ```bash
-REVIEWER=$(grep -oE 'jdi-reviewer-[a-z0-9-]+' .jdi/reviewers.md | head -1)
+REVIEWERS=$(grep -oE 'jdi-reviewer-[a-z0-9-]+' .jdi/reviewers.md | sort -u)
+REVIEWER_COUNT=$(echo "$REVIEWERS" | wc -l)
+echo "Reviewers registered: $REVIEWER_COUNT"
 ```
 
-### Step 3: Spawn reviewer
+**Single-stack** (`REVIEWER_COUNT == 1`): one reviewer, normal flow.
+**Multi-stack** (`REVIEWER_COUNT > 1`): chain reviewers in registry order. Each writes its own REVIEW segment; aggregate verdict = worst-case (1 BLOCK = overall BLOCK).
 
+### Step 3: Spawn reviewer(s)
+
+**Single-stack:**
 ```
 Agent(
-  subagent_type="{REVIEWER}",
+  subagent_type="${REVIEWERS}",
   description="Verify phase {N}",
   prompt="phase={N}, mode=verify"
 )
 ```
 
-Reviewer runs gates 1-7 on its own (defined in the specialist). Read-only. Wait.
+**Multi-stack:** spawn each reviewer in sequence (NOT parallel — build/test commands may conflict on ports, locks, output dirs):
 
-### Step 4: Read verdict
+```
+for REVIEWER in $REVIEWERS:
+  Agent(
+    subagent_type="$REVIEWER",
+    description="Verify phase {N} ({REVIEWER})",
+    prompt="phase={N}, mode=verify, reviewer_segment=${REVIEWER}"
+  )
+  # Each reviewer appends to .jdi/phases/{NN-slug}/REVIEW.md under section
+  # "## Reviewer: {REVIEWER}" with its own gate results and verdict
+```
+
+Each reviewer scopes its gates to its `file_glob` (from frontmatter `scope.file_glob`). Coverage threshold enforced only on files matching the glob.
+
+Reviewers are read-only. Wait for completion before next.
+
+### Step 4: Read aggregate verdict
 
 ```bash
 test -f .jdi/phases/{NN}*/REVIEW.md || { echo "REVIEW.md not created"; exit 1; }
 
-VERDICT=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|BLOCKED)' .jdi/phases/{NN}*/REVIEW.md | awk '{print $2}')
+# Collect all per-reviewer verdicts
+VERDICTS=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|BLOCKED)' .jdi/phases/{NN}*/REVIEW.md | awk '{print $2}')
+
+# Worst-case wins: BLOCK > WARNINGS > APPROVED
+if echo "$VERDICTS" | grep -q BLOCKED; then
+  VERDICT=BLOCKED
+elif echo "$VERDICTS" | grep -q APPROVED_WITH_WARNINGS; then
+  VERDICT=APPROVED_WITH_WARNINGS
+else
+  VERDICT=APPROVED
+fi
+
+# For single-stack, this collapses to the single reviewer's verdict — backward compatible.
 ```
 
 ### Step 5: Update STATE

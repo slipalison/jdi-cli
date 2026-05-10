@@ -78,6 +78,17 @@ Extract:
 - `code_design` (DDD / VS / Hexagonal / Clean / The Method / Legacy-mixed)
 - `adopted` (from STATE.md, default: `false`)
 - `boundary_commit` (from DECISIONS.md D-2 if adopted=true, else empty)
+- `specialist_count` (from bootstrap, default 1)
+- `specialists_meta` (array of `{stack_label, file_glob}` if count > 1)
+
+**Multi-stack mode:**
+If `specialist_count > 1`, loop S3-S7 once per specialist. Each iteration:
+- Uses the iteration's `stack_label` + `file_glob` (e.g. "Backend C#" + `**/*.{cs,csproj}`)
+- Specialist slug = `{project_slug}-{stack_label_kebab}` (e.g. `myapp-backend-csharp`)
+- Files written to `.jdi/agents/jdi-doer-{specialist_slug}.md` + reviewer counterpart
+- Routing in `.jdi/specialists.md` and `.jdi/reviewers.md` gets one row per pair
+
+If `specialist_count == 1`, single pass (existing behavior). Specialist slug = `{project_slug}`. `file_glob = "**/*"` (catch-all). `stack_label = stack` from PROJECT.md.
 - `llm_config` (optional section):
   - `default_model_opencode` — model to use in OpenCode specialists
   - `provider` — provider config (ollama/openai/custom) to merge into opencode.jsonc
@@ -334,6 +345,13 @@ Read `core/templates/doer-specialist.md`. Replace placeholders:
 - `{PROJECT_CONVENTIONS}` -> SQ6 (or stack defaults)
 - `{ADOPTED}` -> "true" or "false" (S2)
 - `{BOUNDARY_COMMIT}` -> hash from D-2 or empty string if greenfield
+- `{FILE_GLOB}` -> current iteration's glob (single-stack: `**/*`)
+- `{STACK_LABEL}` -> current iteration's label (single-stack: same as `{STACK}`)
+
+**Specialist slug derivation:**
+- Single-stack (`specialist_count == 1`): `slug = {project_slug}`
+- Multi-stack: `slug = {project_slug}-{stack_label_kebab}` (e.g. `myapp-backend-csharp`)
+  - kebab: lowercase, spaces→`-`, strip non-alphanum
 
 mkdir + Write to `.jdi/agents/jdi-doer-{slug}.md`.
 
@@ -419,19 +437,23 @@ Gate 7 cache (screenshots, logs, JSON findings, generated spec) must NEVER be co
 
 For each routing file: if it does NOT exist, create with full header. If it exists, append a new line.
 
-`.jdi/specialists.md`:
+`.jdi/specialists.md` (schema v2 — adds `File glob` column for multi-stack routing):
 ```markdown
-| Stack | Agent | Trigger |
-|---|---|---|
-| {stack} | jdi-doer-{slug} | default executor for {project_name} phases |
+| Stack | Agent | File glob | Trigger |
+|---|---|---|---|
+| {stack_label} | jdi-doer-{slug} | {file_glob} | executor for files matching glob |
 ```
 
-`.jdi/reviewers.md`:
+Single-stack default: `**/*` (catch-all). Multi-stack: per-iteration glob.
+
+`.jdi/reviewers.md` (schema v2):
 ```markdown
-| Agent | Trigger | Blocks ship? |
-|---|---|---|
-| jdi-reviewer-{slug} | /jdi-verify | yes, if BLOCKED |
+| Agent | File glob | Trigger | Blocks ship? |
+|---|---|---|---|
+| jdi-reviewer-{slug} | {file_glob} | /jdi-verify | yes, if BLOCKED |
 ```
+
+In multi-stack, append ONE row per iteration. Existing single-row tables stay compatible (planner treats absent glob column as `**/*`).
 
 ### S7: Audit + commit
 

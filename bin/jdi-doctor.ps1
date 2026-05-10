@@ -334,6 +334,35 @@ if ((Test-Path $agUser) -and ((Get-Content $agUser -Raw) -match '"playwright"\s*
 }
 
 # ---------------------------------------------------------------------------
+Write-Section '12. Specialists (single vs multi-stack)'
+
+$specPath = Join-Path $ProjectDir '.jdi\specialists.md'
+$revPath  = Join-Path $ProjectDir '.jdi\reviewers.md'
+
+if (Test-Path $specPath) {
+  $doers = (Get-Content $specPath | Select-String -Pattern 'jdi-doer-[a-z0-9-]+' -AllMatches).Matches |
+           ForEach-Object { $_.Value } | Sort-Object -Unique
+  if ($doers.Count -eq 0) {
+    Write-Note 'specialists.md exists but no doer registered'
+  } elseif ($doers.Count -eq 1) {
+    Write-OK "Single-stack: $($doers[0])"
+  } else {
+    Write-OK "Multi-stack: $($doers.Count) doer specialists"
+    $doers | ForEach-Object { Write-Note "  - $_" }
+  }
+} else {
+  Write-Note '.jdi/specialists.md missing (run /jdi-bootstrap)'
+}
+
+if (Test-Path $revPath) {
+  $revs = (Get-Content $revPath | Select-String -Pattern 'jdi-reviewer-[a-z0-9-]+' -AllMatches).Matches |
+          ForEach-Object { $_.Value } | Sort-Object -Unique
+  if ($revs.Count -gt 1) {
+    Write-Note "  Reviewer chain length: $($revs.Count) (multi-stack /jdi-verify)"
+  }
+}
+
+# ---------------------------------------------------------------------------
 Write-Section '11. Caveman plugin (optional)'
 
 $cavemanUser    = Join-Path $UserHome '.claude\plugins\caveman'

@@ -343,6 +343,34 @@ elif [ -f "$PROJECT_DIR/.gemini/settings.json" ] && grep -q '"playwright"' "$PRO
 fi
 
 # ---------------------------------------------------------------------------
+section "12. Specialists (single vs multi-stack)"
+
+SPEC_PATH="$PROJECT_DIR/.jdi/specialists.md"
+REV_PATH="$PROJECT_DIR/.jdi/reviewers.md"
+
+if [ -f "$SPEC_PATH" ]; then
+  DOERS=$(grep -oE 'jdi-doer-[a-z0-9-]+' "$SPEC_PATH" | sort -u)
+  DOER_COUNT=$(echo "$DOERS" | grep -c .)
+  if [ "$DOER_COUNT" -eq 0 ]; then
+    note "specialists.md exists but no doer registered"
+  elif [ "$DOER_COUNT" -eq 1 ]; then
+    ok "Single-stack: $DOERS"
+  else
+    ok "Multi-stack: $DOER_COUNT doer specialists"
+    echo "$DOERS" | while read d; do note "  - $d"; done
+  fi
+else
+  note ".jdi/specialists.md missing (run /jdi-bootstrap)"
+fi
+
+if [ -f "$REV_PATH" ]; then
+  REVS=$(grep -oE 'jdi-reviewer-[a-z0-9-]+' "$REV_PATH" | sort -u | wc -l)
+  if [ "$REVS" -gt 1 ]; then
+    note "  Reviewer chain length: $REVS (multi-stack /jdi-verify)"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 section "11. Caveman plugin (optional)"
 
 CAVEMAN_USER="$HOME/.claude/plugins/caveman"

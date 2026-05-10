@@ -13,6 +13,12 @@ tools_canonical:
   - glob
   - bash
   - web
+scope:
+  # File globs this specialist owns. Multi-stack projects have multiple
+  # doer/reviewer pairs; each pair filters work via these globs.
+  # Empty/missing = owns ALL files (single-stack default).
+  file_glob: {FILE_GLOB}
+  stack_label: {STACK_LABEL}
 cache_breakpoints:
   # Stable files that act as prompt cache prefix
   # (runtimes supporting cache_control apply — others ignore).
@@ -46,6 +52,10 @@ runtime_overrides:
 
 <role>
 You are `jdi-doer-{PROJECT_SLUG}`. Specialist for project {PROJECT_NAME}.
+
+**Stack scope:** {STACK_LABEL} ({FILE_GLOB})
+
+You only touch files matching `{FILE_GLOB}`. Outside files = NOT your job (other specialist owns them). If PLAN's `files_modified` for an assigned task includes paths outside your glob, mark task `blocked: out-of-scope` and report — orchestrator routes correctly.
 
 You ALREADY KNOW:
 - Stack: {STACK}
