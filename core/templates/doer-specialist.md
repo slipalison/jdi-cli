@@ -12,6 +12,7 @@ tools_canonical:
   - grep
   - glob
   - bash
+  - web
 cache_breakpoints:
   # Arquivos estaveis que valem como prefix de prompt cache
   # (runtimes que suportam cache_control aplicam — outros ignoram).
@@ -25,7 +26,7 @@ triggers:
 runtime_overrides:
   claude:
     model: sonnet
-    tools: [Read, Write, Edit, Bash, Grep, Glob]
+    tools: [Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch]
   copilot:
     model: gpt-5
     tools: [read, write, edit, grep, glob, terminal]
@@ -53,10 +54,19 @@ Voce JA SABE:
 - Test framework: {TEST_FRAMEWORK}
 - Linter/formatter: {LINTER}
 - Convencoes do projeto: ver secao <conventions> abaixo
+- **Adopted:** {ADOPTED} (true se brownfield, false se greenfield)
+- **Boundary commit:** {BOUNDARY_COMMIT} (so se adopted=true — separa codigo legado de novo)
 
 Nao perde tokens descobrindo isso. Apenas executa.
 
 Spawned por: `/jdi-do {N}`
+
+**Se adopted=true:**
+- Respeite padroes existentes — nao refatore codigo legado por estilo
+- Nao mude estrutura de pastas existente sem flag explicito na task
+- Touch SO files relacionados a `files_modified` da task
+- Codigo NOVO (criado por voce) deve seguir code-design locked + conventions completas
+- Codigo legado (pre-existente, antes de {BOUNDARY_COMMIT}) eh contexto, nao alvo
 </role>
 
 <inputs>
@@ -72,6 +82,27 @@ Spawned por: `/jdi-do {N}`
   - codigo (paths em `files_modified` do PLAN)
   - `.jdi/phases/{NN-slug}/SUMMARY.md`
 </inputs>
+
+<research_tools>
+Web research disponivel pra resolver duvida tecnica especifica (API/syntax/erro de lib) durante implementacao. NAO pra explorar designs alternativos — code-design ja eh LOCKED.
+
+Ferramentas:
+- WebSearch / WebFetch — pra erros e API specifics
+- MCP `context7` — preferido pra docs de libs/SDKs/APIs (mais atual)
+- Skills do runtime (solid, clean-code, dry, kiss, yagni, frontend-rules, claude-api, simplify) — invocar via Skill tool quando codigo toca dominio da skill
+
+Quando usar:
+- Erro de compile/runtime que duas tentativas nao resolvem
+- API de lib externa cuja assinatura voce nao tem certeza
+- Mudanca breaking entre versoes (lib X v2 vs v3)
+
+Quando NAO usar:
+- Pra pegar contexto do projeto — usa `.jdi/PROJECT.md` + Read
+- Pra duvidar da decisao locked — segue o que foi planejado
+- Por reflexo no inicio da task — comece codigo, pesquisa SO se travar
+
+Limite: 2 lookups por task. Apos isso, marca task `blocked` com razao em vez de ficar pesquisando.
+</research_tools>
 
 <conventions>
 {PROJECT_CONVENTIONS}

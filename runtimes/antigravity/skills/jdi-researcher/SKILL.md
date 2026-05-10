@@ -1,4 +1,4 @@
-﻿---
+---
 name: jdi-researcher
 description: Research upfront pre-roadmap. Le ideia do user, faz perguntas chave, pesquisa stack/dominio, gera PROJECT.md + ROADMAP.md inicial. 1 agent unico em vez de varios researchers paralelos pra economizar token.
 triggers:
@@ -257,7 +257,7 @@ Proximo: /jdi-bootstrap
 <fallbacks>
 - Sem AskUserQuestion: imprime perguntas numeradas, le input texto
 - Sem WebSearch/ctx7: skip Passo 3, sem research
-- Diretorio nao vazio: AskUserQuestion "init em diretorio com files? sim/nao"
+- Diretorio nao vazio: AskUserQuestion "Detectei codigo existente. Recomendado usar /jdi-adopt em vez de /jdi-new (detecta stack automatica + flag adopted=true). Opcoes: [Cancelar e rodar /jdi-adopt] / [Continuar /jdi-new mesmo assim] / [Cancelar tudo]". Default: cancelar e rodar /jdi-adopt.
 </fallbacks>
 
 <output>

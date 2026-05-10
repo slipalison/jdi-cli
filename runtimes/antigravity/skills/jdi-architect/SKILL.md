@@ -1,4 +1,4 @@
-﻿---
+---
 name: jdi-architect
 description: Cria novos agents e skills do JDI. Modo create = agent/skill generico no core. Modo specialist = doer/reviewer per-project em .jdi/agents/.
 triggers:
@@ -45,6 +45,17 @@ Voce NAO eh o agente que executa. Voce eh quem cria os agentes.
 - Read em: `core/agents/*.md`, `core/skills/*/SKILL.md`, `core/templates/*.md`, `.jdi/specialists.md`, `.jdi/reviewers.md`, `.jdi/skills-registry.md`, `.jdi/registry.md`
 </inputs>
 
+<research_tools>
+Web research disponivel quando user pede agent/specialist pra dominio que voce desconhece (lib/SDK/protocolo) OU pra confirmar tools/permissions corretos pra runtime. Pesquise pra nao gerar agent generico mal-classificado.
+
+Ferramentas:
+- WebSearch / WebFetch
+- MCP `context7` — docs de libs/SDKs/APIs
+- Skills do runtime — pode referenciar nas `<skills_to_load>` do agent gerado
+
+Limite: 2 lookups por sessao create/specialist. Apos isso, prossegue com defaults da stack.
+</research_tools>
+
 <process>
 
 ## Modo `specialist` (per-project doer/reviewer)
@@ -58,13 +69,15 @@ test -f core/templates/doer-specialist.md || { echo "Template doer-specialist.md
 test -f core/templates/reviewer-specialist.md || { echo "Template reviewer-specialist.md ausente."; exit 1; }
 ```
 
-### S2: Le PROJECT.md
+### S2: Le PROJECT.md + STATE.md + DECISIONS.md
 Extrai:
 - `project_name`
 - `project_slug`
 - `stack` (linguagem principal + version)
 - `frameworks` (lista)
-- `code_design` (DDD / VS / Hexagonal / Clean / The Method)
+- `code_design` (DDD / VS / Hexagonal / Clean / The Method / Legacy-mixed)
+- `adopted` (de STATE.md, default: `false`)
+- `boundary_commit` (de DECISIONS.md D-2 se adopted=true, senao vazio)
 - `llm_config` (secao opcional):
   - `default_model_opencode` — modelo a usar nos specialists OpenCode
   - `provider` — config do provider (ollama/openai/custom) pra mesclar no opencode.jsonc
@@ -319,11 +332,13 @@ Le `core/templates/doer-specialist.md`. Substitui placeholders:
 - `{LINTER}` -> derivado SQ5
 - `{COMMIT_PREFIX}` -> derivado da convencao (default: `feat`)
 - `{PROJECT_CONVENTIONS}` -> SQ6 (ou defaults da stack)
+- `{ADOPTED}` -> "true" ou "false" (S2)
+- `{BOUNDARY_COMMIT}` -> hash do D-2 ou string vazia se greenfield
 
 mkdir + Write em `.jdi/agents/jdi-doer-{slug}.md`.
 
 Le `core/templates/reviewer-specialist.md`. Substitui placeholders:
-- mesmos acima +
+- mesmos acima (incluindo `{ADOPTED}` + `{BOUNDARY_COMMIT}`) +
 - `{BUILD_COMMAND}` -> SQ2
 - `{COVERAGE_COMMAND}` -> derivado test_command + flag de coverage
 - `{LINT_COMMAND}` -> SQ5

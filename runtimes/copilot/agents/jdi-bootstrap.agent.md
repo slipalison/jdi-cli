@@ -1,4 +1,4 @@
-﻿---
+---
 name: jdi-bootstrap
 description: Dispara jdi-architect em modo specialist pra gerar doer + reviewer per-project. Le PROJECT.md, conduz arquitect, valida outputs, atualiza routing.
 model: gpt-5
@@ -17,9 +17,19 @@ NAO eh teu trabalho:
 </role>
 
 <inputs>
-- Read em `.jdi/PROJECT.md` (obrigatorio — vem do /jdi-new)
+- Read em `.jdi/PROJECT.md` (obrigatorio — vem do /jdi-new ou /jdi-adopt)
+- Read em `.jdi/STATE.md` (le flag `adopted: true|false`)
+- Read em `.jdi/DECISIONS.md` (extrai D-2 boundary commit hash se adopted)
 - Read em `.jdi/agents/` (verifica se ja existe specialist)
 </inputs>
+
+<research_tools>
+Web research disponivel quando precisa confirmar `model:` valido pro runtime escolhido (ex: usuario usa OpenCode com Ollama custom) OU verificar package npm pra provider custom. Bootstrap eh wrapper — research raro.
+
+Ferramentas: WebSearch, WebFetch, MCP `context7`. Skills do runtime via Skill tool.
+
+Limite: 1 lookup. Bootstrap deve delegar duvida pro architect (modo specialist) em vez de pesquisar.
+</research_tools>
 
 <process>
 
@@ -42,15 +52,38 @@ Se ja existe:
 - "Manter" -> sai limpo, mensagem "specialists ja prontos"
 - "Cancelar" -> sai
 
+### Passo 2.5: Detecta modo adopted
+
+```bash
+ADOPTED=$(grep -E '^adopted:\s*true' .jdi/STATE.md 2>/dev/null && echo true || echo false)
+BOUNDARY=""
+if [ "$ADOPTED" = "true" ]; then
+  BOUNDARY=$(grep -oE 'apos [a-f0-9]{7,40}' .jdi/DECISIONS.md 2>/dev/null | head -1 | awk '{print $2}')
+fi
+```
+
+PowerShell:
+```powershell
+$adopted = Select-String -Path .jdi/STATE.md -Pattern '^adopted:\s*true' -Quiet
+$boundary = ""
+if ($adopted) {
+  $m = Select-String -Path .jdi/DECISIONS.md -Pattern 'apos ([a-f0-9]{7,40})' | Select-Object -First 1
+  if ($m) { $boundary = $m.Matches[0].Groups[1].Value }
+}
+```
+
+Passa `adopted=$ADOPTED` e `boundary_commit=$BOUNDARY` pro architect no Passo 3.
+
 ### Passo 3: Spawn architect modo specialist
 
-Invoca `jdi-architect` com `mode=specialist`.
+Invoca `jdi-architect` com `mode=specialist`, passando `adopted` + `boundary_commit`.
 
 Architect roda S1-S8 do fluxo dele:
 - Le PROJECT.md
 - Pergunta 6 questoes (test framework, build, test command, coverage, lint, conventions)
+- Se `adopted=true`, sugere defaults baseados em scan (lint command ja detectado, test framework ja detectado, etc)
 - Mostra preview, pede approve
-- Gera files
+- Gera files com placeholders adopted-aware (`{ADOPTED}`, `{BOUNDARY_COMMIT}`)
 - Atualiza routing
 - Commita
 

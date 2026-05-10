@@ -42,6 +42,33 @@ test -d .jdi/ && {
   echo ".jdi/ ja existe. Use /jdi-new --reset pra recomecar (CUIDADO: apaga state)."
   exit 1
 }
+
+# Sugere /jdi-adopt se diretorio NAO eh vazio (provavelmente brownfield)
+file_count=$(find . -maxdepth 3 -type f \
+  -not -path './.git/*' -not -path './node_modules/*' \
+  -not -path './.venv/*' -not -path './venv/*' \
+  -not -path './target/*' -not -path './dist/*' -not -path './build/*' \
+  -not -path './bin/*' -not -path './obj/*' \
+  2>/dev/null | wc -l)
+
+if [ "$file_count" -ge 3 ]; then
+  # Pergunta antes de continuar — pode ser greenfield em monorepo
+  echo "Diretorio tem $file_count files de codigo. Parece projeto existente."
+  echo "Para projetos brownfield, /jdi-adopt detecta stack/code-design automaticamente."
+  echo "Continuar com /jdi-new mesmo assim? (recomendado: /jdi-adopt)"
+  # AskUserQuestion: [Continuar /jdi-new] / [Mudar pra /jdi-adopt] / [Cancelar]
+fi
+```
+
+PowerShell:
+```powershell
+if (Test-Path .jdi) { Write-Error ".jdi/ ja existe. Use /jdi-new --reset."; exit 1 }
+$files = Get-ChildItem -Recurse -File -Depth 3 -ErrorAction SilentlyContinue |
+  Where-Object { $_.FullName -notmatch '\\(\.git|node_modules|\.venv|venv|target|dist|build|bin|obj)\\' }
+if ($files.Count -ge 3) {
+  Write-Host "Diretorio tem $($files.Count) files. Considere /jdi-adopt em vez de /jdi-new."
+  # AskUserQuestion sequencial
+}
 ```
 
 Se `--reset` passado, AskUserQuestion confirma + apaga `.jdi/`.
