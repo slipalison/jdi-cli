@@ -329,6 +329,20 @@ if [ -f "$PROJECT_DIR/.opencode/opencode.jsonc" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+section "11. Caveman plugin (optional)"
+
+CAVEMAN_USER="$HOME/.claude/plugins/caveman"
+CAVEMAN_PROJECT="$PROJECT_DIR/.claude/plugins/caveman"
+
+if [ -d "$CAVEMAN_USER" ]; then
+  ok "Caveman installed (user scope: $CAVEMAN_USER)"
+elif [ -d "$CAVEMAN_PROJECT" ]; then
+  ok "Caveman installed (project scope: $CAVEMAN_PROJECT)"
+else
+  note "Caveman plugin not installed (run: npx jdi-cli install-caveman)"
+fi
+
+# ---------------------------------------------------------------------------
 section "Resumo"
 
 if [[ "$FAILS" -gt 0 ]]; then

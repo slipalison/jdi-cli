@@ -282,6 +282,41 @@ function cmdInstallPlaywright({ flags }) {
   }
 }
 
+function cmdInstallCaveman({ flags }) {
+  ui.banner();
+
+  ui.header('JDI: Install Caveman plugin');
+  ui.info(`Directory: ${c.dim}${process.cwd()}${c.reset}`);
+  console.log('');
+
+  const args = [];
+  if (isWindows) {
+    if (flags.repo)  args.push('-Repo', flags.repo);
+    if (flags.scope) args.push('-Scope', flags.scope);
+    if (flags.force) args.push('-Force');
+  } else {
+    if (flags.repo)  args.push('--repo', flags.repo);
+    if (flags.scope) args.push('--scope', flags.scope);
+    if (flags.force) args.push('--force');
+  }
+
+  const { code } = runShellScript('jdi-install-caveman', args);
+
+  if (code === 0) {
+    ui.successSummary('Caveman ready', [
+      `${sym.success} Plugin cloned`,
+      `${sym.info} Restart Claude Code to load`,
+    ]);
+    ui.nextSteps([
+      `Verify: ${c.cyan}/caveman-help${c.reset}`,
+      `Toggle mode: ${c.cyan}/caveman lite|full|ultra${c.reset}`,
+    ]);
+  } else {
+    ui.errorSummary('Caveman install failed', [`${sym.error} Exit code: ${code}`]);
+    process.exit(code);
+  }
+}
+
 function cmdDoctor({ flags }) {
   ui.banner();
 
@@ -311,6 +346,7 @@ function cmdHelp() {
   console.log(`  ${c.cyan}build${c.reset}                  Re-builda runtimes/ a partir de core/`);
   console.log(`  ${c.cyan}doctor${c.reset}                 Diagnostico do projeto + JDI`);
   console.log(`  ${c.cyan}install-playwright${c.reset}     Instala @playwright/test + chromium + MCP config`);
+  console.log(`  ${c.cyan}install-caveman${c.reset}        Instala plugin caveman (modo ultra-compresso)`);
   console.log(`  ${c.cyan}help${c.reset}                   Mostra esta ajuda`);
   console.log(`  ${c.cyan}--version${c.reset}              Mostra versao`);
   console.log('');
@@ -397,6 +433,10 @@ function main() {
     case 'install-playwright':
     case 'playwright':
       cmdInstallPlaywright(parsed);
+      break;
+    case 'install-caveman':
+    case 'caveman':
+      cmdInstallCaveman(parsed);
       break;
     case 'doctor':
       cmdDoctor(parsed);

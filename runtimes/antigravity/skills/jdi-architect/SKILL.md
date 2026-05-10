@@ -455,6 +455,47 @@ git commit -m "chore(jdi): bootstrap specialists for {project_name}"
 Specialists {project_name}: doer + reviewer created in .jdi/agents/. Routing ok.
 ```
 
+### S9.5: Optional Caveman plugin install (any project)
+
+Independent of frontend. Caveman is a Claude Code plugin that compresses LLM
+output ~75% (caveman speech style) without losing technical accuracy. Useful
+for long sessions where context budget matters. Default repo:
+`https://github.com/JuliusBrussee/caveman`
+
+**AskUserQuestion:**
+
+> "Install Caveman plugin (~75% token savings via compressed output style)?
+>  - **Pros:** less tokens per response, longer sessions before compaction.
+>  - **Cons:** terse output style (fragments, no articles); not for all users.
+>  - **Idempotent:** safe to run later via `npx jdi-cli install-caveman`."
+>
+> Options:
+> - [Yes, install now (user scope)]
+> - [Yes, install in this project only (.claude/plugins/)]
+> - [Skip — install later if needed]
+
+If "Yes (user scope)": invoke shell script with `--scope user`.
+If "Yes (project)": invoke with `--scope project`.
+
+**bash:**
+```bash
+PW_SCRIPT="$(npm root)/jdi-cli/bin/jdi-install-caveman.sh"
+[ -f "$PW_SCRIPT" ] || PW_SCRIPT="$(npm root -g)/jdi-cli/bin/jdi-install-caveman.sh"
+[ -f "$PW_SCRIPT" ] && bash "$PW_SCRIPT" --scope ${SCOPE:-user} || echo "  [warn] jdi-install-caveman not found. Run: npx jdi-cli install-caveman"
+```
+
+**PowerShell:**
+```powershell
+$Script = Join-Path (npm root) 'jdi-cli\bin\jdi-install-caveman.ps1'
+if (-not (Test-Path $Script)) { $Script = Join-Path (npm root -g) 'jdi-cli\bin\jdi-install-caveman.ps1' }
+if (Test-Path $Script) { & $Script -Scope ($Scope ?? 'user') } else { Write-Warning "jdi-install-caveman not found. Run: npx jdi-cli install-caveman" }
+```
+
+If "Skip", append to `.jdi/STATE.md`:
+```yaml
+caveman: skipped_at_bootstrap
+```
+
 ### S9: Optional Playwright + MCP install (only if has_frontend=true)
 
 Only run if `frontend.has_frontend: true` in PROJECT.md. Otherwise skip.

@@ -317,6 +317,20 @@ if (Test-Path $opencodeMcp) {
 }
 
 # ---------------------------------------------------------------------------
+Write-Section '11. Caveman plugin (optional)'
+
+$cavemanUser    = Join-Path $UserHome '.claude\plugins\caveman'
+$cavemanProject = Join-Path $ProjectDir '.claude\plugins\caveman'
+
+if (Test-Path $cavemanUser) {
+  Write-OK "Caveman installed (user scope: $cavemanUser)"
+} elseif (Test-Path $cavemanProject) {
+  Write-OK "Caveman installed (project scope: $cavemanProject)"
+} else {
+  Write-Note 'Caveman plugin not installed (run: npx jdi-cli install-caveman)'
+}
+
+# ---------------------------------------------------------------------------
 Write-Section 'Resumo'
 
 if ($script:Fails -gt 0) {
