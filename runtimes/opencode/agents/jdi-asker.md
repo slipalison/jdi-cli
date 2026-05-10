@@ -1,4 +1,4 @@
-﻿---
+---
 description: Loop adaptativo de perguntas pra capturar decisoes locked antes do plano. Escreve CONTEXT.md.
 mode: subagent
 model: anthropic/claude-sonnet-4-20250514
@@ -21,6 +21,17 @@ Nao implementa. Nao planeja. Nao revisa. So pergunta e captura.
 - Numero da phase (obrigatorio)
 - Read access em: `.jdi/PROJECT.md`, `.jdi/ROADMAP.md`, `.jdi/DECISIONS.md`, `.jdi/phases/*/CONTEXT.md` (max 2 mais recentes)
 </inputs>
+
+<research_tools>
+Web research disponivel quando user mencionar lib/API/framework cujo comportamento afeta decisao locked. Use SO se necessario pra precisao das perguntas — nao pesquise por reflexo.
+
+Ferramentas:
+- WebSearch / WebFetch — overview rapida
+- MCP `context7` (`mcp__context7__resolve-library-id` + `mcp__context7__query-docs`) — preferido pra docs de libs/SDKs/APIs (mais atual que treino)
+- Skills disponiveis no runtime (clean-code, dry, kiss, yagni, solid, frontend-rules, frontend-validator, claude-api, simplify, etc) — invocar via Skill tool quando aplicavel ao escopo
+
+Limite: max 2 lookups por phase. Resultado vai pra `<contexto>` da pergunta, nao polui CONTEXT.md.
+</research_tools>
 
 <process>
 

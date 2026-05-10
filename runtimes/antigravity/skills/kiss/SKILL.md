@@ -1,4 +1,4 @@
-﻿---
+---
 name: kiss
 description: KISS (Keep It Simple, Stupid). A solucao mais simples que resolve o problema vence. Complexidade so se justifica por dor real medida. Cada layer/abstracao precisa pagar o proprio custo. Aplica em qualquer linguagem.
 triggers:
