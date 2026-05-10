@@ -1,0 +1,180 @@
+// OpenCode config — JDI managed (autonomous mode)
+//
+// Manual edits abaixo desta linha sao preservados quando /jdi-bootstrap rodar
+// de novo (provider e agent.jdi-* sao gerenciados pelo JDI; outros campos sao seus).
+//
+// Schema reference: https://opencode.ai/docs/config
+//
+// JDI default = AUTONOMOUS: comandos seguros (ls, cat, mkdir, git seguros,
+// build/test toolchain) sao auto-permitidos. Comandos perigosos (rm -rf, git push,
+// reset --hard, sudo, curl) ainda pedem confirmacao.
+//
+// Pra paranoid mode (pede permissao em tudo), troca todas linhas "allow" por "ask".
+// Pra YOLO mode (sem nada de seguranca), troca pra "*": "allow" — NAO RECOMENDADO.
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // Custom instructions: arquivos carregados como contexto extra alem do AGENTS.md.
+  // Descomente se quiser que TODO prompt do agent default carregue PROJECT.md:
+  // "instructions": [".jdi/PROJECT.md", ".jdi/DECISIONS.md"],
+
+  "permission": {
+    "edit": "allow",
+    "webfetch": "ask",
+
+    "bash": {
+      // === Read-only / inspecao — allow ===
+      "ls*": "allow",
+      "dir*": "allow",
+      "cat*": "allow",
+      "type*": "allow",
+      "pwd": "allow",
+      "echo*": "allow",
+      "Get-ChildItem*": "allow",
+      "Get-Content*": "allow",
+      "Get-Location": "allow",
+      "Test-Path*": "allow",
+      "Select-String*": "allow",
+      "head*": "allow",
+      "tail*": "allow",
+      "grep*": "allow",
+      "rg*": "allow",
+      "find*": "allow",
+      "which*": "allow",
+      "where*": "allow",
+
+      // === Filesystem write seguro — allow ===
+      "mkdir*": "allow",
+      "New-Item*": "allow",
+      "touch*": "allow",
+      "Set-Content*": "allow",
+      "Add-Content*": "allow",
+      "Out-File*": "allow",
+      "cp*": "allow",
+      "Copy-Item*": "allow",
+      "mv*": "allow",
+      "Move-Item*": "allow",
+      "Rename-Item*": "allow",
+
+      // === Git seguro — allow ===
+      "git status*": "allow",
+      "git log*": "allow",
+      "git diff*": "allow",
+      "git add*": "allow",
+      "git commit*": "allow",
+      "git tag*": "allow",
+      "git branch*": "allow",
+      "git checkout*": "allow",
+      "git switch*": "allow",
+      "git config*": "allow",
+      "git rev-parse*": "allow",
+      "git symbolic-ref*": "allow",
+      "git init*": "allow",
+      "git stash*": "allow",
+      "git fetch*": "allow",
+      "git pull --ff-only*": "allow",
+      "git restore*": "allow",
+      "git show*": "allow",
+      "git remote -v*": "allow",
+      "git ls-files*": "allow",
+
+      // === Build/test toolchain — allow ===
+      "dotnet build*": "allow",
+      "dotnet test*": "allow",
+      "dotnet format*": "allow",
+      "dotnet ef*": "allow",
+      "dotnet run*": "allow",
+      "dotnet new*": "allow",
+      "dotnet add*": "allow",
+      "dotnet restore*": "allow",
+      "pnpm *": "allow",
+      "npm run*": "allow",
+      "npm test*": "allow",
+      "npm install*": "allow",
+      "npm ci*": "allow",
+      "npx *": "allow",
+      "yarn *": "allow",
+      "vitest*": "allow",
+      "jest*": "allow",
+      "playwright*": "allow",
+      "pytest*": "allow",
+      "poetry *": "allow",
+      "uv *": "allow",
+      "pip install*": "allow",
+      "cargo build*": "allow",
+      "cargo test*": "allow",
+      "cargo check*": "allow",
+      "cargo clippy*": "allow",
+      "cargo fmt*": "allow",
+      "go build*": "allow",
+      "go test*": "allow",
+      "go run*": "allow",
+      "go fmt*": "allow",
+      "make*": "allow",
+
+      // === Container/orquestracao seguro — allow ===
+      "docker ps*": "allow",
+      "docker images*": "allow",
+      "docker logs*": "allow",
+      "docker compose ps*": "allow",
+      "docker compose logs*": "allow",
+      "kubectl get*": "allow",
+      "kubectl describe*": "allow",
+      "kubectl logs*": "allow",
+
+      // === Perigosos — ask ===
+      "git push*": "ask",
+      "git push --force*": "ask",
+      "git reset --hard*": "ask",
+      "git rebase*": "ask",
+      "git revert*": "ask",
+      "git merge*": "ask",
+      "git clean*": "ask",
+      "rm -rf*": "ask",
+      "rmdir*": "ask",
+      "Remove-Item*": "ask",
+      "del *": "ask",
+      "chmod*": "ask",
+      "chown*": "ask",
+      "sudo*": "ask",
+      "curl*": "ask",
+      "wget*": "ask",
+      "Invoke-WebRequest*": "ask",
+      "Invoke-RestMethod*": "ask",
+      "docker run*": "ask",
+      "docker rm*": "ask",
+      "docker rmi*": "ask",
+      "docker volume rm*": "ask",
+      "docker compose down*": "ask",
+      "kubectl delete*": "ask",
+      "kubectl apply*": "ask",
+      "Set-ExecutionPolicy*": "ask",
+
+      // === Catch-all — ask ===
+      "*": "ask"
+    }
+  }
+
+  // ---- INJETADO PELO /jdi-bootstrap (se llm_config customizado em PROJECT.md) ----
+  //
+  // Exemplo Ollama:
+  // "provider": {
+  //   "ollama": {
+  //     "npm": "@ai-sdk/openai-compatible",
+  //     "name": "Ollama",
+  //     "options": { "baseURL": "http://localhost:11434/v1" },
+  //     "models": {
+  //       "glm-5.1:cloud": { "name": "GLM 5.1 Cloud", "tools": true }
+  //     }
+  //   }
+  // },
+  // "model": "ollama/glm-5.1:cloud",
+  // "agent": {
+  //   "jdi-doer-{slug}": { "model": "ollama/glm-5.1:cloud" },
+  //   "jdi-reviewer-{slug}": { "model": "ollama/glm-5.1:cloud" }
+  // }
+
+  // Custom commands sao auto-descobertos em .opencode/commands/*.md
+  // Custom agents sao auto-descobertos em .opencode/agents/*.md
+  // Custom skills sao auto-descobertos em .opencode/skills/<name>/SKILL.md
+}

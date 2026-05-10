@@ -1,0 +1,62 @@
+{
+  "name": "jdi-cli",
+  "version": "1.0.0",
+  "description": "JDI (Just Do It) — workflow enxuto pra Claude Code, GitHub Copilot, Antigravity e OpenCode. 6 comandos no loop, 5 agents core, 2 specialists per-project.",
+  "bin": {
+    "jdi": "bin/jdi.js"
+  },
+  "files": [
+    "bin/jdi.js",
+    "bin/lib",
+    "bin/jdi-build.sh",
+    "bin/jdi-build.ps1",
+    "bin/jdi-install.sh",
+    "bin/jdi-install.ps1",
+    "bin/jdi-doctor.sh",
+    "bin/jdi-doctor.ps1",
+    "bin/git-hooks",
+    "core",
+    "runtimes",
+    "templates-jdi-folder",
+    "README.md",
+    "ARCHITECTURE.md",
+    "AGENTS.md",
+    "COMMANDS.md",
+    "EXTENSION.md",
+    "CREATE.md",
+    "CREATE-EXAMPLE.md",
+    "PORTABILITY.md",
+    "MEMORY.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/slipalison/jdi-cli.git"
+  },
+  "homepage": "https://github.com/slipalison/jdi-cli#readme",
+  "bugs": {
+    "url": "https://github.com/slipalison/jdi-cli/issues"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "ai",
+    "agent",
+    "workflow",
+    "spec-driven-development",
+    "jdi",
+    "opencode",
+    "copilot",
+    "antigravity"
+  ],
+  "author": "JDI contributors",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "node bin/jdi.js build",
+    "doctor": "node bin/jdi.js doctor",
+    "test:local": "npm pack && echo 'Package generated. Test with: npx ./jdi-cli-1.0.0.tgz install <runtime>'"
+  }
+}

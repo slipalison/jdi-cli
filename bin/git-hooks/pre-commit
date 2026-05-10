@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# JDI pre-commit hook — no-op por padrao.
+#
+# O doer specialist eh responsavel por gerar/atualizar docs durante a
+# execucao da phase. Este hook fica aqui pra compatibilidade e como
+# ponto de extensao.
+#
+# Se voce quiser adicionar verificacoes pre-commit (lint rapido, secrets check
+# basico, etc), edite este file ou desative com:
+#   git config --unset core.hooksPath
+
+set -euo pipefail
+
+# nada staged? sai
+if git diff --cached --quiet; then
+  exit 0
+fi
+
+# Hook sem acao por padrao.
+# Reviewer specialist (`/jdi-verify`) cobre validacao de qualidade.
+exit 0

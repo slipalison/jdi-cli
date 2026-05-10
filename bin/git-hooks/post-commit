@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# JDI post-commit hook — no-op por padrao.
+#
+# STATE.md eh atualizado explicitamente pelos comandos (/jdi-do, /jdi-verify,
+# /jdi-ship). Nao ha mais sed automatico.
+#
+# Este hook fica aqui pra compatibilidade e como ponto de extensao
+# (ex: notificar Slack apos commit, atualizar dashboard externo, etc).
+
+set -euo pipefail
+
+# nada de .jdi? nao eh projeto JDI
+[[ -d .jdi ]] || exit 0
+
+# Hook sem acao por padrao.
+exit 0
