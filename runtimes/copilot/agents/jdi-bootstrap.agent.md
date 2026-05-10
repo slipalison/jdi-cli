@@ -1,4 +1,4 @@
-﻿---
+---
 name: jdi-bootstrap
 description: Dispara jdi-architect em modo specialist pra gerar doer + reviewer per-project. Le PROJECT.md, conduz arquitect, valida outputs, atualiza routing.
 model: gpt-5

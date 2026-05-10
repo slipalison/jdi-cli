@@ -1,4 +1,4 @@
-﻿---
+---
 description: Dispara jdi-architect em modo specialist pra gerar doer + reviewer per-project. Le PROJECT.md, conduz arquitect, valida outputs, atualiza routing.
 mode: subagent
 model: anthropic/claude-sonnet-4-20250514

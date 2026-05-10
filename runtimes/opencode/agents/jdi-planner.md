@@ -1,4 +1,4 @@
-﻿---
+---
 description: Gera PLAN.md da phase. Le CONTEXT.md (do asker) + PROJECT.md, decompoe em tasks, mapeia files_modified, ordem de execucao. Sem fluff.
 mode: subagent
 model: anthropic/claude-sonnet-4-20250514

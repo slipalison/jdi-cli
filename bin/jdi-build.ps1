@@ -27,7 +27,7 @@ $Out  = Join-Path $Root 'runtimes'
 
 function Ensure-Dirs {
   $dirs = @(
-    "$Out\claude\agents", "$Out\claude\commands",
+    "$Out\claude\agents", "$Out\claude\commands", "$Out\claude\skills",
     "$Out\copilot\agents", "$Out\copilot\prompts",
     "$Out\antigravity\skills",
     "$Out\opencode\agents", "$Out\opencode\commands", "$Out\opencode\skills"
@@ -274,6 +274,58 @@ function Build-Command {
   Write-Host "  command: $name"
 }
 
+# Standalone skill em core/skills/<name>/SKILL.md (com optional references/ + scripts/).
+# Diferente de Build-AntigravitySkill que converte agent em skill - aqui a skill ja eh skill.
+function Build-StandaloneSkill {
+  param(
+    [string]$SrcDir,        # core/skills/<name>/
+    [string]$Runtime,       # claude | opencode | antigravity
+    [string]$DestRoot       # runtimes/<runtime>/skills/<name>/
+  )
+
+  $name = Split-Path -Leaf $SrcDir
+  $srcSkill = Join-Path $SrcDir 'SKILL.md'
+  if (-not (Test-Path $srcSkill)) { return }
+
+  New-Item -ItemType Directory -Force -Path $DestRoot | Out-Null
+
+  $src = Read-MdSource -Path $srcSkill
+  $desc = Get-BaseFrontmatterValue -Frontmatter $src.Frontmatter -Key 'description'
+
+  $fm = New-Object System.Text.StringBuilder
+  [void]$fm.AppendLine('---')
+  [void]$fm.AppendLine("name: $name")
+  if ($desc) { [void]$fm.AppendLine("description: $desc") }
+
+  if ($Runtime -eq 'antigravity') {
+    # Antigravity descobre skills por triggers - merge de runtime_overrides.antigravity.triggers
+    $override = Get-RuntimeOverride -Frontmatter $src.Frontmatter -Runtime 'antigravity'
+    if ($override.SubBlocks['triggers']) {
+      [void]$fm.AppendLine('triggers:')
+      foreach ($l in $override.SubBlocks['triggers']) {
+        [void]$fm.AppendLine($l)
+      }
+    }
+  }
+
+  [void]$fm.AppendLine('---')
+
+  $content = $fm.ToString() + $src.Body
+  Set-Content -Path (Join-Path $DestRoot 'SKILL.md') -Value $content -Encoding UTF8 -NoNewline
+
+  # Copia subdirs opcionais (references/, scripts/)
+  foreach ($subdir in @('references', 'scripts')) {
+    $srcSub = Join-Path $SrcDir $subdir
+    if (Test-Path $srcSub) {
+      $dstSub = Join-Path $DestRoot $subdir
+      if (Test-Path $dstSub) { Remove-Item -Recurse -Force $dstSub }
+      Copy-Item -Path $srcSub -Destination $dstSub -Recurse -Force
+    }
+  }
+
+  Write-Host "  $Runtime/skills/$name/SKILL.md"
+}
+
 function Main {
   Ensure-Dirs
   Write-Host "JDI build (PowerShell) - gerando runtimes a partir de core/"
@@ -300,6 +352,28 @@ function Main {
   Write-Host "`ncommands (todos os runtimes):"
   $cmdFiles = Get-ChildItem -Path "$Core\commands" -Filter '*.md' -File | Sort-Object Name
   foreach ($f in $cmdFiles) { Build-Command -SrcPath $f.FullName }
+
+  # Standalone skills em core/skills/<name>/SKILL.md
+  $skillDirs = @()
+  if (Test-Path "$Core\skills") {
+    $skillDirs = Get-ChildItem -Path "$Core\skills" -Directory -ErrorAction SilentlyContinue | Sort-Object Name
+  }
+
+  if ($skillDirs.Count -gt 0) {
+    Write-Host "`nskills (standalone):"
+    foreach ($d in $skillDirs) {
+      if ($Target -in 'claude','all') {
+        Build-StandaloneSkill -SrcDir $d.FullName -Runtime 'claude' -DestRoot (Join-Path "$Out\claude\skills" $d.Name)
+      }
+      if ($Target -in 'opencode','all') {
+        Build-StandaloneSkill -SrcDir $d.FullName -Runtime 'opencode' -DestRoot (Join-Path "$Out\opencode\skills" $d.Name)
+      }
+      if ($Target -in 'antigravity','all') {
+        Build-StandaloneSkill -SrcDir $d.FullName -Runtime 'antigravity' -DestRoot (Join-Path "$Out\antigravity\skills" $d.Name)
+      }
+      # Copilot: nao tem conceito nativo de skill - skip
+    }
+  }
 
   Write-Host "`nBuild completo. Veja runtimes/$Target/"
 }

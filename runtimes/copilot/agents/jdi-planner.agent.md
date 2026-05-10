@@ -1,4 +1,4 @@
-﻿---
+---
 name: jdi-planner
 description: Gera PLAN.md da phase. Le CONTEXT.md (do asker) + PROJECT.md, decompoe em tasks, mapeia files_modified, ordem de execucao. Sem fluff.
 model: gpt-5

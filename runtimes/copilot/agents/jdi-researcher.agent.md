@@ -1,4 +1,4 @@
-﻿---
+---
 name: jdi-researcher
 description: Research upfront pre-roadmap. Le ideia do user, faz perguntas chave, pesquisa stack/dominio, gera PROJECT.md + ROADMAP.md inicial. 1 agent unico em vez de varios researchers paralelos pra economizar token.
 model: gpt-5

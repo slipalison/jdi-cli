@@ -1,4 +1,4 @@
-﻿---
+---
 name: jdi-architect
 description: Cria novos agents e skills do JDI. Modo create = agent/skill generico no core. Modo specialist = doer/reviewer per-project em .jdi/agents/.
 triggers:
@@ -68,6 +68,11 @@ Extrai:
 - `llm_config` (secao opcional):
   - `default_model_opencode` — modelo a usar nos specialists OpenCode
   - `provider` — config do provider (ollama/openai/custom) pra mesclar no opencode.jsonc
+- `frontend` (secao opcional, novo):
+  - `has_frontend: true|false`
+  - `frontend_url` (ex: `http://localhost:5173`)
+  - `dev_command` (ex: `pnpm dev`)
+  - `critical_paths` (lista de rotas pra validar)
 
 Se `llm_config` ausente ou so tem `default_model_opencode: anthropic/claude-sonnet-4-20250514`:
 - Usa hardcoded default no template
@@ -79,7 +84,105 @@ Se `llm_config.provider` presente:
 
 Se algum campo obrigatorio ausente, pergunta.
 
-### S3: 6 perguntas focadas (AskUserQuestion, uma por vez)
+### S2.5: Auto-detect frontend (novo)
+
+Se `frontend.has_frontend` ausente em PROJECT.md, roda deteccao automatica antes de perguntar.
+
+**Heuristicas (bash):**
+```bash
+HAS_FRONTEND=false
+HINT=""
+
+# JS/TS frameworks via package.json
+if [ -f package.json ]; then
+  if grep -qE '"(react|vue|svelte|@angular/core|astro|next|nuxt|remix|solid-js|preact|qwik|@sveltejs/kit)"' package.json; then
+    HAS_FRONTEND=true
+    HINT="package.json com frontend framework"
+  fi
+fi
+
+# Razor / Blazor
+if find . -maxdepth 5 \( -name '*.razor' -o -name '*.cshtml' \) 2>/dev/null | head -1 | grep -q .; then
+  HAS_FRONTEND=true
+  HINT="${HINT:+$HINT, }Razor/Blazor templates"
+fi
+
+# Django/Flask templates
+if [ -d templates ] && find templates -name '*.html' 2>/dev/null | head -1 | grep -q .; then
+  HAS_FRONTEND=true
+  HINT="${HINT:+$HINT, }templates/*.html (Django/Flask/Jinja)"
+fi
+
+# Rails ERB
+if [ -d app/views ] && find app/views -name '*.erb' 2>/dev/null | head -1 | grep -q .; then
+  HAS_FRONTEND=true
+  HINT="${HINT:+$HINT, }app/views/*.erb (Rails)"
+fi
+
+# Laravel Blade
+if [ -d resources/views ] && find resources/views -name '*.blade.php' 2>/dev/null | head -1 | grep -q .; then
+  HAS_FRONTEND=true
+  HINT="${HINT:+$HINT, }resources/views/*.blade.php (Laravel)"
+fi
+
+# Static HTML
+if [ -f public/index.html ] || [ -f index.html ] || [ -f src/index.html ]; then
+  HAS_FRONTEND=true
+  HINT="${HINT:+$HINT, }index.html"
+fi
+```
+
+**PowerShell equivalente:**
+```powershell
+$HAS_FRONTEND = $false
+$HINT = @()
+
+if (Test-Path package.json) {
+  if (Select-String -Path package.json -Pattern '"(react|vue|svelte|@angular/core|astro|next|nuxt|remix|solid-js|preact|qwik|@sveltejs/kit)"' -Quiet) {
+    $HAS_FRONTEND = $true; $HINT += "package.json frontend framework"
+  }
+}
+
+if (Get-ChildItem -Recurse -Include *.razor,*.cshtml -ErrorAction SilentlyContinue -Depth 5 | Select-Object -First 1) {
+  $HAS_FRONTEND = $true; $HINT += "Razor/Blazor templates"
+}
+
+if ((Test-Path templates) -and (Get-ChildItem -Recurse templates -Filter *.html -ErrorAction SilentlyContinue | Select-Object -First 1)) {
+  $HAS_FRONTEND = $true; $HINT += "templates/*.html"
+}
+
+if ((Test-Path app/views) -and (Get-ChildItem -Recurse app/views -Filter *.erb -ErrorAction SilentlyContinue | Select-Object -First 1)) {
+  $HAS_FRONTEND = $true; $HINT += "Rails ERB views"
+}
+
+if ((Test-Path resources/views) -and (Get-ChildItem -Recurse resources/views -Filter *.blade.php -ErrorAction SilentlyContinue | Select-Object -First 1)) {
+  $HAS_FRONTEND = $true; $HINT += "Laravel Blade views"
+}
+
+if ((Test-Path public/index.html) -or (Test-Path index.html) -or (Test-Path src/index.html)) {
+  $HAS_FRONTEND = $true; $HINT += "index.html"
+}
+```
+
+**AskUserQuestion confirma:**
+
+Se `HAS_FRONTEND=true`:
+> "Detectei interface web (`{HINT}`). Confirmar?"
+> - [Sim, tem frontend - configurar gate 7]
+> - [Nao, eh API-only ou library]
+> - [Nao tenho certeza - configurar mais tarde]
+
+Se `HAS_FRONTEND=false`:
+> "Nao detectei interface web automaticamente. Esse projeto tem UI?"
+> - [Nao, eh API-only ou library / CLI / lib]
+> - [Sim, tem frontend - configurar gate 7]
+> - [Configurar mais tarde]
+
+Resultado vai pra variavel `has_frontend` usada nas SQ7-9 condicionais.
+
+### S3: 6 a 9 perguntas focadas (AskUserQuestion, uma por vez)
+
+SQ1-SQ6 sempre rodam. SQ7-SQ9 so rodam se `has_frontend=true` no S2.5.
 
 **SQ1 — Test framework**
 "Qual test framework voce usa nesse projeto?"
@@ -119,6 +222,44 @@ Sugestao:
 "Convencoes especificas do projeto? (texto livre, ou skip)"
 User digita regras: naming, imports, error handling, testing patterns.
 
+---
+
+**Bloco condicional - rodam SO se `has_frontend=true`:**
+
+**SQ7 — Dev server command**
+"Qual comando inicia o dev server da UI?"
+Sugestoes baseadas em deteccao:
+- Vite/React/Vue: `pnpm dev` ou `npm run dev`
+- Next.js: `pnpm dev` ou `next dev`
+- Nuxt: `pnpm dev`
+- SvelteKit: `pnpm dev`
+- Blazor: `dotnet watch run`
+- Razor MVC: `dotnet watch run`
+- Django: `python manage.py runserver`
+- Flask: `flask run --debug`
+- Rails: `bin/rails server`
+- Laravel: `php artisan serve`
+- Static: `python -m http.server 8000`
+- Outro (digito)
+
+**SQ8 — Frontend URL**
+"Qual URL o dev server expoe?"
+Defaults sugeridos:
+- Vite: `http://localhost:5173`
+- Next.js / Nuxt: `http://localhost:3000`
+- Blazor / Razor: `http://localhost:5000` ou `https://localhost:5001`
+- Django: `http://localhost:8000`
+- Flask: `http://localhost:5000`
+- Rails: `http://localhost:3000`
+- Laravel: `http://localhost:8000`
+
+**SQ9 — Critical paths**
+"Quais rotas sao criticas pra validar? (lista, separadas por virgula. Default: `/`)"
+
+User digita ex: `/`, `/login`, `/dashboard`, `/settings`.
+
+Estas rotas serao navegadas pelo gate 7 em mobile (375x667) e desktop (1280x720) viewports. Devem ser publicas OU funcionar sem autenticacao em dev (auth flow nao suportado no MVP).
+
 ### S4: Mostra preview do que vai gerar
 
 ```
@@ -129,9 +270,41 @@ Vou gerar:
 Stack: {stack}
 Test: {test_framework} via {test_command}
 Coverage: {coverage_min}%
+{se has_frontend=true:}
+Frontend:
+  URL: {frontend_url}
+  Dev: {dev_command}
+  Routes: {critical_paths}
+  Skills: jdi-frontend-rules + jdi-frontend-validator (gate 7 ativo)
+{/se}
+
+Tambem vou {atualizar|criar secao frontend em} .jdi/PROJECT.md.
 
 Approve / Edit / Cancel?
 ```
+
+### S4.5: Persiste `frontend:` em PROJECT.md (novo)
+
+Se `has_frontend=true` e PROJECT.md ainda nao tem secao `frontend:`, append:
+
+```yaml
+frontend:
+  has_frontend: true
+  frontend_url: {SQ8}
+  dev_command: {SQ7}
+  critical_paths:
+    - {path1}
+    - {path2}
+```
+
+Se `has_frontend=false`, append:
+
+```yaml
+frontend:
+  has_frontend: false
+```
+
+(Persistir explicito evita re-detect em runs futuros do bootstrap.)
 
 ### S5: Gera files
 
@@ -178,6 +351,45 @@ Pra cada `{X_COMMAND}` (build/test/coverage/lint), gera tambem `{X_COMMAND_PS}` 
 A maioria dos comandos `.NET CLI` / `pnpm` / `npm` rodam identicos em bash e PowerShell. Diferenca esta nos pipelines/redirecionamentos.
 
 Write em `.jdi/agents/jdi-reviewer-{slug}.md`.
+
+### S5.5: Injeta `<skills_to_load>` condicional (novo)
+
+Se `has_frontend=true`, injeta bloco no doer e reviewer apos `</role>` via Edit:
+
+**No doer (`.jdi/agents/jdi-doer-{slug}.md`):**
+
+```markdown
+<skills_to_load>
+- jdi-frontend-rules — quando task toca files de frontend (.tsx, .vue, .svelte, .razor, .cshtml, *.html, *.twig, *.erb, *.blade.php, etc). Aplica regras WCAG 2.2 AA + heuristicas de UX antes de escrever codigo.
+</skills_to_load>
+```
+
+**No reviewer (`.jdi/agents/jdi-reviewer-{slug}.md`):**
+
+```markdown
+<skills_to_load>
+- jdi-frontend-rules — checklist de UI/UX em gate 5. Greps especificos por anti-pattern.
+- jdi-frontend-validator — gate 7 (UI live). Detecta Playwright, instala se ausente com consent, spawna dev server, navega rotas, captura console/network/a11y/layout findings.
+</skills_to_load>
+```
+
+Se `has_frontend=false`, NAO injeta nada — skills nem aparecem nos specialists.
+
+### S5.6: Adicionar `.jdi/cache/` ao .gitignore (se has_frontend=true)
+
+```bash
+# bash
+grep -q '^\.jdi/cache/' .gitignore 2>/dev/null || echo '.jdi/cache/' >> .gitignore
+```
+
+```powershell
+# PowerShell
+if (-not (Test-Path .gitignore) -or -not (Select-String -Path .gitignore -Pattern '^\.jdi/cache/' -Quiet)) {
+  Add-Content .gitignore '.jdi/cache/'
+}
+```
+
+Cache do gate 7 (screenshots, logs, JSON findings, spec gerado) NUNCA deve commitar.
 
 ### S6: Atualiza routing
 

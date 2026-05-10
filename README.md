@@ -25,85 +25,68 @@ Em vez de doer generico que descobre stack a cada execucao, voce tem `jdi-doer-{
 /jdi-ship <N>            <- atualiza ROADMAP, avanca phase
 ```
 
-## Quickstart
-
-### Pre-requisitos
-
-- **Node.js 18+** (pra `npx jdi-cli`)
-- **git**
-- Pelo menos 1 runtime suportado: Claude Code, GitHub Copilot, Antigravity, OpenCode
-
-Sem deps Node — JDI usa stdlib only. Pra power users que querem rodar scripts shell direto:
-- Linux/Mac: bash, awk, sed nativos
-- Windows: PowerShell 5.1+ (com Git Bash opcional pra hooks)
-
-### Install em 1 comando
+## Quickstart — `npx` em 30 segundos
 
 ```bash
 cd /path/to/seu/projeto
 npx jdi-cli@latest install opencode
 ```
 
-Substitui `opencode` por `claude`, `copilot`, `antigravity` ou `all` conforme runtime ativo.
+Pronto. Substitui `opencode` por `claude`, `copilot`, `antigravity` ou `all` conforme runtime ativo.
 
-**Comandos disponiveis:**
+> Sem `cd` antes? `npx` roda no diretorio atual. Sempre confirme com `pwd` (Linux/Mac) ou `Get-Location` (Windows).
+
+### Pre-requisitos
+
+- **Node.js 18+** (pra `npx`)
+- **git**
+- Pelo menos 1 runtime: Claude Code, GitHub Copilot, Antigravity, OpenCode
+
+Zero dependencias Node — JDI usa stdlib only.
+
+### Comandos npx
+
 ```bash
-npx jdi-cli install <runtime> [--scope user|project]
-npx jdi-cli build           # so se voce clonou JDI fonte
-npx jdi-cli doctor          # diagnostico
-npx jdi-cli help
-npx jdi-cli --version
+# Install (default scope: project)
+npx jdi-cli@latest install claude
+npx jdi-cli@latest install copilot
+npx jdi-cli@latest install antigravity --scope user
+npx jdi-cli@latest install opencode
+npx jdi-cli@latest install all                    # todos runtimes ao mesmo tempo
+
+# Diagnostico
+npx jdi-cli@latest doctor
+npx jdi-cli@latest doctor --verbose
+
+# Versao
+npx jdi-cli@latest --version
+
+# Help
+npx jdi-cli@latest help
 ```
 
-**Install global (uma vez, depois usa `jdi` direto):**
+> Use `@latest` pra forcar pull da versao mais recente. Sem `@latest`, npx usa a primeira versao bem-conhecida em cache (que pode estar desatualizada).
+
+### Install global (opcional)
+
+Se voce vai usar JDI varias vezes:
+
 ```bash
 npm i -g jdi-cli
 jdi install opencode
 jdi doctor
 ```
 
-### Power users: scripts shell direto
+Depois disso `jdi` funciona direto sem `npx`.
 
-Se voce nao quer Node (containers minimal, etc), JDI shipa scripts standalone.
+### Update pra versao mais recente
 
-**1. Clone JDI fonte**
-```bash
-git clone https://github.com/slipalison/jdi-cli.git
-cd jdi-cli
-```
-
-**2. Build** — gera adapters em `runtimes/` a partir de `core/`
-
-Linux/Mac:
-```bash
-./bin/jdi-build.sh
-```
-
-Windows:
-```powershell
-.\bin\jdi-build.ps1
-```
-
-**3. Install no projeto**
-
-Linux/Mac:
 ```bash
 cd /path/to/seu/projeto
-/path/to/jdi-cli/bin/jdi-install.sh claude --scope project
+npx jdi-cli@latest install <runtime>
 ```
 
-Windows:
-```powershell
-cd C:\path\to\seu\projeto
-C:\path\to\jdi-cli\bin\jdi-install.ps1 -Runtime claude -Scope project
-```
-
-**Nota Windows (so scripts shell):** se PowerShell bloquear execucao:
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-# Ou em casos pontuais:
-pwsh -ExecutionPolicy Bypass -File .\bin\jdi-build.ps1
-```
+State em `.jdi/` eh preservado. Specialists em `.jdi/agents/` tambem.
 
 ### Primeiro projeto
 
@@ -113,13 +96,13 @@ Apos install, abre teu runtime favorito no diretorio do projeto e roda:
 /jdi-new "TODO app .NET 10 + React 19"
 ```
 
-Researcher faz 4 perguntas (visao, stack, code design, MVP features). Gera PROJECT.md + ROADMAP.md.
+Researcher faz 4 perguntas (visao, stack, code design, MVP features). Gera `PROJECT.md` + `ROADMAP.md`.
 
 ```
 /jdi-bootstrap
 ```
 
-Architect modo specialist faz 6 perguntas (test framework, build/test commands, coverage min, lint, conventions). Gera `.jdi/agents/jdi-doer-{slug}.md` + `.jdi/agents/jdi-reviewer-{slug}.md` customizados pra TUA stack.
+Architect modo specialist faz 6-9 perguntas (test framework, build/test commands, coverage, lint, conventions, **e — se detectar UI — dev server, URL e rotas criticas**). Gera `.jdi/agents/jdi-doer-{slug}.md` + `.jdi/agents/jdi-reviewer-{slug}.md` customizados pra TUA stack.
 
 ```
 /jdi-discuss 1
@@ -130,6 +113,101 @@ Architect modo specialist faz 6 perguntas (test framework, build/test commands, 
 ```
 
 Phase 1 entregue. Repete pra phase 2, 3, etc.
+
+### Power users — scripts shell direto (sem Node)
+
+Se voce nao quer Node (containers minimal, ambientes restritos, etc), JDI shipa scripts standalone.
+
+```bash
+git clone https://github.com/slipalison/jdi-cli.git
+cd jdi-cli
+
+# Build adapters
+./bin/jdi-build.sh                 # Linux/Mac
+.\bin\jdi-build.ps1                # Windows
+
+# Install no projeto
+cd /path/to/seu/projeto
+/path/to/jdi-cli/bin/jdi-install.sh claude --scope project          # Linux/Mac
+C:\path\to\jdi-cli\bin\jdi-install.ps1 -Runtime claude -Scope project   # Windows
+```
+
+**Nota Windows:** se PowerShell bloquear `.ps1`:
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+# Ou:
+pwsh -ExecutionPolicy Bypass -File .\bin\jdi-build.ps1
+```
+
+## Frontend support — UI/UX gates + Playwright
+
+Se teu projeto tem interface web, JDI ativa automaticamente um conjunto extra de gates focados em UI/UX. Detecta frontend olhando `package.json` (React, Vue, Svelte, Solid, Angular, Astro, Next, Nuxt, Remix, SvelteKit, Qwik), arquivos Razor/Blazor (`*.razor, *.cshtml`), templates Django/Flask (`templates/*.html`), Rails (`app/views/*.erb`), Laravel (`resources/views/*.blade.php`), ou `index.html` solto.
+
+### O que liga automaticamente
+
+**Skill `frontend-rules`** — checklist universal de UI/UX baseado em **WCAG 2.2 AA + Nielsen heuristics + Material/Apple HIG**. Framework-agnostica — vale React, Vue, Blazor, Razor, Twig, ERB, Blade, qualquer template engine. Cobre:
+
+- Acessibilidade (contraste 4.5:1, foco visivel, keyboard nav, ARIA, semantic HTML, touch targets, labels)
+- Estados obrigatorios (loading / empty / error / success / disabled)
+- Forms (validacao, autocomplete, inputmode, password toggle, confirmacao destrutiva)
+- Performance UX (CLS < 0.1, LCP < 2.5s, INP < 200ms, optimistic UI)
+- Responsivo mobile-first
+- i18n + l10n + RTL
+- Seguranca UI (token nunca em localStorage, CSP, CSRF, target=_blank com noopener)
+- Tabela de **anti-patterns BLOCK** com regra WCAG citada
+
+Doer aplica antes de escrever codigo. Reviewer usa como checklist no gate 5.
+
+**Skill `frontend-validator`** — gate 7 do reviewer. Roda Playwright + axe-core em browser real:
+
+1. Detecta Playwright. Se ausente, **pergunta antes de instalar** (4 opcoes: Chromium / todos browsers / pular gate 7 / cancelar review)
+2. Detecta package manager via lockfile (npm / pnpm / yarn / bun)
+3. Spawna teu dev server, aguarda ready (poll 60s timeout)
+4. Pra cada rota critica × **mobile (375×667)** + **desktop (1280×720)**:
+   - Captura console errors
+   - Captura network failures (4xx, 5xx, requestfailed)
+   - Roda axe-core (WCAG 2.0/2.1/2.2 AA + best-practices)
+   - Detecta horizontal scroll
+   - Screenshot fullpage
+5. Mata dev server (sempre, mesmo em erro)
+6. Output JSON em `.jdi/cache/ui-findings.json`
+
+### Classificacao de findings
+
+| Finding | Severity |
+|---|---|
+| Console error em qualquer route | BLOCK |
+| Network 5xx em rota critica | BLOCK |
+| A11y violation `critical` ou `serious` | BLOCK |
+| Horizontal scroll mobile | BLOCK |
+| A11y violation `moderate`, network 4xx | WARN |
+| A11y violation `minor`, scroll desktop | INFO |
+| Dev server timeout | INCONCLUSIVE (warn) |
+| User recusou Playwright install | SKIPPED (warn) |
+
+Nunca BLOCK por motivo tecnico — so por findings reais. `.jdi/cache/` eh gitignored automaticamente.
+
+### Como ligar
+
+Voce nao precisa fazer nada. Quando rodar `/jdi-bootstrap` em projeto com UI:
+
+1. Auto-detect dispara
+2. Bootstrap pergunta: "Detectei React em `package.json`. Confirmar que tem frontend?"
+3. Se sim, 3 perguntas extras: dev server command (default por framework), frontend URL (default por framework), critical paths (default `/`)
+4. Persiste secao `frontend:` em `PROJECT.md`
+5. Injeta `<skills_to_load>` no doer + reviewer
+
+Daqui em diante, `/jdi-do` carrega `frontend-rules` quando tarefa toca arquivo de UI; `/jdi-verify` roda gate 7 com Playwright.
+
+### Como desligar
+
+Edita `PROJECT.md`:
+```yaml
+frontend:
+  has_frontend: false
+```
+
+Gate 7 pula com `SKIPPED`. Skill nao carrega.
 
 ## Estrutura final apos install
 
@@ -155,9 +233,9 @@ seu-projeto/
 
 Pra outros runtimes, troca `.claude/` por `.github/`, `.gemini/antigravity/`, ou `.opencode/`. Ver [PORTABILITY.md](PORTABILITY.md).
 
-## Agents (5 core + 2 per-project)
+## Agents (5 core + 2 per-project) e Skills (2 condicionais)
 
-Core (shipped):
+Core agents (shipped):
 - `jdi-researcher` (Opus) — discover pre-roadmap
 - `jdi-bootstrap` (Sonnet) — wrapper que gera specialists
 - `jdi-asker` (Sonnet) — loop de perguntas
@@ -167,6 +245,10 @@ Core (shipped):
 Per-project (gerados):
 - `jdi-doer-{slug}` (Sonnet) — executor que sabe a stack
 - `jdi-reviewer-{slug}` (Sonnet) — gates de qualidade da stack (read-only)
+
+Skills condicionais (carregadas se `has_frontend=true`):
+- `frontend-rules` — checklist universal WCAG 2.2 AA + UX heuristics, framework-agnostico
+- `frontend-validator` — gate 7 do reviewer com Playwright + axe-core
 
 Detalhes em [AGENTS.md](AGENTS.md).
 
