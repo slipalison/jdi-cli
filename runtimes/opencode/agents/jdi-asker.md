@@ -1,4 +1,4 @@
----
+﻿---
 description: Loop adaptativo de perguntas pra capturar decisoes locked antes do plano. Escreve CONTEXT.md.
 mode: subagent
 model: anthropic/claude-sonnet-4-20250514

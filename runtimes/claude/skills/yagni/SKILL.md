@@ -1,4 +1,4 @@
----
+﻿---
 name: yagni
 description: YAGNI (You Aren't Gonna Need It). Construa apenas o que requisito atual pede. Generalizacao apos 3o caso real, nunca antes. Codigo nao escrito eh codigo sem bug, sem custo de manutencao, sem teste pendente. Aplica em qualquer linguagem.
 ---

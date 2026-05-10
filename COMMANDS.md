@@ -1,6 +1,6 @@
 # JDI — Commands
 
-8 comandos. 7 no loop principal + 1 meta (`/jdi-create`).
+9 comandos. 7 no loop principal + 1 ralph mode + 1 meta (`/jdi-create`).
 
 ## Loop principal
 
@@ -125,7 +125,47 @@ Faz:
    - BLOCKED — gate 1-3 falhou OU gate 5 critical
 5. Commit: `docs({NN-slug}): verify phase ({VERDICT})`
 
-**Proximo:** `/jdi-ship N` (se nao BLOCKED)
+**Proximo:** `/jdi-ship N` (se nao BLOCKED) — ou `/jdi-loop N` se quiser auto-fix loop
+
+### `/jdi-loop <N> [--max-iter=5] [--max-resets=3]`
+
+**Ralph loop mode.** Roda `/jdi-do` -> `/jdi-verify` em ciclo automatico ate veredicto APPROVED. Sem acao humana entre iter. Cap absoluto: 5 iter por round x 3 resets = 15 iter.
+
+```
+/jdi-loop 2
+/jdi-loop 2 --max-iter=3 --max-resets=2    # cap mais conservador
+```
+
+Faz:
+1. Validacao: PLAN.md + doer + reviewer registrados
+2. Inicializa `.jdi/phases/{NN-slug}/LOOP.md` (ou retoma se existe)
+3. Loop:
+   - Spawn doer (com last REVIEW.md findings + LOOP history como contexto)
+   - Spawn reviewer (read-only, escreve REVIEW.md)
+   - Hash dos blockers/warnings -> append em LOOP.md history
+   - Se veredicto APPROVED ou APPROVED_WITH_WARNINGS -> converged, exit
+   - Se finding hash igual ao iter anterior -> oscillation detected, AskUserQuestion
+   - Se iter >= max_iter -> AskUserQuestion (continuar/abortar/ajustar)
+4. Human gate options:
+   - `Continuar` -> reset counter, novo round (total_resets++)
+   - `Abortar` -> status=escalated, exit limpo
+   - `Ajustar plano` -> status=paused, exit, user edita PLAN/CONTEXT, re-roda /jdi-loop
+5. Hard cap: total_resets >= max_resets -> status=killed, kill switch absoluto
+6. Cada iter = doer commit atomico + reviewer commit (audit trail granular em git)
+
+**Generator/Judge separation:** doer escreve, reviewer le (read-only). Invariante Ralph.
+
+**Quando usar:**
+- Phase com tests automaticos confiaveis
+- Tasks mecanicas (refactor, test coverage, batch fixes)
+- Quer "fire and forget" com cap controlado
+
+**Quando NAO usar:**
+- Tasks que precisam decisao arquitetural humana
+- Phase com gates subjetivos
+- Specs vagas (vai oscilar)
+
+**Proximo:** `/jdi-ship N` (se converged) ou revisao humana (se killed/escalated/paused)
 
 ### `/jdi-ship <N>`
 
@@ -175,6 +215,7 @@ Faz:
 /jdi-plan N     --> .jdi/phases/{NN}/PLAN.md
 /jdi-do N       --> commits atomicos + .jdi/phases/{NN}/SUMMARY.md
 /jdi-verify N   --> .jdi/phases/{NN}/REVIEW.md
+/jdi-loop N     --> ralph mode: do<->verify auto + .jdi/phases/{NN}/LOOP.md
 /jdi-ship N     --> ROADMAP advance + tag (opcional)
 
 /jdi-create     --> [internal] core/agents/* ou core/skills/* (so no repo JDI)
@@ -185,6 +226,8 @@ Faz:
 - `--auto` (em `/jdi-discuss`): asker decide tudo, sem pergunta
 - `--review` (em `/jdi-plan`): mostra preview do PLAN, pede approve
 - `--sequential` (em `/jdi-do`): forca execucao sequencial mesmo se waves permitem paralelo
+- `--max-iter=N` (em `/jdi-loop`): max iter por round antes de human gate (default 5)
+- `--max-resets=N` (em `/jdi-loop`): max rounds de reset antes do kill switch (default 3)
 - `--reset` (em `/jdi-new`): apaga `.jdi/` antes de iniciar (CUIDADO)
 
 ## Idempotencia
@@ -194,4 +237,5 @@ Todos os comandos sao idempotentes pra rerun:
 - `/jdi-plan` ja com PLAN.md -> regera (warn)
 - `/jdi-do` ja com tasks completed -> pula
 - `/jdi-verify` ja com REVIEW.md -> regera
+- `/jdi-loop` ja com LOOP.md status=converged -> aborta (rode /jdi-ship); status=running -> retoma; status=killed -> aborta (revisao humana); status=escalated/paused -> retoma com novo round
 - `/jdi-ship` ja shipped -> warn

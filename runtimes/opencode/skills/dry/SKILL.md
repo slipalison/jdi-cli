@@ -1,4 +1,4 @@
----
+﻿---
 name: dry
 description: DRY (Don't Repeat Yourself). 1 fonte de verdade por conhecimento. Detecta duplicacao real (mesma decisao em 2+ lugares) e separa de duplicacao aparente (mesmo codigo, motivos diferentes). Aplica em qualquer linguagem.
 ---

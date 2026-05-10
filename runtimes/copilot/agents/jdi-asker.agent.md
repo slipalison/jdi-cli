@@ -1,4 +1,4 @@
----
+﻿---
 name: jdi-asker
 description: Loop adaptativo de perguntas pra capturar decisoes locked antes do plano. Escreve CONTEXT.md.
 model: gpt-5

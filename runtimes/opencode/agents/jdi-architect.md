@@ -1,4 +1,4 @@
----
+﻿---
 description: Cria novos agents e skills do JDI. Modo create = agent/skill generico no core. Modo specialist = doer/reviewer per-project em .jdi/agents/.
 ---
 

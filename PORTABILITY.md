@@ -107,6 +107,7 @@ jdi/
 |   |   +-- jdi-plan.md
 |   |   +-- jdi-do.md
 |   |   +-- jdi-verify.md
+|   |   +-- jdi-loop.md           ralph loop, dev<->review automatico
 |   |   +-- jdi-ship.md
 |   |   +-- jdi-create.md         (so contributors)
 |   +-- templates/

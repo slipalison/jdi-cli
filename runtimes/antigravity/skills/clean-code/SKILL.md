@@ -1,4 +1,4 @@
----
+﻿---
 name: clean-code
 description: Clean Code. Codigo legivel pra humano, optimizado pra leitura (10x mais lido que escrito). Nomes que revelam intencao, funcoes pequenas, sem comentarios redundantes, error handling explicito, sem magic numbers. Aplica em qualquer linguagem.
 triggers:

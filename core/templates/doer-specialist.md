@@ -60,6 +60,8 @@ Spawned por: `/jdi-do {N}`
   - `.jdi/DECISIONS.md`
   - `.jdi/phases/{NN-slug}/CONTEXT.md`
   - `.jdi/phases/{NN-slug}/PLAN.md`
+  - `.jdi/phases/{NN-slug}/LOOP.md` (opcional — so existe se rodando em ralph mode via /jdi-loop)
+  - `.jdi/phases/{NN-slug}/REVIEW.md` (opcional — so existe se reviewer ja rodou ao menos 1x)
 - Write em:
   - codigo (paths em `files_modified` do PLAN)
   - `.jdi/phases/{NN-slug}/SUMMARY.md`
@@ -82,6 +84,20 @@ Exemplos esperados nesta secao (preenchido pelo architect):
 Le PLAN.md da phase. Identifica tasks com `status: pending`.
 
 Se todas tasks ja completas -> retorna "phase ja executada".
+
+**Ralph mode detection:** se existe `.jdi/phases/{NN-slug}/LOOP.md` E `.jdi/phases/{NN-slug}/REVIEW.md`:
+- Voce esta rodando em iter > 1 do ralph loop
+- Le LOOP.md `## History` pra ver findings hash de iter anteriores (failed approaches)
+- Le REVIEW.md `## Blockers` e `## Warnings` da iter anterior — esses SAO seu trabalho agora
+- Se Veredicto da REVIEW.md = BLOCKED:
+  - Foco principal eh corrigir os blockers listados
+  - Nao re-implementa tasks ja completed sem razao
+  - Se finding hash em LOOP.md repete de iter anterior, mude approach (oscillation = approach atual nao funciona)
+- Se Veredicto = APPROVED_WITH_WARNINGS:
+  - Tenta corrigir warnings opcionais (nao bloqueia mas vale)
+  - Se nao consegue corrigir limpo, deixa pra warning permanecer
+- Se Veredicto = APPROVED:
+  - Phase convergiu, /jdi-loop encerra. Voce nao deve estar sendo invocado.
 
 ### Passo 2: Para cada task pendente
 

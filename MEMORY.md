@@ -25,6 +25,7 @@ Decisoes locked ficam em `DECISIONS.md`. Audit trail dos specialists/agents cria
 |   |   +-- PLAN.md      saida do /jdi-plan (planner)
 |   |   +-- SUMMARY.md   saida do /jdi-do (doer)
 |   |   +-- REVIEW.md    saida do /jdi-verify (reviewer)
+|   |   +-- LOOP.md      audit trail do /jdi-loop (so se ralph mode foi usado)
 |   +-- 02-...
 +-- archive/             phases antigas movidas (opcional)
 ```
@@ -106,7 +107,7 @@ total_phases: {N}
 project_slug: {slug}
 specialists_ready: true | false
 current_phase: 1
-phase_status: ready | discussed | planned | executed | verified | done
+phase_status: ready | discussed | planned | executed | verified | done | looping | paused | blocked
 phase_verdict: APPROVED | APPROVED_WITH_WARNINGS | BLOCKED  (apos verify)
 next_step: /jdi-discuss 1
 ```
@@ -114,6 +115,11 @@ next_step: /jdi-discuss 1
 **Quem edita:** todos os comandos atualizam apos rodar.
 
 **Lifespan:** sobrescreve a cada commit do orchestrator. Sem historico — git log cobre.
+
+**Status especificos do `/jdi-loop`:**
+- `looping` — `/jdi-loop` em execucao (ralph mode), LOOP.md tem detalhe de iter atual
+- `paused` — user escolheu "Ajustar plano" no human gate, edita PLAN.md/CONTEXT.md e re-roda /jdi-loop
+- `blocked` — `/jdi-verify` retornou BLOCKED OU `/jdi-loop` foi escalated/killed (revisao humana necessaria)
 
 ---
 
@@ -336,6 +342,51 @@ D-4 (2026-05-10, phase 2): Validacao via FluentValidation. Razao: ...
 
 ---
 
+## phases/{NN-slug}/LOOP.md (opcional, so com /jdi-loop)
+
+```markdown
+---
+phase: {N}
+iter: 3
+total_resets: 1
+status: running | converged | escalated | paused | killed
+max_iter_per_round: 5
+max_resets: 3
+created_at: 2026-05-10T10:30:00-03:00
+---
+
+## History (append-only)
+
+- iter 1: BLOCKED, hash=abc123def4, commit=f8d2a1, ts=2026-05-10T10:31:00-03:00
+- iter 2: BLOCKED, hash=abc123def4, commit=a91c33, ts=2026-05-10T10:33:00-03:00  ← oscillation!
+- iter 3: BLOCKED, hash=de45ef9012, commit=2b3d77, ts=2026-05-10T10:36:00-03:00
+- iter 4: BLOCKED, hash=de45ef9012, commit=8e1c44, ts=2026-05-10T10:38:00-03:00
+- iter 5: BLOCKED, hash=11aa22bb33, commit=4f9e21, ts=2026-05-10T10:40:00-03:00
+--- RESET 1 em 2026-05-10T10:42:00-03:00 ---
+- iter 1: APPROVED_WITH_WARNINGS, hash=00ff11ee22, commit=c1d2e3, ts=2026-05-10T10:45:00-03:00
+```
+
+**Quem edita:** `/jdi-loop` cria/append. Ninguem mais toca.
+
+**Regras:**
+- Frontmatter `iter` + `total_resets` + `status` sao MUTAVEIS (sobrescreve)
+- Bloco `## History` eh APPEND-ONLY (audit trail completo, oscillation detection precisa)
+- `hash` = SHA256 truncado dos blockers/warnings normalizados — pra comparar iter N vs N-1
+- `status: converged` => phase pode prosseguir pra `/jdi-ship`
+- `status: killed` => hard cap atingido, requer revisao humana de PLAN/CONTEXT
+- `status: escalated|paused` => user interveio, re-rodar `/jdi-loop {N}` retoma
+
+**States transitions:**
+```
+running → converged   (verdict APPROVED ou APPROVED_WITH_WARNINGS)
+running → escalated   (user escolheu abort no human gate)
+running → paused      (user escolheu ajustar plan no human gate)
+running → killed      (total_resets >= max_resets)
+escalated|paused → running (re-rodar /jdi-loop retoma)
+```
+
+---
+
 ## Niveis de memoria
 
 | Nivel | Arquivo | Lifespan |
@@ -347,6 +398,7 @@ D-4 (2026-05-10, phase 2): Validacao via FluentValidation. Razao: ...
 | Audit | `registry.md` | Append-only |
 | Sessao | `STATE.md` | Sobrescreve |
 | Phase | `phases/NN/CONTEXT.md`, `PLAN.md`, `SUMMARY.md`, `REVIEW.md` | Vida da phase |
+| Loop | `phases/NN/LOOP.md` | Vida da phase, append-only, so com /jdi-loop |
 | Backlog | `todos.md` | Append-only, opcional |
 
 **Sem MEMORY.md generico (v1).** Era catch-all que ficava bagunçado. Substituido por:
