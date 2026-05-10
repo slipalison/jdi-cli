@@ -246,7 +246,14 @@ Per-project (gerados):
 - `jdi-doer-{slug}` (Sonnet) — executor que sabe a stack
 - `jdi-reviewer-{slug}` (Sonnet) — gates de qualidade da stack (read-only)
 
-Skills condicionais (carregadas se `has_frontend=true`):
+Skills universais de programacao (carregadas por doer + reviewer em qualquer projeto):
+- `dry` — Don't Repeat Yourself, knowledge duplication vs code coincidence, regra dos 3
+- `kiss` — Keep It Simple, anti over-engineering, complexidade precisa pagar custo
+- `yagni` — You Aren't Gonna Need It, sem codigo especulativo, generaliza apos 3o caso
+- `solid` — SRP/OCP/LSP/ISP/DIP com heuristicas de detecao
+- `clean-code` — nomes intencionais, funcoes pequenas, error handling explicito, smells classicos
+
+Skills condicionais a frontend (carregadas se `has_frontend=true`):
 - `frontend-rules` — checklist universal WCAG 2.2 AA + UX heuristics, framework-agnostico
 - `frontend-validator` — gate 7 do reviewer com Playwright + axe-core
 
