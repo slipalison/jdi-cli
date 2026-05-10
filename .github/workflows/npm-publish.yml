@@ -1,0 +1,96 @@
+name: Publish to npm
+
+# Dispara quando voce empurra uma tag no formato v*.*.* (ex: v1.6.0).
+# Fluxo recomendado:
+#   1. Bump em package.json
+#   2. Commit + push main
+#   3. git tag -a v1.6.0 -m "..." && git push origin v1.6.0
+#   4. Action publica automatico
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  # Permite trigger manual no UI tambem (Actions tab > Run workflow)
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag a publicar (ex: v1.6.0). Deve existir no repo."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  # Necessario pra `npm publish --provenance` (OIDC com sigstore)
+  id-token: write
+
+jobs:
+  publish:
+    name: Build + publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Tag dispara checkout no commit da tag direto. Sem fetch-depth grande.
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          # Registry URL eh OBRIGATORIO aqui — define onde o NPM_TOKEN injeta
+          registry-url: "https://registry.npmjs.org"
+          # cache: 'npm'  # JDI nao tem package-lock.json (zero deps)
+
+      - name: Verify tag matches package.json
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Tag pode vir do trigger automatico (refs/tags/v1.6.0)
+          # ou do workflow_dispatch (input.tag)
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          TAG_VERSION="${TAG#v}"
+
+          PKG_VERSION=$(node -p "require('./package.json').version")
+
+          echo "Tag:      $TAG"
+          echo "Tag ver:  $TAG_VERSION"
+          echo "Pkg ver:  $PKG_VERSION"
+
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag ($TAG_VERSION) != package.json ($PKG_VERSION). Aborta."
+            exit 1
+          fi
+
+      - name: Rebuild runtimes from core
+        shell: bash
+        run: node bin/jdi.js build
+
+      - name: Verify package contents (dry-run)
+        shell: bash
+        run: npm publish --dry-run
+
+      - name: Publish to npm
+        shell: bash
+        env:
+          # Secret NPM_TOKEN configurado em Settings > Secrets and variables > Actions
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          # --provenance: assina o build via OIDC (sigstore). Aparece como
+          # badge "Provenance" na pagina do pacote no npmjs.com.
+          # --access public: pacote nao-scoped publicado como public.
+          npm publish --provenance --access public
+
+      - name: Summary
+        if: success()
+        shell: bash
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          echo "## jdi-cli@${PKG_VERSION} publicado" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- npm: https://www.npmjs.com/package/jdi-cli/v/${PKG_VERSION}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- tag: ${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_STEP_SUMMARY"
