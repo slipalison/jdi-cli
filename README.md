@@ -1,5 +1,20 @@
 # JDI — Just Do It
 
+```
+       ██╗██████╗ ██╗
+       ██║██╔══██╗██║
+       ██║██║  ██║██║
+  ██   ██║██║  ██║██║
+  ╚█████╔╝██████╔╝██║
+   ╚════╝ ╚═════╝ ╚═╝
+
+  ◄══════════════════════════════════════════════|=|◉|=|/////|==
+  ◄══════════════════════════════════════════════|=|◉|=|/////|==
+  ◄══════════════════════════════════════════════|=|◉|=|/////|==
+
+  Cut through the chaos. Ship the work. [Just do it]
+```
+
 Lean workflow toolkit for solo dev + AI assistant. Adaptive loop, atomic commits, file-based state, fresh context per agent, wave-based parallelism. Per-project specialists that already know your stack.
 
 ## Why

@@ -116,14 +116,14 @@ function ensureScope(scope) {
 // Commands
 // =================================================================
 
-function cmdInstall({ positional, flags }) {
+async function cmdInstall({ positional, flags }) {
   const runtime = positional[0];
   const scope = flags.scope || 'project';
 
   ensureRuntime(runtime);
   ensureScope(scope);
 
-  ui.banner();
+  await ui.bannerAnimated();
 
   ui.header(`Instalando JDI para ${c.bold}${runtime}${c.reset}`);
   ui.info(`Diretorio: ${c.dim}${process.cwd()}${c.reset}`);
@@ -163,8 +163,8 @@ function cmdInstall({ positional, flags }) {
   }
 }
 
-function cmdBuild({ flags }) {
-  ui.banner();
+async function cmdBuild({ flags }) {
+  await ui.bannerAnimated();
 
   ui.header('Building JDI runtimes');
   ui.info(`Source: ${c.dim}${PKG_ROOT}/core/${c.reset}`);
@@ -188,8 +188,8 @@ function cmdBuild({ flags }) {
   }
 }
 
-function cmdUpdate({ flags }) {
-  ui.banner();
+async function cmdUpdate({ flags }) {
+  await ui.bannerAnimated();
 
   ui.header('JDI Update');
   ui.info(`Diretorio: ${c.dim}${process.cwd()}${c.reset}`);
@@ -213,8 +213,8 @@ function cmdUpdate({ flags }) {
   }
 }
 
-function cmdUninstall({ positional, flags }) {
-  ui.banner();
+async function cmdUninstall({ positional, flags }) {
+  await ui.bannerAnimated();
 
   ui.header('JDI Uninstall');
   ui.info(`Diretorio: ${c.dim}${process.cwd()}${c.reset}`);
@@ -245,8 +245,8 @@ function cmdUninstall({ positional, flags }) {
   }
 }
 
-function cmdInstallPlaywright({ flags }) {
-  ui.banner();
+async function cmdInstallPlaywright({ flags }) {
+  await ui.bannerAnimated();
 
   ui.header('JDI: Install Playwright + MCP');
   ui.info(`Directory: ${c.dim}${process.cwd()}${c.reset}`);
@@ -282,8 +282,8 @@ function cmdInstallPlaywright({ flags }) {
   }
 }
 
-function cmdInstallCaveman({ flags }) {
-  ui.banner();
+async function cmdInstallCaveman({ flags }) {
+  await ui.bannerAnimated();
 
   ui.header('JDI: Install Caveman plugin');
   ui.info(`Directory: ${c.dim}${process.cwd()}${c.reset}`);
@@ -317,8 +317,8 @@ function cmdInstallCaveman({ flags }) {
   }
 }
 
-function cmdDoctor({ flags }) {
-  ui.banner();
+async function cmdDoctor({ flags }) {
+  await ui.bannerAnimated();
 
   ui.header('JDI Doctor');
   ui.info(`Diretorio atual: ${c.dim}${process.cwd()}${c.reset}`);
@@ -332,8 +332,8 @@ function cmdDoctor({ flags }) {
   }
 }
 
-function cmdHelp() {
-  ui.banner();
+async function cmdHelp() {
+  await ui.bannerAnimated();
 
   console.log(`${c.bold}Uso:${c.reset}`);
   console.log(`  ${c.cyan}npx jdi-cli <comando> [opcoes]${c.reset}`);
@@ -403,7 +403,7 @@ function cmdVersion() {
 // Main dispatcher
 // =================================================================
 
-function main() {
+async function main() {
   const parsed = parseArgs(process.argv);
 
   if (parsed.flags && parsed.flags.noColor) {
@@ -417,34 +417,34 @@ function main() {
 
   switch (parsed.cmd) {
     case 'install':
-      cmdInstall(parsed);
+      await cmdInstall(parsed);
       break;
     case 'update':
     case 'upgrade':
-      cmdUpdate(parsed);
+      await cmdUpdate(parsed);
       break;
     case 'uninstall':
     case 'remove':
-      cmdUninstall(parsed);
+      await cmdUninstall(parsed);
       break;
     case 'build':
-      cmdBuild(parsed);
+      await cmdBuild(parsed);
       break;
     case 'install-playwright':
     case 'playwright':
-      cmdInstallPlaywright(parsed);
+      await cmdInstallPlaywright(parsed);
       break;
     case 'install-caveman':
     case 'caveman':
-      cmdInstallCaveman(parsed);
+      await cmdInstallCaveman(parsed);
       break;
     case 'doctor':
-      cmdDoctor(parsed);
+      await cmdDoctor(parsed);
       break;
     case 'help':
     case '--help':
     case '-h':
-      cmdHelp();
+      await cmdHelp();
       break;
     case '--version':
     case '-V':
@@ -457,4 +457,7 @@ function main() {
   }
 }
 
-main();
+main().catch((err) => {
+  ui.fail(err && err.message ? err.message : String(err));
+  process.exit(1);
+});
