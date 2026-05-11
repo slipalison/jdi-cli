@@ -378,12 +378,28 @@ Write to `.jdi/agents/jdi-reviewer-{slug}.md`.
 
 After writing doer/reviewer, inject `<skills_to_load>` block after `</role>` via Edit.
 
+**Code-design skill (mandatory) — resolve from `PROJECT.md.Code Design` (LOCKED value) using this mapping:**
+
+| Code Design (PROJECT.md) | Skill to load |
+|---|---|
+| The Method | `the-method` |
+| DDD | `ddd` |
+| Clean Architecture | `clean-architecture` |
+| Hexagonal | `hexagonal` |
+| Onion | `onion` |
+| Vertical Slice | `vertical-slice` |
+
+The resolved code-design skill is loaded by **both doer and reviewer**. Exactly one code-design skill is loaded. Never load two code-design skills simultaneously — the project uses exactly one design. If the mapping cannot resolve, abort with an error and ask the user to fix `PROJECT.md.Code Design`.
+
 **Doer — always:**
 ```markdown
 <skills_to_load>
 - solid — before creating classes/modules/interfaces. Detects god class, large switches, deep inheritance, dep on concretes.
+- {CODE_DESIGN_SKILL} — INVIOLABLE structural rules for the project's locked code design. Apply on every file created.
 </skills_to_load>
 ```
+
+Replace `{CODE_DESIGN_SKILL}` with the resolved entry from the mapping above (e.g. `the-method`, `ddd`, `clean-architecture`, `hexagonal`, `onion`, `vertical-slice`).
 
 If `has_frontend=true`, append:
 ```markdown
@@ -397,8 +413,11 @@ If `has_frontend=true`, append:
 - kiss — gate 5: over-engineering — interface with 1 impl, factory for new(), pass-through, deep inheritance.
 - yagni — gate 5: speculative code — optional params never passed, TODO without ticket, generic with 1 type.
 - clean-code — bad names, long functions, magic numbers, silent catch, boolean params, redundant comments.
+- {CODE_DESIGN_SKILL} — gate 5: enforce INVIOLABLE structural rules for the project's locked code design. BLOCKED on violations defined by the skill.
 </skills_to_load>
 ```
+
+Replace `{CODE_DESIGN_SKILL}` with the same resolved entry — both doer and reviewer load the SAME code-design skill.
 
 If `has_frontend=true`, append:
 ```markdown

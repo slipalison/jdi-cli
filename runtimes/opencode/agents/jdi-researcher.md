@@ -60,10 +60,11 @@ Options:
 - Vertical Slice
 - Clean Architecture
 - Hexagonal (Ports & Adapters)
+- Onion Architecture
 - The Method (Juval Löwy)
 - "Don't know, suggest" (-> recommend based on type + stack)
 
-Locked for the life of the project (global rule).
+Locked for the life of the project (global rule). Mutually exclusive — the project uses exactly ONE code design. The choice is enforced by a JDI skill loaded into doer + reviewer (one of: `ddd`, `vertical-slice`, `clean-architecture`, `hexagonal`, `onion`, `the-method`).
 
 **Q4 — MVP scope**
 "Which minimum features for the MVP? (comma-separated)"
