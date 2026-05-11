@@ -12,6 +12,10 @@ Este projeto usa **JDI (Just Do It)** como workflow de desenvolvimento. JDI eh u
 /jdi-do <N>              -> executa via doer specialist
 /jdi-verify <N>          -> gates via reviewer specialist
 /jdi-ship <N>            -> finaliza phase
+
+# Roadmap mutation (qualquer hora)
+/jdi-add-phase "<name>" [--goal "<t>"] [--at <pos>]   -> adiciona phase
+/jdi-remove-phase <N> [--force]                        -> remove future/pending phase
 ```
 
 `/jdi-create [desc]` cria agents/skills genericos no `core/` (so dentro do repo JDI).

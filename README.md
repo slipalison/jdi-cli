@@ -27,6 +27,10 @@ Full-blown AI workflows (33+ agents, 60+ commands, 100+ subworkflows) burn token
 /jdi-do <N>                        <- execute via doer specialist (SUMMARY.md)
 /jdi-verify <N>                    <- gates via reviewer (REVIEW.md)
 /jdi-ship <N>                      <- update ROADMAP, advance phase
+
+# Roadmap mutation (run anytime)
+/jdi-add-phase "<name>"            <- append (or --at <pos>) a new phase
+/jdi-remove-phase <N>              <- remove a future/pending phase
 ```
 
 ### Brownfield (existing project)
@@ -527,6 +531,8 @@ See [AGENTS.md](AGENTS.md) for full details.
 | `/jdi-do <N>` | phase number | `--sequential` (force sequential execution even if waves permit parallel) | Execute tasks via doer specialist(s) → SUMMARY.md |
 | `/jdi-verify <N>` | phase number | — | Run reviewer specialist gates → REVIEW.md (verdict APPROVED / APPROVED_WITH_WARNINGS / BLOCKED) |
 | `/jdi-ship <N>` | phase number | — | Update ROADMAP, advance phase. Gates: verdict must not be BLOCKED |
+| `/jdi-add-phase "<name>"` | phase name (required) | `--goal "<text>"`, `--at <pos>`, `--reason "<text>"` | Append (or insert at position) a new phase in ROADMAP.md. Bumps `total_phases`. Cannot insert at or before `current_phase`. |
+| `/jdi-remove-phase <N>` | phase number (required) | `--force` (required if artifacts exist) | Remove a future or pending phase. Refuses for `done`, current, or past phases. Archives existing artifacts to `.jdi/archive/removed-<NN-slug>/`. Numbers are NOT renumbered (preserves history). |
 
 **Brownfield entry (1):**
 
