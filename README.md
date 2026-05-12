@@ -46,6 +46,9 @@ Full-blown AI workflows (33+ agents, 60+ commands, 100+ subworkflows) burn token
 # Roadmap mutation (run anytime)
 /jdi-add-phase "<name>"            <- append (or --at <pos>) a new phase
 /jdi-remove-phase <N>              <- remove a future/pending phase
+
+# Continuity / where did I stop?
+/jdi-status                        <- compact snapshot: phase + last action + next step
 ```
 
 ### Brownfield (existing project)
@@ -548,6 +551,7 @@ See [AGENTS.md](AGENTS.md) for full details.
 | `/jdi-ship <N>` | phase number | — | Update ROADMAP, advance phase. Gates: verdict must not be BLOCKED |
 | `/jdi-add-phase "<name>"` | phase name (required) | `--goal "<text>"`, `--at <pos>`, `--reason "<text>"` | Append (or insert at position) a new phase in ROADMAP.md. Bumps `total_phases`. Cannot insert at or before `current_phase`. |
 | `/jdi-remove-phase <N>` | phase number (required) | `--force` (required if artifacts exist) | Remove a future or pending phase. Refuses for `done`, current, or past phases. Archives existing artifacts to `.jdi/archive/removed-<NN-slug>/`. Numbers are NOT renumbered (preserves history). |
+| `/jdi-status` | — | — | Read-only snapshot. Prints current phase + status + verdict + last artifact + last commit + next step. No agent invoked. Safe anytime — use when resuming after a break. |
 
 **Brownfield entry (1):**
 

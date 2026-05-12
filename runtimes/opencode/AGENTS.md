@@ -16,6 +16,9 @@ Este projeto usa **JDI (Just Do It)** como workflow de desenvolvimento. JDI eh u
 # Roadmap mutation (qualquer hora)
 /jdi-add-phase "<name>" [--goal "<t>"] [--at <pos>]   -> adiciona phase
 /jdi-remove-phase <N> [--force]                        -> remove future/pending phase
+
+# Continuidade / snapshot
+/jdi-status                                            -> resumo: phase atual + ultima acao + proximo comando
 ```
 
 `/jdi-create [desc]` cria agents/skills genericos no `core/` (so dentro do repo JDI).
