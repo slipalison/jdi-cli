@@ -364,28 +364,34 @@ Project adopted on {date}. Pre-existing code is not in this roadmap — only NEW
 ## Phases
 
 ### Phase 1: {feature 1 from Q4}
-- **Slug:** 01-{slug}
+- **Slug:** {slug1}
 - **Status:** pending
 - **Goal:** {1-line description}
 
 ### Phase 2: {feature 2 from Q4}
-- **Slug:** 02-{slug}
+- **Slug:** {slug2}
 - **Status:** pending
 - **Goal:** {description}
 
 (... up to N)
 ```
 
+Slug values are canonical (no `NN-` prefix). Numeric position is display-only.
+
 ### Step 7: Generate state files
 
 ```markdown
 # .jdi/STATE.md
 project_slug: {slug}
+schema_version: 2
 adopted: true
 specialists_ready: false
 current_phase: 1
+current_phase_slug: {slug1}
 next_step: /jdi-bootstrap
 ```
+
+`schema_version: 2` activates slug-as-ID for multi-developer safety. `current_phase_slug` is canonical; `current_phase` is the display mirror.
 
 ```markdown
 # .jdi/DECISIONS.md

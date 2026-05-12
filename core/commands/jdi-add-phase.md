@@ -1,7 +1,7 @@
 ---
 name: jdi-add-phase
-description: Adds a new phase to ROADMAP.md. Append at end (default) or insert at a specific position. Bumps total_phases. Atomic commit.
-argument_hint: "\"<phase name>\" [--goal \"<goal>\"] [--at <position>]"
+description: Registers a new phase in ROADMAP.md. Slug-as-ID — multi-developer safe. Validates slug uniqueness and shape. Append at end (default), or position via --before/--after. Atomic commit.
+argument_hint: "\"<phase name>\" [--goal \"<goal>\"] [--slug <slug>] [--before <slug>|--after <slug>] [--reason \"<text>\"]"
 runtime_intent:
   invokes_agent: none
 runtime_overrides:
@@ -19,153 +19,240 @@ runtime_overrides:
 ---
 
 <objective>
-Adds a new phase to the project's roadmap. Edits `.jdi/ROADMAP.md`. Does not start the phase — only registers it. The user advances via `/jdi-discuss <N>` when ready.
+Registers a new phase in the project's roadmap. Edits `.jdi/ROADMAP.md`. Does not start the phase — only registers it. The user advances via `/jdi-discuss <slug>` (or `<position>`) when ready.
+
+Phase identifier is the **slug** (string). Position (`### Phase N`) is purely a display number derived from listing order. Two developers working on different branches may add different phases simultaneously without colliding, because:
+
+1. Slug uniqueness is enforced locally before any write (Step 3)
+2. If two devs pick the same slug, git surfaces a conflict on `.jdi/ROADMAP.md` at merge time — no silent collision
+3. Folder collisions cannot happen, because folder names match slugs (no shared `02-...` namespace)
 </objective>
 
 <arguments>
 - `name` (required) — short phase name. Quote if it contains spaces.
-- `--goal "<text>"` (optional) — 1-line description of what the phase delivers. If missing, AskUserQuestion will prompt.
-- `--at <position>` (optional) — insert at this position instead of appending. Existing phases at and after `<position>` shift down by 1 (renumbered in ROADMAP only — slugs stay the same in any existing `.jdi/phases/` folders). Default: append.
+- `--goal "<text>"` (optional) — 1-line description of what the phase delivers. AskUserQuestion fills it if missing.
+- `--slug <slug>` (optional) — explicit slug override. If omitted, derived from `name`. Must pass strict validation (see Step 3).
+- `--before <slug>` (optional) — insert before the phase with this slug.
+- `--after <slug>` (optional) — insert after the phase with this slug.
+- `--reason "<text>"` (optional) — recorded in `DECISIONS.md` as audit trail when inserting mid-roadmap.
+
+`--before` and `--after` are mutually exclusive. If neither is given, the phase is appended.
+
+Legacy: `--at <N>` (integer position) is accepted on v1 schemas for backwards compatibility. On v2 schemas it is rejected with a hint to use `--before`/`--after` instead, because integer positions are mutable across developer branches.
 
 Examples:
 - `/jdi-add-phase "User authentication" --goal "Login + signup + JWT"`
-- `/jdi-add-phase "Performance pass" --at 3`
-- `/jdi-add-phase "Hotfix N+1 query"`
+- `/jdi-add-phase "Payments" --slug payments`
+- `/jdi-add-phase "Hotfix N+1 query" --after user-auth`
 </arguments>
 
 <process>
 
 ### Step 1: Validation
+
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new first."; exit 1; }
 test -f .jdi/ROADMAP.md || { echo "ROADMAP.md missing."; exit 1; }
 test -f .jdi/STATE.md || { echo "STATE.md missing."; exit 1; }
+
+JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
 ```
 
-If `<name>` argument missing: AskUserQuestion "Phase name?" (free text). Required.
+PowerShell mirrors via Test-Path. See `bin/lib/jdi-*.ps1` helpers.
 
-If `--goal` flag missing: AskUserQuestion "Phase goal (1 line)?" (free text). Required.
+If `name` missing → AskUserQuestion "Phase name?" (free text, required).
+If `--goal` missing → AskUserQuestion "Phase goal (1 line)?" (free text, required).
 
-### Step 2: Compute phase number + slug
-
-Read `total_phases` from `.jdi/ROADMAP.md`:
+### Step 2: Detect schema version
 
 ```bash
-TOTAL=$(grep -oE 'total_phases:\s*[0-9]+' .jdi/ROADMAP.md | grep -oE '[0-9]+')
+SCHEMA=1
+SV=$(grep -oE 'schema_version:\s*[0-9]+' .jdi/STATE.md | grep -oE '[0-9]+' | head -1 || true)
+[ -n "$SV" ] && SCHEMA=$SV
+
+# Multi-developer safety check — v1 projects should migrate first
+if [ "$SCHEMA" -lt 2 ]; then
+  echo ""
+  echo "WARNING: this project is on schema v1 (numeric phase IDs)."
+  echo "If multiple developers run /jdi-add-phase simultaneously, integer"
+  echo "positions may collide. Recommended: /jdi-migrate-phases (one-time, non-destructive)."
+  echo ""
+  # AskUserQuestion: [Continue on v1] / [Run /jdi-migrate-phases first (recommended)] / [Cancel]
+fi
+
+# Reject --at on v2
+for arg in "$@"; do
+  if [ "$SCHEMA" -ge 2 ] && [ "${arg%%=*}" = "--at" ]; then
+    echo "ERROR: --at <N> is not supported on schema v2 (numeric positions are mutable across branches)."
+    echo "Use --before <slug> or --after <slug> instead."
+    exit 1
+  fi
+done
 ```
 
-PowerShell:
-```powershell
-$total = (Select-String -Path .jdi/ROADMAP.md -Pattern 'total_phases:\s*([0-9]+)').Matches[0].Groups[1].Value -as [int]
+### Step 3: Derive and validate slug (HARD GATE)
+
+```bash
+# Derive slug from name if --slug not provided
+if [ -z "$SLUG" ]; then
+  SLUG=$(echo "$NAME" | tr '[:upper:]' '[:lower:]' \
+    | iconv -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null \
+    | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' \
+    | cut -c1-40)
+fi
+
+# Strict validation + uniqueness check
+SLUG=$(bash "$JDI_LIB/jdi-validate-slug.sh" "$SLUG" --check-unique)
+if [ -z "$SLUG" ]; then
+  # validator already printed the error to stderr
+  exit $?
+fi
 ```
 
-If `--at <pos>` provided, validate `1 <= pos <= total + 1`. Otherwise `pos = total + 1` (append).
+PowerShell parallel: `& "$JDI_LIB\jdi-validate-slug.ps1" -Slug $slug -CheckUnique`.
 
-If `pos <= current_phase` (read from STATE.md), abort with error: "Cannot insert before current phase {current}. Use --at {current+1} or higher."
+**Validation failures (any aborts before any write):**
+- Invalid shape (uppercase, underscores, leading hyphen, etc.) → exit 1
+- Reserved JDI keyword (`current`, `all`, `archive`, etc.) → exit 2
+- Duplicate slug (folder or ROADMAP entry exists) → exit 3
+- Corrupt repo (multiple folder forms of the same slug) → exit 4
 
-Generate `slug` from `name`:
-- Lowercase
-- Replace accents (à → a, é → e, ç → c, ñ → n)
-- Non-alphanumeric → `-`
-- Collapse repeated `-`, strip leading/trailing `-`
-- Truncate to 40 chars
+Validator runs **before** any pull/fetch. Multi-developer collision protection is two-layered:
+1. Local pre-check (this step) — catches collisions visible at this moment
+2. Git merge — catches collisions that arose on the remote between local check and push
 
-Phase identifier prefix is the 2-digit position (`NN`): `01`, `02`, ..., zero-padded.
+### Step 4: Resolve insert position
 
-### Step 3: Renumber prefix on shift (only if --at)
+Parse ROADMAP.md to count current phases and determine insert index.
 
-If `--at <pos>` shifts existing phases:
+```bash
+EXISTING=$(grep -cE '^### Phase ' .jdi/ROADMAP.md)
+CURRENT_PHASE_INT=$(grep -oE 'current_phase:\s*[0-9]+' .jdi/STATE.md | grep -oE '[0-9]+' | head -1 || echo "0")
 
-Edit `.jdi/ROADMAP.md` — for every existing `### Phase K:` where `K >= pos`, change to `### Phase K+1:` and bump its `**Slug:**` prefix from `KK-...` to `(K+1)(K+1)-...`.
+if [ -n "$BEFORE_SLUG" ]; then
+  # Find position of the anchor phase
+  TARGET_POS=$(bash "$JDI_LIB/jdi-resolve-phase.sh" "$BEFORE_SLUG" 2>/dev/null | grep '^JDI_PHASE_POSITION=' | cut -d"'" -f2)
+  [ -z "$TARGET_POS" ] && { echo "ERROR: anchor slug '$BEFORE_SLUG' not found"; exit 1; }
+  INSERT_POS=$TARGET_POS
+elif [ -n "$AFTER_SLUG" ]; then
+  TARGET_POS=$(bash "$JDI_LIB/jdi-resolve-phase.sh" "$AFTER_SLUG" 2>/dev/null | grep '^JDI_PHASE_POSITION=' | cut -d"'" -f2)
+  [ -z "$TARGET_POS" ] && { echo "ERROR: anchor slug '$AFTER_SLUG' not found"; exit 1; }
+  INSERT_POS=$((TARGET_POS + 1))
+else
+  INSERT_POS=$((EXISTING + 1))
+fi
 
-**WARNING (printed):**
-> "Renumbering ROADMAP phases. Any existing `.jdi/phases/<NN-slug>/` folders are NOT renamed — they keep their original slugs and become "history". New work in renumbered phases creates new folders. Commits referencing old `phase {K}` remain valid as history."
+# Refuse to insert at or before current_phase
+if [ "$INSERT_POS" -le "$CURRENT_PHASE_INT" ]; then
+  echo "ERROR: cannot insert at position $INSERT_POS — current_phase is $CURRENT_PHASE_INT. Past/current phases are immutable history."
+  exit 1
+fi
+```
 
-This is intentional. Do not rename `.jdi/phases/` folders — would break commit history and cross-references in DECISIONS.md.
+### Step 5: Write to ROADMAP.md
 
-If `--at` not provided (append), skip Step 3.
+**If appending** (`INSERT_POS == EXISTING + 1`): append a new `### Phase N` block at the end of the `## Phases` section.
 
-### Step 4: Append phase section to ROADMAP.md
-
-If appending (`pos == total + 1`), append at the bottom of `## Phases`:
+**If inserting** (`INSERT_POS <= EXISTING`): shift the heading numbers of all subsequent `### Phase K` entries to `### Phase K+1`. **Slug values are NOT changed** — they stay canonical. This is the key v2 invariant: position is display-only, slug is canonical ID.
 
 ```markdown
-
-### Phase {pos}: {name}
-- **Slug:** {NN}-{slug}
+### Phase {INSERT_POS}: {name}
+- **Slug:** {slug}              <!-- v2 canonical, no NN prefix -->
 - **Status:** pending
 - **Goal:** {goal}
 ```
 
-If inserting (`pos <= total`), insert the new section BEFORE the section that previously had number `pos` (now renumbered to `pos+1`).
+For v1 schema, write `Slug: {NN}-{slug}` instead (preserves legacy folder convention).
 
-### Step 5: Bump total_phases
-
-Edit `.jdi/ROADMAP.md`:
-```
-total_phases: {TOTAL + 1}
-```
-
-### Step 6: Audit trail in DECISIONS.md (optional, only if user passes --reason)
-
-Not required. If user wants to record why this phase was added mid-project, they pass `--reason "<text>"`. When present, append to `.jdi/DECISIONS.md`:
-
-```markdown
-D-{N+1} ({date}, phase {pos}): Phase added mid-project. Reason: {reason}
-```
-
-(N = current max D-X.)
-
-### Step 7: Commit
+### Step 6: Update derived counter
 
 ```bash
-git add .jdi/ROADMAP.md .jdi/DECISIONS.md 2>/dev/null
-git commit -m "chore(jdi): add phase {pos} {NN-slug}"
+# total_phases is a display field, not an ID. Always recompute from line count.
+NEW_TOTAL=$(grep -cE '^### Phase ' .jdi/ROADMAP.md)
+if grep -qE '^total_phases:' .jdi/ROADMAP.md; then
+  sed -i.bak -E "s/^total_phases:.*$/total_phases: $NEW_TOTAL/" .jdi/ROADMAP.md
+  rm -f .jdi/ROADMAP.md.bak
+fi
 ```
 
-PowerShell:
-```powershell
-git add .jdi/ROADMAP.md .jdi/DECISIONS.md 2>$null
-git commit -m "chore(jdi): add phase $pos $NN-$slug"
-```
+### Step 7: Audit trail (only if `--reason` provided)
 
-### Step 8: Confirm
+Append to `.jdi/DECISIONS.md` with deterministic ID format (collision-free across branches):
 
 ```
-Phase {pos}: {name} added.
-Slug: {NN}-{slug}
-Goal: {goal}
-Status: pending
-total_phases: {TOTAL + 1}
+D-{YYYY-MM-DD}-{slug}-1: Phase '{name}' (slug: {slug}) added. Reason: {reason}.
+```
 
-Next: /jdi-discuss {pos} (when ready to start this phase)
+If multiple decisions share the same date+slug+sequence (e.g. amended on same day), bump the trailing `-1` to `-2`, etc. Scope is per-day-per-slug, so two devs adding different phases on the same day produce non-colliding IDs.
+
+### Step 8: Refresh manifest (v2 only)
+
+If `.jdi/phases.json` exists (v2 project), regenerate it from the updated ROADMAP. Simple rewrite — manifest is derived state, never primary.
+
+### Step 9: Commit
+
+```bash
+git add .jdi/ROADMAP.md .jdi/DECISIONS.md .jdi/phases.json 2>/dev/null
+git commit -m "chore(jdi): add phase $SLUG"
+```
+
+Commit scope uses the slug, not the position. Slug is stable across branch merges; position is not.
+
+### Step 10: Confirm
+
+```
+Phase {INSERT_POS}: {name}
+  Slug:     {slug}
+  Goal:     {goal}
+  Status:   pending
+  Schema:   v{SCHEMA}
+
+Next: /jdi-discuss {slug}
 ```
 
 </process>
 
 <gates>
 - pre: `.jdi/ROADMAP.md` + `.jdi/STATE.md` exist
-- pre: `--at <pos>` (if used) is greater than `current_phase` in STATE.md
-- post: ROADMAP.md has new phase section + bumped total_phases + atomic commit
+- pre: slug passes shape + reserved + uniqueness checks (`jdi-validate-slug.sh --check-unique`)
+- pre: `--before`/`--after` anchor resolves successfully if provided
+- pre: insert position > current_phase
+- pre: `--at` not used on v2 schema
+- post: ROADMAP.md gains new phase block + `total_phases` recomputed + atomic commit
+- post: `phases.json` regenerated if v2
+- invariant: existing phase slugs are never renamed
 </gates>
 
 <errors>
-- `.jdi/` missing -> "Run /jdi-new first"
-- `--at <pos>` <= current_phase -> "Cannot insert before current phase. Use --at {current+1} or higher."
-- `--at <pos>` < 1 or > total+1 -> "Position out of range. Valid: 1..{total+1}"
-- Phase name empty -> AskUserQuestion to fill
-- Goal empty -> AskUserQuestion to fill
+- `.jdi/` missing → "Run /jdi-new first"
+- Name empty → AskUserQuestion fills
+- Goal empty → AskUserQuestion fills
+- Slug fails validation → exit with named code (1: shape, 2: reserved, 3: duplicate, 4: ambiguous)
+- `--before` or `--after` anchor not found → exit 1 listing the offending slug
+- `--at` on v2 → exit 1 with instruction to use `--before`/`--after`
+- Insert position ≤ current_phase → exit 1
+- Both `--before` and `--after` given → exit 1 (mutually exclusive)
 </errors>
+
+<rules>
+- Slug is canonical. Position is display-only.
+- Existing phase slugs are NEVER renamed.
+- Folder is created later (by `/jdi-discuss`), not here.
+- Uniqueness check is local + git-merge layered. Both must hold.
+- `--at <N>` is v1-only legacy.
+- Audit IDs in DECISIONS.md use `D-{date}-{slug}-{seq}` on v2 (collision-free across branches). v1 keeps `D-N` increment for backwards reading.
+</rules>
 
 <runtime_notes>
 
 **Claude Code:**
 - AskUserQuestion handles missing args interactively.
+- Validator + resolver are shelled out to `bin/lib/`.
 
 **Copilot:**
-- AskUserQuestion not always available — read missing args from prompt body or fail with clear error.
+- AskUserQuestion not always available — require explicit flags or fail with clear error.
 
 **OpenCode/Antigravity:**
-- Same interactive flow as Claude when supported. Otherwise fail with clear error message asking the user to re-invoke with all args.
+- Same interactive flow as Claude when supported.
 
 </runtime_notes>

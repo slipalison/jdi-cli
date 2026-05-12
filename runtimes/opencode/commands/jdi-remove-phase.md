@@ -1,7 +1,7 @@
 ---
 name: jdi-remove-phase
-description: Removes a phase from ROADMAP.md. Refuses to remove done phases or the current phase. Archives any existing phase artifacts. Atomic commit.
-argument_hint: "<phase_number> [--force]"
+description: Removes a phase from ROADMAP.md. Accepts slug OR position. Refuses to remove done/current/past phases. Archives any existing phase artifacts. Atomic commit.
+argument_hint: "<slug|position> [--force]"
 runtime_intent:
   invokes_agent: none
 runtime_overrides:
@@ -19,16 +19,19 @@ runtime_overrides:
 ---
 
 <objective>
-Removes a phase from `.jdi/ROADMAP.md`. Refuses to remove the current phase or any phase already shipped. If the phase has artifacts under `.jdi/phases/<NN-slug>/`, moves them to `.jdi/archive/removed-<NN-slug>/` instead of deleting (preserves history).
+Removes a phase from `.jdi/ROADMAP.md`. Refuses to remove the current phase or any phase already shipped. If the phase has artifacts under `.jdi/phases/<dir>/`, moves them to `.jdi/archive/removed-<slug>/` instead of deleting (preserves history).
+
+Accepts either a slug (canonical or legacy `NN-slug`) or an integer position. Slug is preferred — it survives roadmap reordering, position does not.
 </objective>
 
 <arguments>
-- `phase_number` (required) — number of the phase to remove (as listed in ROADMAP.md).
+- `phase_id` (required) — slug (`auth-flow`) OR position integer (`3`).
 - `--force` (optional) — required when removing a phase that has any artifacts in `.jdi/phases/`. Without `--force`, the command refuses and explains.
 
 Examples:
+- `/jdi-remove-phase auth-flow`
 - `/jdi-remove-phase 4`
-- `/jdi-remove-phase 5 --force`
+- `/jdi-remove-phase payments --force`
 </arguments>
 
 <process>
@@ -40,178 +43,196 @@ test -d .jdi/ || { echo "Not a JDI project."; exit 1; }
 test -f .jdi/ROADMAP.md || { echo "ROADMAP.md missing."; exit 1; }
 test -f .jdi/STATE.md || { echo "STATE.md missing."; exit 1; }
 
-# Argument required
-[ -n "$1" ] || { echo "Phase number required. Usage: /jdi-remove-phase <N> [--force]"; exit 1; }
+[ -n "${1:-}" ] || { echo "Phase id required. Usage: /jdi-remove-phase <slug|position> [--force]"; exit 1; }
+
+JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
 ```
 
-Parse `phase_number` (positional). Parse `--force` flag.
+PowerShell mirrors via `Test-Path`. Same `$args` parsing.
 
-### Step 2: Read state
+### Step 2: Resolve phase
 
 ```bash
-CURRENT=$(grep -oE 'current_phase:\s*[0-9]+' .jdi/STATE.md | grep -oE '[0-9]+')
-TOTAL=$(grep -oE 'total_phases:\s*[0-9]+' .jdi/ROADMAP.md | grep -oE '[0-9]+')
-PHASE_NUMBER=$1
+eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$1") || {
+  echo "Phase '$1' not found in ROADMAP."
+  exit 1
+}
+
+PHASE_SLUG="$JDI_PHASE_SLUG"
+PHASE_DIR="$JDI_PHASE_DIR"
+PHASE_POSITION="$JDI_PHASE_POSITION"
+PHASE_FOLDER_EXISTS="$JDI_PHASE_FOLDER_EXISTS"
 ```
 
 PowerShell:
 ```powershell
-$current = (Select-String -Path .jdi/STATE.md -Pattern 'current_phase:\s*([0-9]+)').Matches[0].Groups[1].Value -as [int]
-$total = (Select-String -Path .jdi/ROADMAP.md -Pattern 'total_phases:\s*([0-9]+)').Matches[0].Groups[1].Value -as [int]
-$phaseNumber = [int]$args[0]
+$r = & "$JDI_LIB\jdi-resolve-phase.ps1" -Id $args[0] -AsObject
+if (-not $r) { Write-Error "Phase '$($args[0])' not found in ROADMAP."; exit 1 }
+$phaseSlug = $r.Slug; $phaseDir = $r.Dir; $phasePosition = $r.Position; $phaseFolderExists = $r.FolderExists
 ```
 
-### Step 3: Hard refuses (no override)
+### Step 3: Read state + hard refuses
 
 ```bash
-# Must be in range
-if [ "$PHASE_NUMBER" -lt 1 ] || [ "$PHASE_NUMBER" -gt "$TOTAL" ]; then
-  echo "Phase $PHASE_NUMBER does not exist. Valid: 1..$TOTAL"
+CURRENT_PHASE_INT=$(grep -oE 'current_phase:\s*[0-9]+' .jdi/STATE.md | grep -oE '[0-9]+' | head -1 || echo "0")
+CURRENT_PHASE_SLUG=$(grep -E '^current_phase_slug:' .jdi/STATE.md | sed -E 's/^current_phase_slug:[[:space:]]*//' || true)
+
+# Past phases are history — immutable
+if [ "$PHASE_POSITION" -lt "$CURRENT_PHASE_INT" ]; then
+  echo "Cannot remove phase '$PHASE_SLUG' (position $PHASE_POSITION) — already past. current_phase is $CURRENT_PHASE_INT. Past phases are immutable history."
   exit 1
 fi
 
-# Cannot remove past phases (preserves history)
-if [ "$PHASE_NUMBER" -lt "$CURRENT" ]; then
-  echo "Cannot remove phase $PHASE_NUMBER — already past. current_phase is $CURRENT. Past phases are immutable history."
+# Current phase — must finish or abandon first
+if [ "$PHASE_POSITION" -eq "$CURRENT_PHASE_INT" ] || [ "$PHASE_SLUG" = "$CURRENT_PHASE_SLUG" ]; then
+  echo "Cannot remove the current phase ('$PHASE_SLUG'). Ship or abandon it first."
   exit 1
 fi
 
-# Cannot remove the current phase
-if [ "$PHASE_NUMBER" -eq "$CURRENT" ]; then
-  echo "Cannot remove the current phase ($CURRENT). Ship or abandon it first, then advance current_phase."
+# Done status — immutable
+STATUS=$(awk -v target="$PHASE_SLUG" '
+  /^### Phase / { in_block = 1; matched = 0 }
+  in_block && /^- \*\*Slug:\*\*/ {
+    s = $0
+    sub(/^- \*\*Slug:\*\*[[:space:]]*/, "", s)
+    canonical = s; sub(/^[0-9]+-/, "", canonical)
+    if (s == target || canonical == target) matched = 1
+  }
+  matched && /^- \*\*Status:\*\*/ {
+    sub(/^- \*\*Status:\*\*[[:space:]]*/, "")
+    print
+    exit
+  }
+' .jdi/ROADMAP.md)
+
+if [ "$STATUS" = "done" ]; then
+  echo "Phase '$PHASE_SLUG' is 'done'. Cannot remove. Shipped phases are immutable history."
   exit 1
 fi
-```
-
-Read the phase's `Status:` from ROADMAP:
-
-```bash
-STATUS=$(awk "/### Phase $PHASE_NUMBER:/,/^### Phase /" .jdi/ROADMAP.md | grep -oE 'Status:\*\* (pending|ready|done|partial|blocked|in-progress)' | head -1 | awk '{print $2}')
-```
-
-If `STATUS == done`: refuse hard.
-```
-Phase $PHASE_NUMBER is `done`. Cannot remove. Shipped phases are immutable history.
 ```
 
 ### Step 4: Detect artifacts
 
-Find the phase folder under `.jdi/phases/`:
-
 ```bash
-NN=$(printf '%02d' "$PHASE_NUMBER")
-PHASE_DIR=$(ls -d .jdi/phases/${NN}-*/ 2>/dev/null | head -1 || true)
+if [ "$PHASE_FOLDER_EXISTS" = "true" ] && [ "${FORCE:-false}" != "true" ]; then
+  echo "Phase '$PHASE_SLUG' has artifacts in $PHASE_DIR (CONTEXT/PLAN/SUMMARY/REVIEW)."
+  echo "Re-run with --force to archive these artifacts to .jdi/archive/removed-$PHASE_SLUG/ and proceed."
+  exit 1
+fi
 ```
 
-PowerShell:
-```powershell
-$nn = '{0:D2}' -f $phaseNumber
-$phaseDir = Get-ChildItem .jdi/phases/ -Directory -Filter "$nn-*" -ErrorAction SilentlyContinue | Select-Object -First 1
-```
-
-If `PHASE_DIR` exists AND `--force` NOT passed: refuse.
-```
-Phase $PHASE_NUMBER has artifacts in $PHASE_DIR (CONTEXT/PLAN/SUMMARY/REVIEW).
-Re-run with --force to archive these artifacts to .jdi/archive/removed-<NN-slug>/ and proceed.
-```
-
-### Step 5: Confirm with user (irreversible-ish action)
+### Step 5: Confirm with user (irreversible)
 
 AskUserQuestion (always run, even with --force):
 
-> "Remove phase $PHASE_NUMBER: '$PHASE_NAME'?
+> "Remove phase '$PHASE_SLUG' (position $PHASE_POSITION)?
 >
 > Status: $STATUS
-> Artifacts: ${PHASE_DIR:-none}
-> Action: ROADMAP section removed, total_phases decremented, artifacts (if any) moved to .jdi/archive/removed-<NN-slug>/."
+> Artifacts: ${PHASE_DIR if folder_exists else 'none'}
+> Action: ROADMAP section removed, total_phases recomputed, artifacts (if any) moved to .jdi/archive/removed-$PHASE_SLUG/."
 >
 > Options:
 > - [Yes, remove]
 > - [Cancel]
 
-If "Cancel" -> exit clean.
+If Cancel → exit 0 clean.
 
 ### Step 6: Archive artifacts (if any)
 
 ```bash
-if [ -n "$PHASE_DIR" ]; then
+if [ "$PHASE_FOLDER_EXISTS" = "true" ]; then
   mkdir -p .jdi/archive
   test -f .jdi/archive/index.md || echo "# Archive index" > .jdi/archive/index.md
 
-  BASENAME=$(basename "$PHASE_DIR")
-  TARGET=".jdi/archive/removed-$BASENAME"
+  TARGET=".jdi/archive/removed-$PHASE_SLUG"
+  # Disambiguate if a previous removal of the same slug exists
+  i=2
+  while [ -d "$TARGET" ]; do
+    TARGET=".jdi/archive/removed-$PHASE_SLUG-$i"
+    i=$((i + 1))
+  done
+
   mv "$PHASE_DIR" "$TARGET"
-  echo "- removed-$BASENAME (removed $(date -u +%F) via /jdi-remove-phase)" >> .jdi/archive/index.md
+  echo "- $(basename "$TARGET") (removed $(date -u +%F) via /jdi-remove-phase, original folder: $(basename "$PHASE_DIR"))" >> .jdi/archive/index.md
 fi
 ```
 
 PowerShell:
 ```powershell
-if ($phaseDir) {
+if ($phaseFolderExists) {
   if (-not (Test-Path .jdi/archive)) { New-Item -ItemType Directory .jdi/archive | Out-Null }
   if (-not (Test-Path .jdi/archive/index.md)) { Set-Content .jdi/archive/index.md "# Archive index" }
-  $basename = $phaseDir.Name
-  $target = ".jdi/archive/removed-$basename"
-  Move-Item $phaseDir.FullName $target
-  Add-Content .jdi/archive/index.md "- removed-$basename (removed $(Get-Date -Format 'yyyy-MM-dd') via /jdi-remove-phase)"
+  $target = ".jdi/archive/removed-$phaseSlug"
+  $i = 2
+  while (Test-Path $target) { $target = ".jdi/archive/removed-$phaseSlug-$i"; $i++ }
+  Move-Item $phaseDir $target
+  Add-Content .jdi/archive/index.md "- $(Split-Path $target -Leaf) (removed $(Get-Date -Format 'yyyy-MM-dd') via /jdi-remove-phase, original folder: $(Split-Path $phaseDir -Leaf))"
 }
 ```
 
 ### Step 7: Edit ROADMAP.md
 
-Remove the entire `### Phase $PHASE_NUMBER: ...` block (header + bullets) up to (but not including) the next `### Phase ` line or end of file.
+Remove the entire `### Phase $PHASE_POSITION: ...` block (header + bullets) up to (but not including) the next `### Phase` line or end of file.
 
-Decrement `total_phases`:
-```
-total_phases: {TOTAL - 1}
-```
+Renumber subsequent `### Phase K` headings to `K-1` (display order). **Slug values are NOT changed** — they remain canonical.
 
-**Do NOT renumber** subsequent phases. Phases after the removed one keep their original numbers. This preserves all references in commit history, `DECISIONS.md`, and archived phase folders. The roadmap simply has a gap (e.g., 1, 2, 3, 5, 6 — 4 was removed).
-
-### Step 8: Audit trail in DECISIONS.md
-
-Append:
-```markdown
-D-{N+1} ({date}): Phase $PHASE_NUMBER removed via /jdi-remove-phase. Artifacts: ${PHASE_DIR:+archived to .jdi/archive/removed-<NN-slug>/}{none if empty}.
+Recompute `total_phases`:
+```bash
+NEW_TOTAL=$(grep -cE '^### Phase ' .jdi/ROADMAP.md)
+sed -i.bak -E "s/^total_phases:.*$/total_phases: $NEW_TOTAL/" .jdi/ROADMAP.md
+rm -f .jdi/ROADMAP.md.bak
 ```
 
-### Step 9: Commit
+### Step 8: Refresh manifest (v2 only)
+
+If `.jdi/phases.json` exists, regenerate from updated ROADMAP.
+
+### Step 9: Audit trail in DECISIONS.md
+
+Append (v2 uses deterministic IDs; v1 uses D-N increment):
+
+```
+D-{YYYY-MM-DD}-{slug}-rm: Phase '{slug}' removed via /jdi-remove-phase. Artifacts: {archived_path or "none"}.
+```
+
+### Step 10: Commit
 
 ```bash
-git add .jdi/ROADMAP.md .jdi/DECISIONS.md .jdi/archive/ 2>/dev/null
-git commit -m "chore(jdi): remove phase {PHASE_NUMBER}"
+git add .jdi/ROADMAP.md .jdi/DECISIONS.md .jdi/archive/ .jdi/phases.json 2>/dev/null
+git commit -m "chore(jdi): remove phase $PHASE_SLUG"
 ```
 
-### Step 10: Confirm
+### Step 11: Confirm
 
 ```
-Phase {PHASE_NUMBER} removed.
-{if artifacts:} Artifacts archived: .jdi/archive/removed-{NN-slug}/
-total_phases: {TOTAL - 1}
+Phase '{slug}' removed.
+{if artifacts:} Artifacts archived: .jdi/archive/removed-{slug}/
+total_phases: {NEW_TOTAL}
 
-Note: phase numbers are not renumbered — references in commits, DECISIONS, and archive remain valid.
+Note: slugs of remaining phases are not changed. Display positions renumbered.
 ```
 
 </process>
 
 <gates>
 - pre: `.jdi/ROADMAP.md` + `.jdi/STATE.md` exist
-- pre: `phase_number` is in range `1..total_phases`
-- pre: `phase_number > current_phase`
-- pre: phase status != `done`
-- pre: `--force` provided when phase has artifacts
-- post: ROADMAP.md section removed + total_phases decremented + artifacts archived (if any) + DECISIONS.md appended + atomic commit
+- pre: phase resolves via `jdi-resolve-phase.sh`
+- pre: phase is not the current phase, not past, status != `done`
+- pre: `--force` provided if phase has artifacts
+- post: ROADMAP.md section removed + `total_phases` recomputed + artifacts archived (if any) + DECISIONS.md appended + atomic commit
+- post: `phases.json` regenerated if v2
+- invariant: slugs of remaining phases never change
 </gates>
 
 <errors>
-- `.jdi/` missing -> "Run /jdi-new first"
-- `phase_number` missing -> usage hint
-- `phase_number` out of range -> "Valid: 1..{total}"
-- `phase_number < current_phase` -> refuse (past = history)
-- `phase_number == current_phase` -> refuse (ship or abandon first)
-- phase status `done` -> refuse (shipped = history)
-- artifacts exist + no `--force` -> refuse + suggest `--force`
-- user cancels at AskUserQuestion -> exit clean
+- `.jdi/` missing → "Run /jdi-new first"
+- Phase id missing → usage hint
+- Phase id not found → resolver exits 2 — propagate
+- Phase id is past → refuse (history)
+- Phase id is current → refuse (ship or abandon first)
+- Status `done` → refuse (shipped = history)
+- Artifacts exist + no `--force` → refuse + suggest `--force`
+- User cancels → exit clean
 </errors>
 
 <runtime_notes>
@@ -220,9 +241,9 @@ Note: phase numbers are not renumbered — references in commits, DECISIONS, and
 - Confirms via AskUserQuestion.
 
 **Copilot:**
-- AskUserQuestion not always available — require explicit `--yes` flag as fallback.
+- AskUserQuestion not always available — require explicit `--yes` flag fallback.
 
 **OpenCode/Antigravity:**
-- Same interactive confirm as Claude. Fallback to `--yes` when prompts unsupported.
+- Same interactive confirm. Fallback to `--yes` when prompts unsupported.
 
 </runtime_notes>

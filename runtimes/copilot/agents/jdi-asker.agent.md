@@ -14,8 +14,12 @@ Do not implement. Do not plan. Do not review. Only ask and capture.
 </role>
 
 <inputs>
-- Phase number (required)
+- `phase_slug` (required, canonical slug — no `NN-` prefix)
+- `phase_dir` (required, absolute or relative path to the phase folder — orchestrator pre-resolves this)
+- `phase_position` (display-only integer, optional but useful for the CONTEXT.md heading)
 - Read access in: `.jdi/PROJECT.md`, `.jdi/ROADMAP.md`, `.jdi/DECISIONS.md`, `.jdi/phases/*/CONTEXT.md` (max 2 most recent)
+
+Legacy: if invoked with only `phase_number`, resolve via `bin/lib/jdi-resolve-phase.sh` to obtain slug + dir.
 </inputs>
 
 <research_tools>
@@ -33,11 +37,13 @@ Limit: max 2 lookups per phase. Result goes into `<contexto>` of the question, d
 
 ### Step 1: Load context
 - Read PROJECT.md (vision, stack, rules)
-- Read ROADMAP.md, find phase by number
+- Read ROADMAP.md, find phase by slug (or position if invoked with int)
 - Read DECISIONS.md (all D-XX)
-- Read up to 2 previous CONTEXT.md
+- Read up to 2 previous CONTEXT.md (resolved via `bin/lib/jdi-resolve-phase.sh` on positions `phase_position - 1` and `phase_position - 2`)
 
-If phase not in ROADMAP -> error: "Phase {N} not found."
+If phase not in ROADMAP -> error: "Phase '{phase_slug}' not found."
+
+`phase_dir` is provided by the orchestrator; do not reconstruct it via `printf '%02d'`.
 
 ### Step 2: Identify gray areas
 Gray areas = decisions that change the outcome and the user cares about.
@@ -64,10 +70,10 @@ Per question:
 No batching. No chaining. One at a time.
 
 ### Step 4: Write CONTEXT.md
-Path: `.jdi/phases/{NN-slug}/CONTEXT.md`
+Path: `{phase_dir}/CONTEXT.md` (orchestrator pre-resolved — never hand-build `NN-slug`)
 
 ```markdown
-# Phase {N}: {name} — Context
+# Phase {position}: {name} — Context  (slug: {phase_slug})
 
 ## Goal
 {from ROADMAP, 1 line}
@@ -91,7 +97,7 @@ Max 1500 tokens. If exceeded, suggest phase split.
 ### Step 5: Confirm
 ```
 CONTEXT.md ok. Decisions: D-{X}, D-{Y}, D-{Z}.
-Next: /jdi-plan {N}
+Next: /jdi-plan {phase_slug}
 ```
 
 </process>
@@ -111,8 +117,8 @@ Next: /jdi-plan {N}
 </fallbacks>
 
 <output>
-- `.jdi/phases/{NN-slug}/CONTEXT.md` (created)
-- `.jdi/DECISIONS.md` (updated, append-only)
+- `{phase_dir}/CONTEXT.md` (created — folder created on first write if absent)
+- `.jdi/DECISIONS.md` (updated, append-only — on schema v2 use `D-{YYYY-MM-DD}-{phase_slug}-{seq}` IDs to avoid cross-branch collisions; v1 keeps `D-N` increment)
 - `.jdi/todos.md` (updated, if scope creep)
 - Next-step message in chat
 </output>

@@ -4,6 +4,19 @@ State em arquivo plano. Sem DB. Sem servidor. Markdown + YAML frontmatter quando
 
 Decisoes locked ficam em `DECISIONS.md`. Audit trail dos specialists/agents criados ficam em `registry.md`. Aprendizado de phase fica em `SUMMARY.md` e `REVIEW.md` por phase.
 
+## Schema versions
+
+Field `schema_version` em `STATE.md` indica o modelo de identificação de phases:
+
+| Version | Phase ID | Folder | Multi-dev safe? |
+|---|---|---|---|
+| 1 (legacy) | numeric position (`current_phase: 5`) | `.jdi/phases/NN-slug/` | NO — numeric positions colidem entre branches |
+| 2 (current) | canonical slug (`current_phase_slug: auth-flow`) | `.jdi/phases/<slug>/` | YES — slug é único; colisão de slug surface como conflito git visivel |
+
+Projetos v1 podem migrar via `/jdi-migrate-phases` (non-destructive: nao renomeia folders, apenas adiciona `schema_version: 2` + `phases.json` manifest). Toda command JDI aceita slug OU integer position em v2; resolver lib (`bin/lib/jdi-resolve-phase.{sh,ps1}`) normaliza.
+
+Quando `schema_version` ausente, default = 1 (compatibilidade).
+
 ## Arvore completa
 
 ```
@@ -20,14 +33,16 @@ Decisoes locked ficam em `DECISIONS.md`. Audit trail dos specialists/agents cria
 +-- agents/              per-project specialists
 |   +-- jdi-doer-{slug}.md
 |   +-- jdi-reviewer-{slug}.md
++-- phases.json          v2 only: manifest (position <-> slug + legacy flag). Derived state.
 +-- phases/
-|   +-- 01-setup-api/
+|   +-- setup-api/                  v2 layout: folder = canonical slug
 |   |   +-- CONTEXT.md   saida do /jdi-discuss (asker)
 |   |   +-- PLAN.md      saida do /jdi-plan (planner)
 |   |   +-- SUMMARY.md   saida do /jdi-do (doer)
 |   |   +-- REVIEW.md    saida do /jdi-verify (reviewer)
 |   |   +-- LOOP.md      audit trail do /jdi-loop (so se ralph mode foi usado)
-|   +-- 02-...
+|   +-- 02-old-phase/               v1 legacy layout preserved post-migration (NUNCA renomeado)
+|   +-- ...
 +-- archive/             phases antigas movidas (opcional)
 ```
 
@@ -108,12 +123,16 @@ total_phases: {N}
 # {project_name} — State
 
 project_slug: {slug}
+schema_version: 2
 specialists_ready: true | false
-current_phase: 1
+current_phase: 1                   # display mirror (legacy v1 readers)
+current_phase_slug: setup-api      # v2 canonical phase ID
 phase_status: ready | discussed | planned | executed | verified | done | looping | paused | blocked
 phase_verdict: APPROVED | APPROVED_WITH_WARNINGS | BLOCKED  (apos verify)
-next_step: /jdi-discuss 1
+next_step: /jdi-discuss setup-api
 ```
+
+`current_phase_slug` é a fonte da verdade em v2. `current_phase` continua escrito como display/legacy mirror — `/jdi-status` lê preferencialmente o slug, fallback pro integer.
 
 **Quem edita:** todos os comandos atualizam apos rodar.
 
@@ -182,6 +201,9 @@ D-4 (2026-05-10, phase 2): Validacao via FluentValidation. Razao: ...
 **Regras:**
 - D-X nunca volta — decisao locked = imutavel
 - Cada D-X tem data + phase (se aplicavel) + justificativa em 1 linha
+- **v1 format (legacy):** ID sequencial (`D-1`, `D-2`, ...). Racy em multi-dev — dois branches alocam mesmo numero.
+- **v2 format (multi-dev safe):** ID deterministico `D-{YYYY-MM-DD}-{phase_slug}-{seq}` (ex: `D-2026-05-09-setup-api-1`). Sem colisao entre branches.
+- Projetos migrados aceitam ambos formatos em leitura; escrita nova segue `schema_version`.
 
 ---
 
@@ -249,7 +271,7 @@ D-4 (2026-05-10, phase 2): Validacao via FluentValidation. Razao: ...
 
 ---
 
-## phases/{NN-slug}/CONTEXT.md
+## phases/<slug>/  (v2; v1 legacy: phases/{NN-slug}/)CONTEXT.md
 
 ```markdown
 # Phase {N}: {nome} — Context
@@ -277,7 +299,7 @@ D-4 (2026-05-10, phase 2): Validacao via FluentValidation. Razao: ...
 
 ---
 
-## phases/{NN-slug}/PLAN.md
+## phases/<slug>/  (v2; v1 legacy: phases/{NN-slug}/)PLAN.md
 
 ```markdown
 # Phase {N}: {nome} — Plan
@@ -326,7 +348,7 @@ D-4 (2026-05-10, phase 2): Validacao via FluentValidation. Razao: ...
 
 ---
 
-## phases/{NN-slug}/SUMMARY.md
+## phases/<slug>/  (v2; v1 legacy: phases/{NN-slug}/)SUMMARY.md
 
 ```markdown
 # Phase {N}: {nome} — Summary
@@ -354,7 +376,7 @@ D-4 (2026-05-10, phase 2): Validacao via FluentValidation. Razao: ...
 
 ---
 
-## phases/{NN-slug}/REVIEW.md
+## phases/<slug>/  (v2; v1 legacy: phases/{NN-slug}/)REVIEW.md
 
 ```markdown
 # Phase {N}: Review
@@ -385,7 +407,7 @@ D-4 (2026-05-10, phase 2): Validacao via FluentValidation. Razao: ...
 
 ---
 
-## phases/{NN-slug}/LOOP.md (opcional, so com /jdi-loop)
+## phases/<slug>/  (v2; v1 legacy: phases/{NN-slug}/)LOOP.md (opcional, so com /jdi-loop)
 
 ```markdown
 ---
@@ -441,8 +463,8 @@ escalated|paused → running (re-rodar /jdi-loop retoma)
 | Routing | `specialists.md`, `reviewers.md` | Append-only |
 | Audit | `registry.md` | Append-only |
 | Sessao | `STATE.md` | Sobrescreve |
-| Phase | `phases/NN/CONTEXT.md`, `PLAN.md`, `SUMMARY.md`, `REVIEW.md` | Vida da phase |
-| Loop | `phases/NN/LOOP.md` | Vida da phase, append-only, so com /jdi-loop |
+| Phase | `phases/<slug>/CONTEXT.md`, `PLAN.md`, `SUMMARY.md`, `REVIEW.md` (v2) ou `phases/NN-slug/` (v1) | Vida da phase |
+| Loop | `phases/<slug>/LOOP.md` | Vida da phase, append-only, so com /jdi-loop |
 | Backlog | `todos.md` | Append-only, opcional |
 
 **Sem MEMORY.md generico (v1).** Era catch-all que ficava bagunçado. Substituido por:

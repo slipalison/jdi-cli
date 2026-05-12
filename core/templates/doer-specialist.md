@@ -46,7 +46,7 @@ runtime_overrides:
       write: allow
   antigravity:
     triggers_extra:
-      - "implement phase {N} of {PROJECT_NAME}"
+      - "implement phase {PHASE_SLUG} of {PROJECT_NAME}"
       - "execute tasks of the phase"
 ---
 
@@ -69,7 +69,7 @@ You ALREADY KNOW:
 
 Do not waste tokens discovering this. Just execute.
 
-Spawned by: `/jdi-do {N}`
+Spawned by: `/jdi-do {PHASE_SLUG}` (or legacy `/jdi-do {N}`)
 
 **If adopted=true:**
 - Respect existing patterns — do not refactor legacy code for style
@@ -80,17 +80,17 @@ Spawned by: `/jdi-do {N}`
 </role>
 
 <inputs>
-- `phase_number` required
+- `phase_slug` (canonical slug, required) + `phase_dir` (orchestrator pre-resolved path). Legacy: `phase_number` if invoked from v1 callers.
 - Read on:
   - `.jdi/PROJECT.md`
   - `.jdi/DECISIONS.md`
-  - `.jdi/phases/{NN-slug}/CONTEXT.md`
-  - `.jdi/phases/{NN-slug}/PLAN.md`
-  - `.jdi/phases/{NN-slug}/LOOP.md` (optional — only exists if running in ralph mode via /jdi-loop)
-  - `.jdi/phases/{NN-slug}/REVIEW.md` (optional — only exists if reviewer ran at least once)
+  - `{PHASE_DIR}/CONTEXT.md`
+  - `{PHASE_DIR}/PLAN.md`
+  - `{PHASE_DIR}/LOOP.md` (optional — only exists if running in ralph mode via /jdi-loop)
+  - `{PHASE_DIR}/REVIEW.md` (optional — only exists if reviewer ran at least once)
 - Write on:
   - code (paths in PLAN's `files_modified`)
-  - `.jdi/phases/{NN-slug}/SUMMARY.md`
+  - `{PHASE_DIR}/SUMMARY.md`
 </inputs>
 
 <research_tools>
@@ -132,7 +132,7 @@ Read phase PLAN.md. Identify tasks with `status: pending`.
 
 If all tasks already complete -> return "phase already executed".
 
-**Ralph mode detection:** if `.jdi/phases/{NN-slug}/LOOP.md` AND `.jdi/phases/{NN-slug}/REVIEW.md` exist:
+**Ralph mode detection:** if `{PHASE_DIR}/LOOP.md` AND `{PHASE_DIR}/REVIEW.md` exist:
 - You are running in iter > 1 of the ralph loop
 - Read LOOP.md `## History` to see finding hash from previous iters (failed approaches)
 - Read REVIEW.md `## Blockers` and `## Warnings` from previous iter — those ARE your work now
@@ -156,7 +156,7 @@ Loop:
 4. If failed -> adjust. Max 3 attempts. After 3, mark task `blocked` and continue.
 5. If passed:
    - `git add {files}`
-   - `git commit -m "{COMMIT_PREFIX}({NN-slug}): {task summary}"`
+   - `git commit -m "{COMMIT_PREFIX}({PHASE_SLUG}): {task summary}"`
    - Mark task `completed` in PLAN
 6. Append line in SUMMARY.md: `- {task_id}: {short result}`
 
@@ -165,7 +165,7 @@ No `--no-verify`. No hook skipping.
 ### Step 3: Write final SUMMARY.md
 
 ```markdown
-# Phase {N}: {name} — Summary
+# Phase {position}: {name} — Summary  (slug: {PHASE_SLUG})
 
 **Status:** {complete|partial}
 **Tasks:** {done}/{total} complete, {blocked} blocked
@@ -210,7 +210,7 @@ Print SUMMARY.md path + status.
 
 <output>
 - Modified code, atomically committed
-- `.jdi/phases/{NN-slug}/PLAN.md` updated (task statuses)
-- `.jdi/phases/{NN-slug}/SUMMARY.md` created
-- Final message: `phase {N}: {X}/{Y} tasks, {Z} blocked. SUMMARY: {path}`
+- `{PHASE_DIR}/PLAN.md` updated (task statuses)
+- `{PHASE_DIR}/SUMMARY.md` created
+- Final message: `phase {PHASE_SLUG}: {X}/{Y} tasks, {Z} blocked. SUMMARY: {path}`
 </output>

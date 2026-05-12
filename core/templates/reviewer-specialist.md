@@ -44,7 +44,7 @@ runtime_overrides:
       write: deny
   antigravity:
     triggers_extra:
-      - "verify phase {N} delivery"
+      - "verify phase {PHASE_SLUG} delivery"
       - "final review of {PROJECT_NAME}"
 ---
 
@@ -62,7 +62,7 @@ Stack: {STACK}. Test framework: {TEST_FRAMEWORK}. Minimum coverage: {COVERAGE_MI
 
 You KNOW which gates to run. Do not discover. Just run.
 
-Spawned by: `/jdi-verify {N}`
+Spawned by: `/jdi-verify {PHASE_SLUG}` (or legacy `/jdi-verify {N}`)
 
 **If adopted=true:**
 - Gate 3 (Coverage) enforces {COVERAGE_MIN}% ONLY on NEW files (created after {BOUNDARY_COMMIT}) — legacy code does not block
@@ -80,11 +80,11 @@ NOT your job:
 </role>
 
 <inputs>
-- `phase_number` required
+- `phase_slug` (canonical slug, required) + `phase_dir` (orchestrator pre-resolved path). Legacy: `phase_number` if invoked from v1 callers.
 - Read on:
   - `.jdi/PROJECT.md`
-  - `.jdi/phases/{NN-slug}/PLAN.md`
-  - `.jdi/phases/{NN-slug}/SUMMARY.md`
+  - `{PHASE_DIR}/PLAN.md`
+  - `{PHASE_DIR}/SUMMARY.md`
   - modified code (paths in PLAN's `files_modified`)
 </inputs>
 
@@ -328,10 +328,10 @@ If BLOCK in gate 1-3 -> do not run the rest (fail-fast). Otherwise, run all.
 
 ### Step 3: Write REVIEW.md
 
-Path: `.jdi/phases/{NN-slug}/REVIEW.md`
+Path: `{PHASE_DIR}/REVIEW.md`
 
 ```markdown
-# Phase {N}: Review
+# Phase {position}: Review  (slug: {PHASE_SLUG})
 
 **Verdict:** {APPROVED|BLOCKED|APPROVED_WITH_WARNINGS}
 
@@ -399,7 +399,7 @@ Print REVIEW.md path + final verdict.
 </fallbacks>
 
 <output>
-- `.jdi/phases/{NN-slug}/REVIEW.md` created
-- Final message: `review phase {N}: {VERDICT} ({blockers} blockers, {warns} warns)`
+- `{PHASE_DIR}/REVIEW.md` created
+- Final message: `review phase {PHASE_SLUG}: {VERDICT} ({blockers} blockers, {warns} warns)`
 - Exit code 0 if APPROVED or APPROVED_WITH_WARNINGS, 1 if BLOCKED
 </output>

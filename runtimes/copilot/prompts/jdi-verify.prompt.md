@@ -1,7 +1,7 @@
 ---
 name: jdi-verify
-description: Runs phase quality gates via reviewer specialist. Build, tests, coverage, lint, security checks. Verdict APPROVED / APPROVED_WITH_WARNINGS / BLOCKED.
-argument_hint: "<phase_number>"
+description: Runs phase quality gates via reviewer specialist. Build, tests, coverage, lint, security checks. Verdict APPROVED / APPROVED_WITH_WARNINGS / BLOCKED. Accepts slug or position.
+argument_hint: "<slug|position>"
 runtime_intent:
   invokes_agent: dynamic
 runtime_overrides:
@@ -15,7 +15,7 @@ runtime_overrides:
   antigravity:
     triggers:
       - "/jdi-verify"
-      - "verify phase {N}"
+      - "verify phase"
 ---
 
 <objective>
@@ -23,7 +23,7 @@ Verifies the phase was delivered correctly. Runs gates defined in the project's 
 </objective>
 
 <arguments>
-- `phase_number` (required)
+- `phase_id` (required): canonical slug, legacy slug, or integer position
 </arguments>
 
 <process>
@@ -32,27 +32,36 @@ Verifies the phase was delivered correctly. Runs gates defined in the project's 
 ```bash
 test -d .jdi/ || { echo "Not a JDI project."; exit 1; }
 
+JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
+
 # Verify reviewer exists
 ls .jdi/agents/jdi-reviewer-*.md 2>/dev/null | head -1 || {
   echo "Reviewer missing. /jdi-bootstrap."
   exit 1
 }
+```
+
+### Step 2: Resolve phase
+
+```bash
+eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$1") || { echo "Phase '$1' not found."; exit 1; }
+PHASE_SLUG="$JDI_PHASE_SLUG"
+PHASE_DIR="$JDI_PHASE_DIR"
+PHASE_POSITION="$JDI_PHASE_POSITION"
 
 # Verify phase was executed
-ls .jdi/phases/{NN}*/SUMMARY.md 2>/dev/null || {
-  echo "Phase {N} not executed. /jdi-do {N}."
+test -f "$PHASE_DIR/SUMMARY.md" || {
+  echo "Phase $PHASE_SLUG not executed. /jdi-do $PHASE_SLUG."
   exit 1
 }
 
-# Context budget warm-up (does not block)
-JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
+# Context budget warm-up
 if [ -f "$JDI_LIB/jdi-monitor.sh" ]; then
-  bash "$JDI_LIB/jdi-monitor.sh" .jdi/PROJECT.md .jdi/DECISIONS.md .jdi/phases/{NN}*/PLAN.md .jdi/phases/{NN}*/SUMMARY.md || true
+  bash "$JDI_LIB/jdi-monitor.sh" .jdi/PROJECT.md .jdi/DECISIONS.md "$PHASE_DIR/PLAN.md" "$PHASE_DIR/SUMMARY.md" || true
 fi
-# Windows: pwsh -File "$JDI_LIB/jdi-monitor.ps1" -Paths @(...)
 ```
 
-### Step 2: Resolve reviewer specialist(s)
+### Step 3: Resolve reviewer specialist(s)
 
 ```bash
 REVIEWERS=$(grep -oE 'jdi-reviewer-[a-z0-9-]+' .jdi/reviewers.md | sort -u)
@@ -63,14 +72,14 @@ echo "Reviewers registered: $REVIEWER_COUNT"
 **Single-stack** (`REVIEWER_COUNT == 1`): one reviewer, normal flow.
 **Multi-stack** (`REVIEWER_COUNT > 1`): chain reviewers in registry order. Each writes its own REVIEW segment; aggregate verdict = worst-case (1 BLOCK = overall BLOCK).
 
-### Step 3: Spawn reviewer(s)
+### Step 4: Spawn reviewer(s)
 
 **Single-stack:**
 ```
 Agent(
   subagent_type="${REVIEWERS}",
-  description="Verify phase {N}",
-  prompt="phase={N}, mode=verify"
+  description="Verify phase $PHASE_SLUG",
+  prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, mode=verify"
 )
 ```
 
@@ -80,24 +89,23 @@ Agent(
 for REVIEWER in $REVIEWERS:
   Agent(
     subagent_type="$REVIEWER",
-    description="Verify phase {N} ({REVIEWER})",
-    prompt="phase={N}, mode=verify, reviewer_segment=${REVIEWER}"
+    description="Verify phase $PHASE_SLUG ($REVIEWER)",
+    prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, mode=verify, reviewer_segment=$REVIEWER"
   )
-  # Each reviewer appends to .jdi/phases/{NN-slug}/REVIEW.md under section
-  # "## Reviewer: {REVIEWER}" with its own gate results and verdict
+  # Each reviewer appends to $PHASE_DIR/REVIEW.md under section
+  # "## Reviewer: $REVIEWER" with its own gate results and verdict
 ```
 
 Each reviewer scopes its gates to its `file_glob` (from frontmatter `scope.file_glob`). Coverage threshold enforced only on files matching the glob.
 
 Reviewers are read-only. Wait for completion before next.
 
-### Step 4: Read aggregate verdict
+### Step 5: Read aggregate verdict
 
 ```bash
-test -f .jdi/phases/{NN}*/REVIEW.md || { echo "REVIEW.md not created"; exit 1; }
+test -f "$PHASE_DIR/REVIEW.md" || { echo "REVIEW.md not created"; exit 1; }
 
-# Collect all per-reviewer verdicts
-VERDICTS=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|BLOCKED)' .jdi/phases/{NN}*/REVIEW.md | awk '{print $2}')
+VERDICTS=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|BLOCKED)' "$PHASE_DIR/REVIEW.md" | awk '{print $2}')
 
 # Worst-case wins: BLOCK > WARNINGS > APPROVED
 if echo "$VERDICTS" | grep -q BLOCKED; then
@@ -107,42 +115,41 @@ elif echo "$VERDICTS" | grep -q APPROVED_WITH_WARNINGS; then
 else
   VERDICT=APPROVED
 fi
-
-# For single-stack, this collapses to the single reviewer's verdict — backward compatible.
 ```
 
-### Step 5: Update STATE
+### Step 6: Update STATE
 
 ```markdown
-current_phase: {N}
+current_phase: $PHASE_POSITION
+current_phase_slug: $PHASE_SLUG
 phase_status: {verified|blocked}
 phase_verdict: {APPROVED|APPROVED_WITH_WARNINGS|BLOCKED}
-next_step: {if APPROVED or WITH_WARNINGS: /jdi-ship {N}; if BLOCKED: fix and /jdi-do {N} again}
+next_step: {if APPROVED or WITH_WARNINGS: /jdi-ship $PHASE_SLUG; if BLOCKED: fix and /jdi-do $PHASE_SLUG again}
 ```
 
 ```bash
-git add .jdi/phases/{NN-slug}/REVIEW.md .jdi/STATE.md
-git commit -m "docs({NN-slug}): verify phase ({VERDICT})"
+git add "$PHASE_DIR/REVIEW.md" .jdi/STATE.md
+git commit -m "docs($PHASE_SLUG): verify phase ($VERDICT)"
 ```
 
-### Step 6: Confirm
+### Step 7: Confirm
 
 **APPROVED:**
 ```
-Phase {N}: APPROVED. Next: /jdi-ship {N}
+Phase $PHASE_SLUG: APPROVED. Next: /jdi-ship $PHASE_SLUG
 ```
 
 **APPROVED_WITH_WARNINGS:**
 ```
-Phase {N}: APPROVED_WITH_WARNINGS ({count} warnings).
-REVIEW.md: .jdi/phases/{NN-slug}/REVIEW.md
-Next: /jdi-ship {N} (or fix first)
+Phase $PHASE_SLUG: APPROVED_WITH_WARNINGS ({count} warnings).
+REVIEW.md: $PHASE_DIR/REVIEW.md
+Next: /jdi-ship $PHASE_SLUG (or fix first)
 ```
 
 **BLOCKED:**
 ```
-Phase {N}: BLOCKED ({count} blockers). REVIEW.md: .jdi/phases/{NN-slug}/REVIEW.md
-Fix → /jdi-do {N} → /jdi-verify {N}
+Phase $PHASE_SLUG: BLOCKED ({count} blockers). REVIEW.md: $PHASE_DIR/REVIEW.md
+Fix → /jdi-do $PHASE_SLUG → /jdi-verify $PHASE_SLUG
 ```
 
 </process>
@@ -153,7 +160,7 @@ Fix → /jdi-do {N} → /jdi-verify {N}
 </gates>
 
 <errors>
-- Reviewer missing -> /jdi-bootstrap
-- SUMMARY missing -> /jdi-do
-- Reviewer fails -> show error, keep state, suggest retry
+- Reviewer missing → /jdi-bootstrap
+- SUMMARY missing → /jdi-do
+- Reviewer fails → show error, keep state, suggest retry
 </errors>

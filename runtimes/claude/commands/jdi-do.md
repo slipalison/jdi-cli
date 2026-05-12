@@ -1,7 +1,7 @@
 ---
 name: jdi-do
-description: Executes phase. Automatic routing to project's doer specialist. Wave-based parallel if phase has >=3 independent tasks.
-argument_hint: "<phase_number> [--sequential]"
+description: Executes phase. Automatic routing to project's doer specialist. Wave-based parallel if phase has >=3 independent tasks. Accepts slug or position.
+argument_hint: "<slug|position> [--sequential]"
 runtime_intent:
   invokes_agent: dynamic
 runtime_overrides:
@@ -15,7 +15,7 @@ runtime_overrides:
   antigravity:
     triggers:
       - "/jdi-do"
-      - "execute phase {N}"
+      - "execute phase"
 ---
 
 <objective>
@@ -23,7 +23,7 @@ Executes all tasks of the given phase. Reads PLAN.md, groups into waves, dispatc
 </objective>
 
 <arguments>
-- `phase_number` (required)
+- `phase_id` (required): canonical slug, legacy slug, or integer position
 - `--sequential` (optional): forces sequential execution even if waves allow parallel. Useful for debug.
 </arguments>
 
@@ -34,27 +34,33 @@ Executes all tasks of the given phase. Reads PLAN.md, groups into waves, dispatc
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new."; exit 1; }
 test -f .jdi/STATE.md || { echo "STATE.md missing."; exit 1; }
 
+JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
+
 # Verify specialist exists
 ls .jdi/agents/jdi-doer-*.md 2>/dev/null | head -1 || {
   echo "Doer specialist missing. Run /jdi-bootstrap."
   exit 1
 }
-
-# Verify PLAN.md exists for phase
-ls .jdi/phases/{NN}*/PLAN.md 2>/dev/null || {
-  echo "PLAN.md missing for phase {N}. Run /jdi-plan {N}."
-  exit 1
-}
-
-# Context budget warm-up (does not block)
-JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
-if [ -f "$JDI_LIB/jdi-monitor.sh" ]; then
-  bash "$JDI_LIB/jdi-monitor.sh" .jdi/PROJECT.md .jdi/DECISIONS.md .jdi/phases/{NN}*/PLAN.md .jdi/phases/{NN}*/CONTEXT.md || true
-fi
-# Windows: pwsh -File "$JDI_LIB/jdi-monitor.ps1" -Paths @(...)
 ```
 
-### Step 2: Resolve doer specialist(s)
+### Step 2: Resolve phase
+
+```bash
+eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$1") || { echo "Phase '$1' not found."; exit 1; }
+PHASE_SLUG="$JDI_PHASE_SLUG"
+PHASE_DIR="$JDI_PHASE_DIR"
+PHASE_POSITION="$JDI_PHASE_POSITION"
+
+# Verify PLAN.md exists
+test -f "$PHASE_DIR/PLAN.md" || { echo "PLAN.md missing for phase $PHASE_SLUG. Run /jdi-plan $PHASE_SLUG."; exit 1; }
+
+# Context budget warm-up
+if [ -f "$JDI_LIB/jdi-monitor.sh" ]; then
+  bash "$JDI_LIB/jdi-monitor.sh" .jdi/PROJECT.md .jdi/DECISIONS.md "$PHASE_DIR/PLAN.md" "$PHASE_DIR/CONTEXT.md" || true
+fi
+```
+
+### Step 3: Resolve doer specialist(s)
 
 Read `.jdi/specialists.md`. Detect single vs multi-stack.
 
@@ -76,13 +82,12 @@ DOER=$(grep -oE 'jdi-doer-[a-z0-9-]+' .jdi/specialists.md | head -1)
 **Multi-stack** (`DOER_COUNT > 1`): for each task in PLAN.md, read its `**Specialist:**` field (planner set this). Dispatch to that specialist. Tasks in same wave can spawn DIFFERENT specialists in parallel.
 
 ```bash
-# Per task, extract specialist from PLAN.md
-TASK_SPEC=$(awk -v t="$task_id" '/^#### '"$task_id"':/{flag=1} flag && /^\*\*Specialist:\*\*/{print $2; exit}' .jdi/phases/{NN}*/PLAN.md)
+TASK_SPEC=$(awk -v t="$task_id" '/^#### '"$task_id"':/{flag=1} flag && /^\*\*Specialist:\*\*/{print $2; exit}' "$PHASE_DIR/PLAN.md")
 ```
 
 If task lacks specialist field (legacy PLAN.md pre-1.12) → fallback to first doer registered.
 
-### Step 3: Read PLAN.md, group waves
+### Step 4: Read PLAN.md, group waves
 
 Parse PLAN.md, extract:
 - List of pending tasks (`status: pending`)
@@ -93,14 +98,14 @@ If `--sequential` or phase has <3 parallel tasks: use sequential execution (1 do
 
 Otherwise: wave-based parallel.
 
-### Step 4: Intra-wave overlap check (safety)
+### Step 5: Intra-wave overlap check (safety)
 
 For each wave:
 - Get list of files_modified per task
 - Check pair-by-pair: do 2 tasks share a file?
-- If yes -> override to sequential for that wave (warn user)
+- If yes → override to sequential for that wave (warn user)
 
-### Step 5: Execute waves
+### Step 6: Execute waves
 
 **For each wave in order:**
 
@@ -113,18 +118,17 @@ For each wave:
 Sequential dispatch — ONE `Agent()` per message with `run_in_background: true`. Each task resolves its OWN `subagent_type` from task.specialist (multi-stack):
 
 ```
-# For each task in wave, resolve specialist:
 TASK_SPECIALIST = <task.specialist field from PLAN.md> OR <single doer fallback>
 
 Agent(
-  subagent_type="${TASK_SPECIALIST}",   # may differ per task in multi-stack
-  description="Execute T-{X}.{Y} phase {N}",
-  prompt="phase={N}, task=T-{X}.{Y}, mode=single_task",
+  subagent_type="${TASK_SPECIALIST}",
+  description="Execute T-{X} phase $PHASE_SLUG",
+  prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, task=T-{X}, mode=single_task",
   run_in_background: true
 )
 ```
 
-Within a wave, multi-stack projects may spawn DIFFERENT specialists in parallel (e.g. `jdi-doer-myapp-backend` and `jdi-doer-myapp-frontend` simultaneously — different file scopes, disjoint `files_modified`).
+Within a wave, multi-stack projects may spawn DIFFERENT specialists in parallel (different file scopes, disjoint `files_modified`).
 
 Wait for all to return before next wave.
 
@@ -132,41 +136,42 @@ Wait for all to return before next wave.
 
 Doer reads PLAN.md/PROJECT.md/CONTEXT.md on its own — specialist convention.
 
-### Step 6: After each wave
+### Step 7: After each wave
 
 Read updated PLAN.md (doer updates status). Count:
 - completed
 - blocked
 - pending
 
-If any task `blocked` in critical wave -> stop execution, mark phase `partial`, skip to Step 8.
+If any task `blocked` in critical wave → stop execution, mark phase `partial`, skip to Step 9.
 
-### Step 7: After all waves
+### Step 8: After all waves
 
 Verify SUMMARY.md was created:
 ```bash
-test -f .jdi/phases/{NN}*/SUMMARY.md || { echo "warn: SUMMARY missing"; }
+test -f "$PHASE_DIR/SUMMARY.md" || { echo "warn: SUMMARY missing"; }
 ```
 
-### Step 8: Update STATE
+### Step 9: Update STATE
 
 ```markdown
-current_phase: {N}
+current_phase: $PHASE_POSITION
+current_phase_slug: $PHASE_SLUG
 phase_status: {executed|partial}
-next_step: /jdi-verify {N}
+next_step: /jdi-verify $PHASE_SLUG
 ```
 
 ```bash
 git add .jdi/STATE.md
-git commit -m "chore(state): phase {N} executed"
+git commit -m "chore(state): phase $PHASE_SLUG executed"
 ```
 
-### Step 9: Confirm
+### Step 10: Confirm
 
 ```
-Phase {N}: {done}/{total} tasks ({blocked} blocked), {W} waves, {count} files.
-SUMMARY: .jdi/phases/{NN-slug}/SUMMARY.md
-Next: /jdi-verify {N}
+Phase $PHASE_SLUG: {done}/{total} tasks ({blocked} blocked), {W} waves, {count} files.
+SUMMARY: $PHASE_DIR/SUMMARY.md
+Next: /jdi-verify $PHASE_SLUG
 ```
 
 </process>
@@ -177,10 +182,10 @@ Next: /jdi-verify {N}
 </gates>
 
 <errors>
-- Doer missing -> /jdi-bootstrap
-- PLAN missing -> /jdi-plan
-- Doer fails on task -> task stays `blocked`, continue with the rest (does not abort all)
-- Entire wave blocked -> abort phase, mark `partial`
+- Doer missing → /jdi-bootstrap
+- PLAN missing → /jdi-plan
+- Doer fails on task → task stays `blocked`, continue with the rest (does not abort all)
+- Entire wave blocked → abort phase, mark `partial`
 </errors>
 
 <runtime_notes>

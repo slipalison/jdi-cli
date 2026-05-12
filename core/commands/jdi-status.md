@@ -40,50 +40,67 @@ None.
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new first."; exit 1; }
 test -f .jdi/STATE.md || { echo "STATE.md missing — broken project."; exit 1; }
+
+JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
 ```
 
 ### Step 2: Read state
 
 ```bash
 PROJECT_SLUG=$(grep -oE 'project_slug:\s*\S+' .jdi/STATE.md | awk '{print $2}')
-CURRENT=$(grep -oE 'current_phase:\s*[0-9]+' .jdi/STATE.md | grep -oE '[0-9]+')
+SCHEMA=$(grep -oE 'schema_version:\s*[0-9]+' .jdi/STATE.md | grep -oE '[0-9]+' | head -1)
+[ -z "$SCHEMA" ] && SCHEMA=1
+
+# Current phase: prefer slug (v2), fall back to integer (v1)
+CURRENT_SLUG=$(grep -E '^current_phase_slug:' .jdi/STATE.md | sed -E 's/^current_phase_slug:[[:space:]]*//' | head -1)
+CURRENT_INT=$(grep -oE 'current_phase:\s*[0-9]+' .jdi/STATE.md | grep -oE '[0-9]+' | head -1)
+
+CURRENT_ID="$CURRENT_SLUG"
+[ -z "$CURRENT_ID" ] && CURRENT_ID="$CURRENT_INT"
+
 PHASE_STATUS=$(grep -oE 'phase_status:\s*[a-z_-]+' .jdi/STATE.md | awk '{print $2}')
 VERDICT=$(grep -oE 'phase_verdict:\s*[A-Z_]+' .jdi/STATE.md | awk '{print $2}')
 NEXT_STEP=$(grep -E '^next_step:' .jdi/STATE.md | sed -E 's/^next_step:[[:space:]]*//')
 
-# Phase name from ROADMAP
-PHASE_NAME=$(awk "/^### Phase $CURRENT:/{sub(/^### Phase $CURRENT:[[:space:]]*/, \"\"); print; exit}" .jdi/ROADMAP.md 2>/dev/null)
-TOTAL=$(grep -oE 'total_phases:\s*[0-9]+' .jdi/ROADMAP.md | grep -oE '[0-9]+')
+TOTAL=$(grep -oE 'total_phases:\s*[0-9]+' .jdi/ROADMAP.md | grep -oE '[0-9]+' || grep -cE '^### Phase ' .jdi/ROADMAP.md)
 
-NN=$(printf '%02d' "$CURRENT")
-PHASE_DIR=$(ls -d .jdi/phases/${NN}-*/ 2>/dev/null | head -1 | sed 's|/$||')
+# Resolve phase (handles slug OR int)
+PHASE_DIR=""; PHASE_NAME=""; PHASE_POSITION=""
+if [ -n "$CURRENT_ID" ]; then
+  if eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$CURRENT_ID" 2>/dev/null); then
+    PHASE_DIR="$JDI_PHASE_DIR"
+    PHASE_POSITION="$JDI_PHASE_POSITION"
+    CURRENT_SLUG="$JDI_PHASE_SLUG"
+  fi
+
+  # Phase name from ROADMAP — by position
+  if [ -n "$PHASE_POSITION" ]; then
+    PHASE_NAME=$(awk -v n="$PHASE_POSITION" '
+      /^### Phase / {
+        line = $0
+        sub(/^### Phase /, "", line)
+        pos = line + 0
+        if (pos == n) {
+          sub(/^### Phase [0-9]+:[[:space:]]*/, "")
+          print
+          exit
+        }
+      }
+    ' .jdi/ROADMAP.md)
+  fi
+fi
 ```
 
-PowerShell:
-```powershell
-$state = Get-Content .jdi/STATE.md -Raw
-$projectSlug = ([regex]::Match($state, 'project_slug:\s*(\S+)')).Groups[1].Value
-$current = [int]([regex]::Match($state, 'current_phase:\s*([0-9]+)')).Groups[1].Value
-$phaseStatus = ([regex]::Match($state, 'phase_status:\s*([a-z_-]+)')).Groups[1].Value
-$verdict = ([regex]::Match($state, 'phase_verdict:\s*([A-Z_]+)')).Groups[1].Value
-$nextStep = ([regex]::Match($state, '(?m)^next_step:\s*(.+)$')).Groups[1].Value.Trim()
-
-$roadmap = Get-Content .jdi/ROADMAP.md -Raw
-$phaseName = ([regex]::Match($roadmap, "(?m)^### Phase $current`:\s*(.+)$")).Groups[1].Value.Trim()
-$total = [int]([regex]::Match($roadmap, 'total_phases:\s*([0-9]+)')).Groups[1].Value
-
-$nn = '{0:D2}' -f $current
-$phaseDir = (Get-ChildItem .jdi/phases/ -Directory -Filter "$nn-*" -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
-```
+PowerShell mirrors via `Get-Content -Raw` + regex + the resolver `.ps1`.
 
 ### Step 3: Detect last artifact in current phase
 
-Priority order (most recent stage first): `REVIEW.md` -> `SUMMARY.md` -> `PLAN.md` -> `CONTEXT.md`.
+Priority order (most recent stage first): `REVIEW.md` → `SUMMARY.md` → `PLAN.md` → `CONTEXT.md`.
 
 ```bash
 LAST_ARTIFACT=""
 LAST_ARTIFACT_PATH=""
-if [ -n "$PHASE_DIR" ]; then
+if [ -n "$PHASE_DIR" ] && [ -d "$PHASE_DIR" ]; then
   for f in REVIEW.md SUMMARY.md PLAN.md CONTEXT.md; do
     if [ -f "$PHASE_DIR/$f" ]; then
       LAST_ARTIFACT="$f"
@@ -94,27 +111,11 @@ if [ -n "$PHASE_DIR" ]; then
 fi
 ```
 
-PowerShell:
-```powershell
-$lastArtifact = ""
-$lastArtifactPath = ""
-if ($phaseDir) {
-  foreach ($f in @('REVIEW.md', 'SUMMARY.md', 'PLAN.md', 'CONTEXT.md')) {
-    $candidate = Join-Path $phaseDir $f
-    if (Test-Path $candidate) {
-      $lastArtifact = $f
-      $lastArtifactPath = $candidate
-      break
-    }
-  }
-}
-```
-
 ### Step 4: Pull one-line summary from the last artifact
 
 Extract a 1-line headline so the user sees what was last produced without opening the file.
 
-- `REVIEW.md`: pull the `**Veredicto:**` / `**Verdict:**` line + 1-line "Recomendacao".
+- `REVIEW.md`: pull the `**Verdict:**` line.
 - `SUMMARY.md`: pull `**Status:**` + `**Tasks:**` line.
 - `PLAN.md`: pull `Total tasks:` and `Waves:` from the Execution section.
 - `CONTEXT.md`: pull the `## Goal` line.
@@ -148,13 +149,6 @@ LAST_COMMIT=$(git log -1 --format='%h  %s' 2>/dev/null || echo "(no commits yet)
 COMMITS_TODAY=$(git log --since=midnight --format='%h' 2>/dev/null | wc -l | tr -d ' ')
 ```
 
-PowerShell:
-```powershell
-$lastCommit = & git log -1 --format='%h  %s' 2>$null
-if (-not $lastCommit) { $lastCommit = '(no commits yet)' }
-$commitsToday = (& git log --since=midnight --format='%h' 2>$null | Measure-Object).Count
-```
-
 ### Step 6: Print
 
 ```
@@ -162,7 +156,8 @@ $commitsToday = (& git log --since=midnight --format='%h' 2>$null | Measure-Obje
   JDI status
 ══════════════════════════════════════════════════
   Project:        {project_slug}
-  Phase:          {current}/{total} — {phase_name}
+  Schema:         v{SCHEMA}
+  Phase:          {position}/{total} — {phase_name} (slug: {slug})
   Phase status:   {phase_status}
   Verdict:        {verdict or "—"}
 
@@ -180,15 +175,16 @@ $commitsToday = (& git log --since=midnight --format='%h' 2>$null | Measure-Obje
 
 **Empty-state messages:**
 
-- `{verdict}` empty when phase not yet verified -> print `—`.
-- `{last_artifact}` empty when no phase artifacts yet (e.g. right after `/jdi-bootstrap`) -> print `(none — phase has not started)`.
-- `{next_step}` empty -> print `(STATE.md missing next_step — possibly corrupted state)`.
+- `{verdict}` empty → `—`.
+- `{last_artifact}` empty → `(none — phase has not started)`.
+- `{next_step}` empty → `(STATE.md missing next_step — possibly corrupted state)`.
+- v1 project without slug → use position only (`Phase: 3/8 — auth flow`).
 
 ### Step 7: Optional flags (future)
 
 Reserved for later, do not implement now:
-- `--verbose` -> dump full last artifact body (truncated to first 40 lines).
-- `--json` -> emit machine-readable JSON for pipelines.
+- `--verbose` → dump full last artifact body (truncated to first 40 lines).
+- `--json` → emit machine-readable JSON for pipelines.
 
 </process>
 
@@ -198,21 +194,22 @@ Reserved for later, do not implement now:
 </gates>
 
 <errors>
-- `.jdi/` missing -> "Run /jdi-new first"
-- STATE.md missing -> abort with corrupted-state message
-- ROADMAP.md missing -> warn and continue (some fields empty)
-- Not a git repo -> commit fields print "(no commits yet)" — does not fail
+- `.jdi/` missing → "Run /jdi-new first"
+- STATE.md missing → abort with corrupted-state message
+- ROADMAP.md missing → warn and continue (some fields empty)
+- Phase id unresolvable → print "(phase id stale)" but do not fail
+- Not a git repo → commit fields print "(no commits yet)" — does not fail
 </errors>
 
 <runtime_notes>
 
 **Claude Code:**
-- Pure Bash + Grep + Read. No Agent invocation.
+- Pure Bash + Grep + Read + resolver lib. No Agent invocation.
 
 **Copilot:**
 - Same — terminal-driven.
 
 **OpenCode/Antigravity:**
-- Same — pure shell. Antigravity triggers also fire on natural-language phrases like "where did we stop", "what's next".
+- Same — pure shell. Antigravity triggers also fire on natural-language phrases.
 
 </runtime_notes>

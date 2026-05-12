@@ -1,7 +1,7 @@
 ---
 name: jdi-plan
-description: Generates phase PLAN.md. Decomposes into tasks with files_modified, acceptance, parallelism waves.
-argument_hint: "<phase_number> [--review]"
+description: Generates phase PLAN.md. Decomposes into tasks with files_modified, acceptance, parallelism waves. Accepts slug or position.
+argument_hint: "<slug|position> [--review]"
 runtime_intent:
   invokes_agent: jdi-planner
 runtime_overrides:
@@ -16,7 +16,7 @@ runtime_overrides:
   antigravity:
     triggers:
       - "/jdi-plan"
-      - "plan phase {N}"
+      - "plan phase"
 ---
 
 <objective>
@@ -24,7 +24,7 @@ Generates PLAN.md for the given phase. Decomposes into tasks (max 8), groups int
 </objective>
 
 <arguments>
-- `phase_number` (required): phase number, e.g. `1`, `2`
+- `phase_id` (required): canonical slug, legacy slug, or integer position
 - `--review` (optional): show preview and ask for approval before saving
 </arguments>
 
@@ -34,40 +34,63 @@ Generates PLAN.md for the given phase. Decomposes into tasks (max 8), groups int
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. Run /jdi-new."; exit 1; }
 test -f .jdi/PROJECT.md || { echo "PROJECT.md missing."; exit 1; }
+
+JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
 ```
 
-Verify phase CONTEXT.md exists:
+### Step 2: Resolve phase
+
 ```bash
-ls .jdi/phases/{NN}*/CONTEXT.md 2>/dev/null || { echo "CONTEXT.md missing. Run /jdi-discuss {N}"; exit 1; }
+eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$1") || { echo "Phase '$1' not found."; exit 1; }
+PHASE_SLUG="$JDI_PHASE_SLUG"
+PHASE_DIR="$JDI_PHASE_DIR"
+PHASE_POSITION="$JDI_PHASE_POSITION"
+```
+
+PowerShell:
+```powershell
+$r = & "$JDI_LIB\jdi-resolve-phase.ps1" -Id $args[0] -AsObject
+$phaseSlug = $r.Slug; $phaseDir = $r.Dir; $phasePosition = $r.Position
+```
+
+### Step 3: Verify CONTEXT.md
+
+```bash
+test -f "$PHASE_DIR/CONTEXT.md" || { echo "CONTEXT.md missing. Run /jdi-discuss $PHASE_SLUG"; exit 1; }
 
 # Context budget warm-up (does not block)
-JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
 if [ -f "$JDI_LIB/jdi-monitor.sh" ]; then
-  bash "$JDI_LIB/jdi-monitor.sh" .jdi/PROJECT.md .jdi/DECISIONS.md .jdi/phases/{NN}*/CONTEXT.md || true
+  bash "$JDI_LIB/jdi-monitor.sh" .jdi/PROJECT.md .jdi/DECISIONS.md "$PHASE_DIR/CONTEXT.md" || true
 fi
-# Windows: pwsh -File "$JDI_LIB/jdi-monitor.ps1" -Paths @(...)
 ```
 
-### Step 2: Spawn planner
-Invoke `jdi-planner` with phase_number. Wait.
+PowerShell: `pwsh -File "$JDI_LIB/jdi-monitor.ps1" -Paths @(...)`.
 
-### Step 3: Verify
+### Step 4: Spawn planner
+Invoke `jdi-planner` with:
+- `phase_slug=$PHASE_SLUG`
+- `phase_dir=$PHASE_DIR`
+- `phase_position=$PHASE_POSITION`
+
+Wait.
+
+### Step 5: Verify
 ```bash
-test -f .jdi/phases/{NN}*/PLAN.md || { echo "PLAN.md not created"; exit 1; }
+test -f "$PHASE_DIR/PLAN.md" || { echo "PLAN.md not created"; exit 1; }
 ```
 
-### Step 4: Confirm
-Show plan summary + suggest `/jdi-do {N}`.
+### Step 6: Confirm
+Show plan summary + suggest `/jdi-do $PHASE_SLUG`.
 
 </process>
 
 <gates>
-- pre: `.jdi/PROJECT.md` + `.jdi/phases/{NN-slug}/CONTEXT.md` exist
+- pre: `.jdi/PROJECT.md` + `$PHASE_DIR/CONTEXT.md` exist
 - post: PLAN.md created + STATE.md updated + commit
 </gates>
 
 <errors>
-- CONTEXT.md missing -> suggest `/jdi-discuss {N}`
-- Phase does not exist in ROADMAP -> error
-- Planner cancelled -> exit clean
+- CONTEXT.md missing → suggest `/jdi-discuss $PHASE_SLUG`
+- Phase id not resolvable → exit with hint
+- Planner cancelled → exit clean
 </errors>

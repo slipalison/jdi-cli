@@ -1,7 +1,7 @@
 ---
 name: jdi-discuss
-description: Adaptive question loop to capture locked decisions before planning the phase.
-argument_hint: "<phase_number> [--auto]"
+description: Adaptive question loop to capture locked decisions before planning the phase. Accepts slug or position.
+argument_hint: "<slug|position> [--auto]"
 runtime_intent:
   invokes_agent: jdi-asker
 runtime_overrides:
@@ -16,7 +16,7 @@ runtime_overrides:
   antigravity:
     triggers:
       - "/jdi-discuss"
-      - "discuss phase {N}"
+      - "discuss phase"
       - "start phase discussion"
 ---
 
@@ -25,56 +25,84 @@ Capture locked decisions for the given phase. Output: CONTEXT.md consumed by the
 </objective>
 
 <arguments>
-- `phase_number` (required): phase number, e.g. `1`, `2`, `3.1`
+- `phase_id` (required): canonical slug (`auth-flow`), legacy slug (`02-auth-flow`), or integer position (`2`)
 - `--auto` (optional): asker decides everything, no questions. Use when phase is trivial.
 </arguments>
 
 <process>
 
 ### Step 1: Validation
-1. Confirm `.jdi/` exists. If not: "Run /jdi-new first."
-2. Confirm phase exists in ROADMAP.md. If not: "Phase {N} not found."
-3. Confirm CONTEXT.md does not yet exist for phase. If yes: ask "overwrite or skip?"
-
-### Step 2: Spawn asker
-Invoke `jdi-asker` with:
-- `phase_number={N}`
-- `mode=auto` if `--auto`, otherwise `mode=interactive`
-
-Agent runs its own process. Returns when CONTEXT.md is written.
-
-### Step 3: Commit
-After asker finishes:
 ```bash
-git add .jdi/phases/{NN-slug}/CONTEXT.md .jdi/DECISIONS.md .jdi/todos.md
-git commit -m "docs({NN-slug}): capture phase context"
+test -d .jdi/ || { echo "Not a JDI project. /jdi-new first."; exit 1; }
+
+JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
 ```
 
-### Step 4: Update state
+### Step 2: Resolve phase
+
+```bash
+eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$1") || {
+  echo "Phase '$1' not found in ROADMAP."
+  exit 1
+}
+
+PHASE_SLUG="$JDI_PHASE_SLUG"
+PHASE_DIR="$JDI_PHASE_DIR"
+PHASE_POSITION="$JDI_PHASE_POSITION"
+```
+
+PowerShell:
+```powershell
+$r = & "$JDI_LIB\jdi-resolve-phase.ps1" -Id $args[0] -AsObject
+$phaseSlug = $r.Slug; $phaseDir = $r.Dir; $phasePosition = $r.Position
+```
+
+### Step 3: Check existing CONTEXT.md
+
+If `$PHASE_DIR/CONTEXT.md` exists, ask: overwrite | skip | view.
+
+### Step 4: Spawn asker
+Invoke `jdi-asker` with:
+- `phase_slug=$PHASE_SLUG`
+- `phase_dir=$PHASE_DIR`
+- `phase_position=$PHASE_POSITION` (display only)
+- `mode=auto` if `--auto`, otherwise `mode=interactive`
+
+Agent runs its own process. Returns when CONTEXT.md is written to `$PHASE_DIR/CONTEXT.md`.
+
+### Step 5: Commit
+```bash
+git add "$PHASE_DIR/CONTEXT.md" .jdi/DECISIONS.md .jdi/todos.md 2>/dev/null
+git commit -m "docs($PHASE_SLUG): capture phase context"
+```
+
+### Step 6: Update state
 Edit `.jdi/STATE.md`:
-- `current_phase: {NN-slug}`
-- `next_step: /jdi-plan {N}`
+- `current_phase: $PHASE_POSITION` (legacy mirror, kept for v1 reading)
+- `current_phase_slug: $PHASE_SLUG`
+- `next_step: /jdi-plan $PHASE_SLUG`
 
 ```bash
 git add .jdi/STATE.md
-git commit -m "chore(state): phase {NN} discussed"
+git commit -m "chore(state): phase $PHASE_SLUG discussed"
 ```
 
-### Step 5: Confirm
+### Step 7: Confirm
 ```
 CONTEXT.md ok ({lines} lines, {count} decisions, {creep} in todos.md).
-Next: /jdi-plan {N}
+Next: /jdi-plan $PHASE_SLUG
 ```
 
 </process>
 
 <gates>
-- pre: `.jdi/` exists + phase listed in ROADMAP.md
+- pre: `.jdi/` exists + phase resolves via `jdi-resolve-phase.sh`
 - post: CONTEXT.md written + commit made + STATE.md updated
 </gates>
 
 <errors>
-- ROADMAP.md not found -> exit, suggest /jdi-new
-- CONTEXT.md already exists -> ask: overwrite | skip | view
-- jdi-asker fails -> no commit, no state update, show error
+- ROADMAP.md not found → exit, suggest /jdi-new
+- Phase id not resolvable → exit with hint
+- CONTEXT.md already exists → ask: overwrite | skip | view
+- jdi-asker fails → no commit, no state update, show error
 </errors>

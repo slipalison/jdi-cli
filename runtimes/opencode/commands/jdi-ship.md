@@ -1,7 +1,7 @@
 ---
 name: jdi-ship
-description: Finalizes phase after verify. Updates ROADMAP.md, marks phase as done, advances pointer to next.
-argument_hint: "<phase_number>"
+description: Finalizes phase after verify. Updates ROADMAP.md, marks phase as done, advances pointer to next. Accepts slug or position.
+argument_hint: "<slug|position>"
 runtime_intent:
   invokes_agent: none
 runtime_overrides:
@@ -14,7 +14,7 @@ runtime_overrides:
   antigravity:
     triggers:
       - "/jdi-ship"
-      - "finalize phase {N}"
+      - "finalize phase"
 ---
 
 <objective>
@@ -22,7 +22,7 @@ Finalizes phase after /jdi-verify approves. Updates ROADMAP.md (phase: done), ad
 </objective>
 
 <arguments>
-- `phase_number` (required)
+- `phase_id` (required): canonical slug, legacy slug, or integer position
 </arguments>
 
 <process>
@@ -30,106 +30,145 @@ Finalizes phase after /jdi-verify approves. Updates ROADMAP.md (phase: done), ad
 ### Step 1: Validation
 ```bash
 test -d .jdi/ || { echo "Not a JDI project."; exit 1; }
+JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
+```
+
+### Step 2: Resolve phase
+
+```bash
+eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$1") || { echo "Phase '$1' not found."; exit 1; }
+PHASE_SLUG="$JDI_PHASE_SLUG"
+PHASE_DIR="$JDI_PHASE_DIR"
+PHASE_POSITION="$JDI_PHASE_POSITION"
 
 # Verify REVIEW.md exists
-ls .jdi/phases/{NN}*/REVIEW.md 2>/dev/null || {
-  echo "REVIEW.md missing. /jdi-verify {N}."
+test -f "$PHASE_DIR/REVIEW.md" || {
+  echo "REVIEW.md missing. /jdi-verify $PHASE_SLUG."
   exit 1
 }
 
 # Read verdict
-VERDICT=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|BLOCKED)' .jdi/phases/{NN}*/REVIEW.md | awk '{print $2}')
+VERDICT=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|BLOCKED)' "$PHASE_DIR/REVIEW.md" | awk '{print $2}')
 
 if [ "$VERDICT" = "BLOCKED" ]; then
-  echo "Phase {N} BLOCKED. Fix before ship."
+  echo "Phase $PHASE_SLUG BLOCKED. Fix before ship."
   exit 1
 fi
 ```
 
-### Step 2: Confirm with user (only if WITH_WARNINGS)
+### Step 3: Confirm with user (only if WITH_WARNINGS)
 
 If `VERDICT=APPROVED_WITH_WARNINGS`:
 ```
-Phase {N} has uncorrected warnings. Ship anyway?
+Phase $PHASE_SLUG has uncorrected warnings. Ship anyway?
 - Yes, ship (warnings remain in REVIEW.md)
 - No, fix first
 ```
 
-If "No" -> exit clean.
+If "No" → exit clean.
 
-### Step 3: Update ROADMAP.md
+### Step 4: Update ROADMAP.md
 
-Edit `.jdi/ROADMAP.md`:
-- Phase {N}: `status: done`
-- Phase {N+1}: `status: ready` (if exists)
+Find the phase by `Slug:` value (canonical or legacy form). Edit:
+- This phase: `status: done`
+- Next phase (if any): `status: ready`
 
-If no phase {N+1}:
+```bash
+# Use awk to update only the phase block matching $PHASE_SLUG
+NEXT_POSITION=$((PHASE_POSITION + 1))
+```
+
+If no phase at NEXT_POSITION:
 ```
 All phases complete.
 Project delivered.
 ```
 
-### Step 4: Update STATE.md
+### Step 5: Resolve next phase slug
 
-```markdown
-current_phase: {N+1 or done}
-phase_status: ready (if {N+1} exists) or complete
-next_step: /jdi-discuss {N+1} or done
+```bash
+NEXT_PHASE_SLUG=""
+if eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$NEXT_POSITION" 2>/dev/null); then
+  NEXT_PHASE_SLUG="$JDI_PHASE_SLUG"
+fi
 ```
 
-### Step 5: Archive old phases (compaction)
+### Step 6: Update STATE.md
 
-Read `archive_after` from `.jdi/config.json` (default 5). If current phase advances to `N+1`, and a phase exists with number `<= (N+1) - archive_after`, move to `.jdi/archive/`.
+```markdown
+current_phase: {NEXT_POSITION or done}
+current_phase_slug: {NEXT_PHASE_SLUG or done}
+phase_status: ready (if next exists) or complete
+next_step: /jdi-discuss {NEXT_PHASE_SLUG} or done
+```
+
+### Step 7: Archive old phases (compaction)
+
+Read `archive_after` from `.jdi/config.json` (default 5). Phases with position `<= NEXT_POSITION - archive_after` move to `.jdi/archive/`.
 
 ```bash
 ARCHIVE_AFTER=5
-if [ -f .jdi/config.json ]; then
-  if command -v jq >/dev/null 2>&1; then
-    ARCHIVE_AFTER=$(jq -r '.compaction.archive_after // 5' .jdi/config.json)
-  fi
+if [ -f .jdi/config.json ] && command -v jq >/dev/null 2>&1; then
+  ARCHIVE_AFTER=$(jq -r '.compaction.archive_after // 5' .jdi/config.json)
 fi
 
-NEXT=$((N + 1))
-THRESHOLD=$((NEXT - ARCHIVE_AFTER))
+THRESHOLD=$((NEXT_POSITION - ARCHIVE_AFTER))
 
 if [ "$THRESHOLD" -ge 1 ]; then
   mkdir -p .jdi/archive
   test -f .jdi/archive/index.md || echo "# Archive index" > .jdi/archive/index.md
 
-  for dir in .jdi/phases/*/; do
-    NN=$(basename "$dir" | grep -oE '^[0-9]+' || true)
-    [ -z "$NN" ] && continue
-    NN_NUM=$((10#$NN))  # force decimal
-    if [ "$NN_NUM" -le "$THRESHOLD" ]; then
-      VERDICT_OLD=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|BLOCKED)' "$dir/REVIEW.md" 2>/dev/null | awk '{print $2}' || echo "UNKNOWN")
-      mv "$dir" .jdi/archive/
-      echo "- $(basename "$dir"): ${VERDICT_OLD} (archived $(date -u +%F))" >> .jdi/archive/index.md
-    fi
+  # Walk ROADMAP phases by position, archive folders whose position <= THRESHOLD
+  awk '
+    /^### Phase / {
+      line = $0
+      sub(/^### Phase /, "", line)
+      pos = line + 0
+      next
+    }
+    /^- \*\*Slug:\*\*/ {
+      slug = $0
+      sub(/^- \*\*Slug:\*\*[[:space:]]*/, "", slug)
+      print pos "|" slug
+    }
+  ' .jdi/ROADMAP.md | while IFS='|' read -r pos raw_slug; do
+    [ "$pos" -le "$THRESHOLD" ] || continue
+    eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$pos" 2>/dev/null) || continue
+    [ "$JDI_PHASE_FOLDER_EXISTS" = "true" ] || continue
+
+    VERDICT_OLD=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|BLOCKED)' "$JDI_PHASE_DIR/REVIEW.md" 2>/dev/null | awk '{print $2}' || echo "UNKNOWN")
+    mv "$JDI_PHASE_DIR" .jdi/archive/
+    echo "- $(basename "$JDI_PHASE_DIR"): $VERDICT_OLD (archived $(date -u +%F))" >> .jdi/archive/index.md
   done
 fi
-# Windows: equivalent in PowerShell — Move-Item + Add-Content
 ```
 
-Archived phases remain accessible via `.jdi/archive/` but exit the default read-path. Read-depth rule (`ARCHITECTURE.md > Read-depth scaling`) treats archive as `<= current - 2`.
+PowerShell equivalent uses `Move-Item` + `Add-Content` + the resolver `.ps1`. See `bin/lib/` mirror.
 
-### Step 6: Final commit
+Archived phases remain accessible via `.jdi/archive/` but exit the default read-path.
+
+### Step 8: Refresh manifest (v2 only)
+
+If `.jdi/phases.json` exists, regenerate from updated ROADMAP.
+
+### Step 9: Final commit
 
 ```bash
-git add .jdi/ROADMAP.md .jdi/STATE.md .jdi/archive/ 2>/dev/null
-git commit -m "feat({NN-slug}): ship phase {N} ({VERDICT})"
+git add .jdi/ROADMAP.md .jdi/STATE.md .jdi/archive/ .jdi/phases.json 2>/dev/null
+git commit -m "feat($PHASE_SLUG): ship phase ($VERDICT)"
 ```
 
 Optional tag (if PROJECT.md has `tag_phases: true`):
 ```bash
-git tag "phase-{N}-{slug}"
+git tag "phase-$PHASE_SLUG"
 ```
 
-### Step 7: Confirm
+### Step 10: Confirm
 
 ```
-Phase {N} shipped.
-{if more phases:} Next: /jdi-discuss {N+1}
-{if last:} Project delivered. Tag: phase-{N}-{slug}
+Phase $PHASE_SLUG shipped.
+{if more phases:} Next: /jdi-discuss $NEXT_PHASE_SLUG
+{if last:} Project delivered. Tag: phase-$PHASE_SLUG
 ```
 
 </process>
@@ -140,7 +179,7 @@ Phase {N} shipped.
 </gates>
 
 <errors>
-- REVIEW missing -> /jdi-verify
-- Verdict BLOCKED -> abort
-- Already shipped -> abort with warning
+- REVIEW missing → /jdi-verify
+- Verdict BLOCKED → abort
+- Already shipped → abort with warning
 </errors>

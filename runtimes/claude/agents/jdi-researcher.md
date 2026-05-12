@@ -177,27 +177,33 @@ total_phases: {N}
 ## Phases
 
 ### Phase 1: {feature 1 name}
-- **Slug:** 01-{slug}
+- **Slug:** {slug1}
 - **Status:** pending
 - **Goal:** {1-line description}
 
 ### Phase 2: {feature 2 name}
-- **Slug:** 02-{slug}
+- **Slug:** {slug2}
 - **Status:** pending
 - **Goal:** {1-line description}
 
 (... up to N)
 ```
 
+Slug values are canonical (no `NN-` prefix). Multi-developer parallel branches rely on slug uniqueness for safe merges; the numeric `### Phase N` heading is display-only and may be renumbered on insert/remove.
+
 ### Step 6: Generate initial state files
 
 ```markdown
 # .jdi/STATE.md
 project_slug: {slug}
+schema_version: 2
 specialists_ready: false
 current_phase: 1
+current_phase_slug: {slug1}
 next_step: /jdi-bootstrap
 ```
+
+`schema_version: 2` activates slug-as-ID. `current_phase_slug` is the canonical phase identifier; `current_phase` is kept as a display mirror.
 
 ```markdown
 # .jdi/DECISIONS.md
