@@ -31,26 +31,36 @@ core/                    <- shipped, generators (lives in JDI repo)
     reviewer-specialist.md   <- idem
 
 .jdi/                    <- per-project state (gerado por /jdi-new)
-  PROJECT.md, ROADMAP.md, DECISIONS.md, STATE.md
+  PROJECT.md, ROADMAP.md, DECISIONS.md, STATE.md (schema_version: 2)
   specialists.md, reviewers.md, registry.md
+  phases.json            <- v2 only: manifest position <-> slug (derived state)
   agents/                <- per-project specialists (gerado por /jdi-bootstrap)
     jdi-doer-{slug}.md
     jdi-reviewer-{slug}.md
-  phases/{NN-slug}/
+  phases/<slug>/         <- v2 layout (default novo)
     CONTEXT.md, PLAN.md, SUMMARY.md, REVIEW.md
+  phases/NN-<slug>/      <- v1 legacy layout (nunca renomeado pós-migração)
+
+bin/lib/                 <- helpers compartilhados (shipped via npm files whitelist)
+  jdi-resolve-phase.{sh,ps1}    <- int OR slug → {slug, dir, position, schema, exists}
+  jdi-validate-slug.{sh,ps1}    <- shape + reserved + --check-unique
+  jdi-monitor.{sh,ps1}          <- context budget warm-up
+  jdi-truncate.{sh,ps1}         <- max_chars enforce
 ```
 
 ## Ciclo de vida
 
 ```
-/jdi-new "<descricao>"   -> PROJECT.md + ROADMAP.md + STATE.md + DECISIONS.md
-/jdi-bootstrap           -> .jdi/agents/jdi-doer-{slug} + jdi-reviewer-{slug}
-/jdi-discuss N           -> phases/NN/CONTEXT.md
-/jdi-plan N              -> phases/NN/PLAN.md (tasks + waves)
-/jdi-do N                -> commits atomicos + phases/NN/SUMMARY.md
-/jdi-verify N            -> phases/NN/REVIEW.md (gates)
-/jdi-ship N              -> ROADMAP advance + tag (opcional) + STATE atualizado
+/jdi-new "<descricao>"          -> PROJECT.md + ROADMAP.md + STATE.md (schema v2) + DECISIONS.md
+/jdi-bootstrap                  -> .jdi/agents/jdi-doer-{slug} + jdi-reviewer-{slug}
+/jdi-discuss <slug|position>    -> phases/<slug>/CONTEXT.md
+/jdi-plan    <slug|position>    -> phases/<slug>/PLAN.md (tasks + waves)
+/jdi-do      <slug|position>    -> commits atomicos + phases/<slug>/SUMMARY.md
+/jdi-verify  <slug|position>    -> phases/<slug>/REVIEW.md (gates)
+/jdi-ship    <slug|position>    -> ROADMAP advance + tag (opcional) + STATE atualizado
 ```
+
+Phase ID dual: slug (canonical) ou posição int (display/legacy). Resolver (`bin/lib/jdi-resolve-phase.sh|.ps1`) normaliza para `{slug, dir, position, schema_version, folder_exists}`. v1 → v2 via `/jdi-migrate-phases` (non-destructive).
 
 Gates entre etapas:
 

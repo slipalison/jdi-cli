@@ -89,6 +89,28 @@ JDI core declara intent (`reasoning: medium`) — adapter traduz pra modelo conc
 
 JDI core formata pra atender o pior caso (Antigravity precisa triggers fortes) — outros runtimes ignoram o campo extra.
 
+## Phase ID schema (slug-as-ID)
+
+Schema v2 (default em projetos novos) usa **slug** como identificador canônico de phase em vez de número. Esse modelo é portável entre os 4 runtimes — não depende de feature específica de nenhum:
+
+- **STATE.md** carrega `schema_version: 2` + `current_phase_slug: <slug>`. Campo `current_phase` (int) mantido como display mirror.
+- **Folder** = `.jdi/phases/<slug>/` (v2) ou `.jdi/phases/NN-<slug>/` (v1 legacy preservado).
+- **Resolver** (`bin/lib/jdi-resolve-phase.{sh,ps1}`) normaliza qualquer input (int OR slug) para path resolvido. Cada command MD chama o resolver no Step 2 — invariante cross-runtime.
+- **Validator** (`bin/lib/jdi-validate-slug.{sh,ps1}`) impõe shape + reserved words + uniqueness antes de `/jdi-add-phase` criar phase.
+- **Triggers (Antigravity):** `/jdi-do auth-flow` e `/jdi-do 2` ambos disparam mesmo skill — prose triggers aceitam ambas formas.
+- **Comandos slash (Claude/Copilot/OpenCode):** `argument_hint: "<slug|position>"`.
+
+Multi-developer safety: dois devs em branches paralelos criando phases distintas (slugs diferentes) → folders disjuntos, merge limpo. Mesmo slug → conflito git explícito (sinal real, não silent overwrite).
+
+Migração v1 → v2: comando `/jdi-migrate-phases` (non-destructive). Por runtime:
+
+| Runtime | Como invocar | Notas |
+|---|---|---|
+| Claude Code | `/jdi-migrate-phases` | AskUserQuestion para confirmação |
+| Copilot | `/jdi-migrate-phases` | Sem AskUserQuestion — pode exigir `--yes` se prompt não suportado |
+| Antigravity | Triggers: `/jdi-migrate-phases`, `migrate phases`, `upgrade schema`, `schema v2` | Prose-based |
+| OpenCode | `/jdi-migrate-phases` | `subtask: true` no frontmatter |
+
 ## Estrutura de pastas
 
 ```
@@ -102,6 +124,7 @@ jdi/
 |   |   +-- jdi-architect.md      Opus  - meta (modo create + specialist)
 |   +-- commands/
 |   |   +-- jdi-new.md
+|   |   +-- jdi-adopt.md
 |   |   +-- jdi-bootstrap.md
 |   |   +-- jdi-discuss.md
 |   |   +-- jdi-plan.md
@@ -109,6 +132,10 @@ jdi/
 |   |   +-- jdi-verify.md
 |   |   +-- jdi-loop.md           ralph loop, dev<->review automatico
 |   |   +-- jdi-ship.md
+|   |   +-- jdi-status.md         snapshot read-only (sem agent)
+|   |   +-- jdi-add-phase.md      registra phase (slug-as-ID, multi-dev safe)
+|   |   +-- jdi-remove-phase.md   remove future/pending phase
+|   |   +-- jdi-migrate-phases.md v1 -> v2 non-destructive upgrade
 |   |   +-- jdi-create.md         (so contributors)
 |   +-- templates/
 |       +-- agent.md              base pra agent generico

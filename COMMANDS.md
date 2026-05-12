@@ -1,6 +1,8 @@
 # JDI — Commands
 
-9 comandos. 7 no loop principal + 1 ralph mode + 1 meta (`/jdi-create`).
+11 comandos. 7 no loop principal + roadmap mutation (2) + ralph mode (1) + migration (1) + meta (1).
+
+Todo comando que toma uma phase aceita **slug** (`auth-flow`, canonical) OU **posição inteira** (`2`, display). Slug é estável entre branches; posição renumera no insert/remove. Schema v2 usa slug-as-ID; projetos legacy v1 (numeric) continuam funcionando até rodar `/jdi-migrate-phases`.
 
 ## Loop principal
 
@@ -41,13 +43,14 @@ Faz:
 
 **Proximo:** `/jdi-discuss 1`
 
-### `/jdi-discuss <N> [--auto]`
+### `/jdi-discuss <slug|position> [--auto]`
 
 Captura decisoes locked da phase.
 
 ```
-/jdi-discuss 2
-/jdi-discuss 1 --auto    # asker decide tudo, sem perguntar
+/jdi-discuss auth-flow
+/jdi-discuss 2                       # também aceita posição (legacy/conveniência)
+/jdi-discuss auth-flow --auto        # asker decide tudo, sem perguntar
 ```
 
 Faz:
@@ -57,12 +60,12 @@ Faz:
    - Pergunta uma por vez (max 5 D-XX por sessao)
    - Captura cada resposta como D-XX em DECISIONS.md
    - Scope creep -> `.jdi/todos.md`
-   - Escreve `.jdi/phases/{NN-slug}/CONTEXT.md`
-3. Commit: `docs({NN-slug}): capture phase context`
+   - Escreve `.jdi/phases/{phase_dir}/CONTEXT.md`
+3. Commit: `docs({phase_dir}): capture phase context`
 
-**Proximo:** `/jdi-plan N`
+**Proximo:** `/jdi-plan <slug>`
 
-### `/jdi-plan <N> [--review]`
+### `/jdi-plan <slug|position> [--review]`
 
 Decompoe phase em tasks executaveis.
 
@@ -78,12 +81,12 @@ Faz:
    - Decompoe em tasks (max 8) com `files_modified` + `acceptance` + `dependencies` + `test`
    - Agrupa em waves (paralelo dentro, sequencial entre)
    - Self-check (toda task tem files_modified? wave grouping respeita deps?)
-   - Escreve `.jdi/phases/{NN-slug}/PLAN.md`
-3. Commit: `docs({NN-slug}): generate plan ({M} tasks, {W} waves)`
+   - Escreve `.jdi/phases/{phase_dir}/PLAN.md`
+3. Commit: `docs({phase_dir}): generate plan ({M} tasks, {W} waves)`
 
-**Proximo:** `/jdi-do N`
+**Proximo:** `/jdi-do <slug>`
 
-### `/jdi-do <N> [--sequential]`
+### `/jdi-do <slug|position> [--sequential]`
 
 Executa tasks da phase via doer specialist do projeto.
 
@@ -101,11 +104,11 @@ Faz:
    - Se paralelo: sequential dispatch (1 Agent por message com `run_in_background:true`)
    - Se sequencial: 1 doer por task em sequencia
 5. Doer atualiza status no PLAN.md, commita atomico, escreve SUMMARY.md final
-6. Commit final do orchestrator: `chore(state): phase {N} executed`
+6. Commit final do orchestrator: `chore(state): phase <slug> executed`
 
-**Proximo:** `/jdi-verify N`
+**Proximo:** `/jdi-verify <slug>`
 
-### `/jdi-verify <N>`
+### `/jdi-verify <slug|position>`
 
 Roda gates de qualidade via reviewer specialist.
 
@@ -119,15 +122,15 @@ Faz:
    - Gate 4: Lint/Format
    - Gate 5: Security/Perf rules da stack
    - Gate 6: Plan consistency (commits batem com files_modified)
-4. Reviewer escreve `.jdi/phases/{NN-slug}/REVIEW.md` com veredicto:
+4. Reviewer escreve `.jdi/phases/{phase_dir}/REVIEW.md` com veredicto:
    - APPROVED — todos gates PASS
    - APPROVED_WITH_WARNINGS — sem blockers, alguns warns
    - BLOCKED — gate 1-3 falhou OU gate 5 critical
-5. Commit: `docs({NN-slug}): verify phase ({VERDICT})`
+5. Commit: `docs({phase_dir}): verify phase ({VERDICT})`
 
-**Proximo:** `/jdi-ship N` (se nao BLOCKED) — ou `/jdi-loop N` se quiser auto-fix loop
+**Proximo:** `/jdi-ship <slug>` (se nao BLOCKED) — ou `/jdi-loop <slug>` se quiser auto-fix loop
 
-### `/jdi-loop <N> [--max-iter=5] [--max-resets=3]`
+### `/jdi-loop <slug|position> [--max-iter=5] [--max-resets=3]`
 
 **Ralph loop mode.** Roda `/jdi-do` -> `/jdi-verify` em ciclo automatico ate veredicto APPROVED. Sem acao humana entre iter. Cap absoluto: 5 iter por round x 3 resets = 15 iter.
 
@@ -138,7 +141,7 @@ Faz:
 
 Faz:
 1. Validacao: PLAN.md + doer + reviewer registrados
-2. Inicializa `.jdi/phases/{NN-slug}/LOOP.md` (ou retoma se existe)
+2. Inicializa `.jdi/phases/{phase_dir}/LOOP.md` (ou retoma se existe)
 3. Loop:
    - Spawn doer (com last REVIEW.md findings + LOOP history como contexto)
    - Spawn reviewer (read-only, escreve REVIEW.md)
@@ -165,21 +168,121 @@ Faz:
 - Phase com gates subjetivos
 - Specs vagas (vai oscilar)
 
-**Proximo:** `/jdi-ship N` (se converged) ou revisao humana (se killed/escalated/paused)
+**Proximo:** `/jdi-ship <slug>` (se converged) ou revisao humana (se killed/escalated/paused)
 
-### `/jdi-ship <N>`
+### `/jdi-ship <slug|position>`
 
 Finaliza phase, avanca pra proxima.
 
 Faz:
 1. Validacao: REVIEW.md existe + veredicto != BLOCKED
 2. Se WITH_WARNINGS: pergunta "ship mesmo assim?"
-3. Atualiza ROADMAP.md (phase {N}: status `done`, phase {N+1}: status `ready`)
-4. Atualiza STATE.md (current_phase: {N+1})
-5. Commit: `feat({NN-slug}): ship phase {N} ({VERDICT})`
-6. Tag opcional: `phase-{N}-{slug}` (se PROJECT.md tem `tag_phases: true`)
+3. Atualiza ROADMAP.md (phase corrente: status `done`, próxima phase: status `ready`)
+4. Atualiza STATE.md (`current_phase` + `current_phase_slug` apontam pra próxima)
+5. Commit: `feat(<slug>): ship phase ({VERDICT})`
+6. Tag opcional: `phase-<slug>` (se PROJECT.md tem `tag_phases: true`)
 
-**Proximo:** `/jdi-discuss <N+1>` (ou done)
+**Proximo:** `/jdi-discuss <next-slug>` (ou done)
+
+## Roadmap mutation
+
+### `/jdi-add-phase "<name>" [--goal "<text>"] [--slug <slug>] [--before <slug>|--after <slug>] [--reason "<text>"]`
+
+Registra nova phase em ROADMAP.md. **Slug-as-ID** — validação rígida + uniqueness antes de qualquer write. Multi-developer safe.
+
+```
+/jdi-add-phase "User authentication" --goal "Login + signup + JWT"
+/jdi-add-phase "Payments" --slug payments --after auth-flow
+/jdi-add-phase "Hotfix" --before payments
+```
+
+Faz:
+1. Validação: `.jdi/STATE.md` + `.jdi/ROADMAP.md` existem
+2. Detecta `schema_version` (em v1 avisa pra rodar `/jdi-migrate-phases`)
+3. Deriva slug do `name` (ou usa `--slug` se passado)
+4. Valida slug via `bin/lib/jdi-validate-slug.sh --check-unique`:
+   - Shape: `[a-z][a-z0-9-]{2,39}`, sem `--`, sem trailing `-`
+   - Reserved words: `current`, `all`, `archive`, `removed`, `history`, `latest`, `pending`, `ready`, `done`, `blocked`, `partial`
+   - Uniqueness vs `.jdi/phases/` + ROADMAP entries
+5. Resolve posição de insert (`--before`/`--after`/append). Recusa `<= current_phase`.
+6. Escreve em ROADMAP.md (header + Slug + Status + Goal)
+7. Recomputa `total_phases`
+8. Regenera `.jdi/phases.json` (v2)
+9. Commit: `chore(jdi): add phase <slug>`
+
+Legacy `--at <pos>` (integer) aceito **apenas em v1**; rejeitado em v2 com hint para usar `--before`/`--after` (posições mudam entre branches, slugs não).
+
+**Proximo:** `/jdi-discuss <slug>` (quando pronto pra iniciar)
+
+### `/jdi-remove-phase <slug|position> [--force]`
+
+Remove phase pendente/future de ROADMAP.md. Recusa em current/past/done.
+
+```
+/jdi-remove-phase auth-flow
+/jdi-remove-phase 4 --force        # com artifacts -> arquiva, não deleta
+```
+
+Faz:
+1. Resolve phase via `bin/lib/jdi-resolve-phase.sh`
+2. Hard refuses:
+   - `position < current_phase` → past = history
+   - `position == current_phase` → ship/abandona primeiro
+   - `status == done` → shipped = history
+3. Se artifacts existem: requer `--force` (ou aborta com hint)
+4. AskUserQuestion confirma (sempre, mesmo com --force)
+5. Move folder pra `.jdi/archive/removed-<slug>/` (preserve history)
+6. Remove block do ROADMAP, renumera display headings, recomputa `total_phases`
+7. Append em DECISIONS.md (audit trail)
+8. Commit: `chore(jdi): remove phase <slug>`
+
+Slugs das phases remanescentes **nunca mudam**.
+
+## Continuity
+
+### `/jdi-status`
+
+Read-only snapshot. Sem agent invoke. Safe anytime.
+
+Imprime:
+- Project + schema_version
+- Current phase (slug + posição + nome)
+- Phase status + verdict
+- Último artefato (REVIEW/SUMMARY/PLAN/CONTEXT)
+- Último commit + commits hoje
+- Next step (exato comando a rodar)
+
+Útil para retomar sessão após break.
+
+## Migration
+
+### `/jdi-migrate-phases [--dry-run] [--force]`
+
+Upgrade non-destructive de v1 (numeric IDs) → v2 (slug-as-ID). Idempotente.
+
+```
+/jdi-migrate-phases --dry-run    # mostra plano, escreve nada
+/jdi-migrate-phases              # confirma + escreve
+```
+
+Faz:
+1. Validação: `.jdi/STATE.md` + `.jdi/ROADMAP.md` existem; working tree limpo (ou `--force`)
+2. Detecta `schema_version` — se já v2, exit 0 (no-op)
+3. **Audit (sempre, mesmo com --force)** antes de qualquer write:
+   - **C1** — Folder/ROADMAP parity (folder slug == ROADMAP slug)
+   - **C2** — No duplicate canonical slugs (`01-foo/` E `foo/` = corrupt)
+   - **C3** — All existing slugs pass shape validation
+   - **C4** — Orphan folders sem ROADMAP entry → warn (não bloqueia)
+4. Mostra plano (sempre — dry-run ou não):
+   - Schema 1 → 2
+   - N phases, M folders preservados
+   - Manifesto `.jdi/phases.json` (novo)
+5. AskUserQuestion confirma (skip se --dry-run)
+6. Escreve `.jdi/phases.json` (mapping position ↔ slug, flag `legacy: true` em folders v1)
+7. Atualiza STATE.md (`schema_version: 2` + `current_phase_slug: <resolved>`)
+8. Commit: `chore(jdi): migrate to schema v2 (slug-as-ID)`
+
+**Invariante:** folders existentes nunca são renomeados. Git history references preservadas.
 
 ## Comando meta
 
@@ -209,17 +312,24 @@ Faz:
 ## Resumo visual
 
 ```
-/jdi-new        --> .jdi/{PROJECT,ROADMAP,STATE,DECISIONS}.md + .gitattributes
-/jdi-bootstrap  --> .jdi/agents/{jdi-doer-{slug},jdi-reviewer-{slug}}.md + routing
-/jdi-discuss N  --> .jdi/phases/{NN}/CONTEXT.md
-/jdi-plan N     --> .jdi/phases/{NN}/PLAN.md
-/jdi-do N       --> commits atomicos + .jdi/phases/{NN}/SUMMARY.md
-/jdi-verify N   --> .jdi/phases/{NN}/REVIEW.md
-/jdi-loop N     --> ralph mode: do<->verify auto + .jdi/phases/{NN}/LOOP.md
-/jdi-ship N     --> ROADMAP advance + tag (opcional)
+/jdi-new                  --> .jdi/{PROJECT,ROADMAP,STATE,DECISIONS}.md + .gitattributes (schema v2)
+/jdi-bootstrap            --> .jdi/agents/{jdi-doer-{slug},jdi-reviewer-{slug}}.md + routing
+/jdi-discuss <slug>       --> .jdi/phases/<slug>/CONTEXT.md
+/jdi-plan    <slug>       --> .jdi/phases/<slug>/PLAN.md
+/jdi-do      <slug>       --> commits atomicos + .jdi/phases/<slug>/SUMMARY.md
+/jdi-verify  <slug>       --> .jdi/phases/<slug>/REVIEW.md
+/jdi-loop    <slug>       --> ralph mode: do<->verify auto + .jdi/phases/<slug>/LOOP.md
+/jdi-ship    <slug>       --> ROADMAP advance + tag (opcional)
 
-/jdi-create     --> [internal] core/agents/* ou core/skills/* (so no repo JDI)
+/jdi-add-phase "<name>"   --> registra nova phase (slug-as-ID, multi-dev safe)
+/jdi-remove-phase <slug>  --> remove future/pending phase + arquiva artifacts
+/jdi-status               --> snapshot read-only (sem agent)
+/jdi-migrate-phases       --> v1 → v2 non-destructive upgrade
+
+/jdi-create               --> [internal] core/agents/* ou core/skills/* (so no repo JDI)
 ```
+
+Em v2 (default novo), folders são `.jdi/phases/<slug>/`. Em v1 legacy preservado, folders ficam `.jdi/phases/NN-<slug>/` — resolver detecta ambos.
 
 ## Flags globais
 
@@ -229,6 +339,12 @@ Faz:
 - `--max-iter=N` (em `/jdi-loop`): max iter por round antes de human gate (default 5)
 - `--max-resets=N` (em `/jdi-loop`): max rounds de reset antes do kill switch (default 3)
 - `--reset` (em `/jdi-new`): apaga `.jdi/` antes de iniciar (CUIDADO)
+- `--slug <slug>` (em `/jdi-add-phase`): override do slug derivado do name
+- `--before <slug>` / `--after <slug>` (em `/jdi-add-phase`): insert posicional sem race condition entre branches (substitui `--at <int>` em v2)
+- `--reason "<text>"` (em `/jdi-add-phase`): audit em DECISIONS.md
+- `--force` (em `/jdi-remove-phase`): permite remoção com artifacts (arquiva)
+- `--dry-run` (em `/jdi-migrate-phases`): mostra plano, escreve nada
+- `--force` (em `/jdi-migrate-phases`): bypass clean-tree gate (audit C1-C3 sempre roda)
 
 ## Idempotencia
 
