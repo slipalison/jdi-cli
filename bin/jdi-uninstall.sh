@@ -15,6 +15,14 @@ set -euo pipefail
 PROJECT_DIR="$(pwd)"
 USER_HOME="${HOME:-$HOME}"
 
+# Skills universais shipped pelo JDI (runtimes/<rt>/skills/). Mantenha em sync com o ship.
+UNIVERSAL_SKILLS=(
+  clean-architecture clean-code ddd dry
+  frontend-rules frontend-validator
+  hexagonal kiss onion solid
+  the-method vertical-slice yagni
+)
+
 RUNTIME="all"
 SCOPE="both"
 PURGE=0
@@ -80,7 +88,7 @@ uninstall_claude() {
     fi
 
     if [[ -d "$dir/skills" ]]; then
-      for skill in frontend-rules frontend-validator dry kiss yagni solid clean-code; do
+      for skill in "${UNIVERSAL_SKILLS[@]}"; do
         remove_safe "$dir/skills/$skill" "skills/$skill/"
       done
     fi
@@ -141,7 +149,7 @@ uninstall_antigravity() {
         [[ -d "$sd" ]] && remove_safe "$sd" "skills/$(basename "$sd")/"
       done
       # universais
-      for skill in frontend-rules frontend-validator dry kiss yagni solid clean-code; do
+      for skill in "${UNIVERSAL_SKILLS[@]}"; do
         remove_safe "$dir/skills/$skill" "skills/$skill/"
       done
     fi
@@ -181,7 +189,7 @@ uninstall_opencode() {
     fi
 
     if [[ -d "$dir/skills" ]]; then
-      for skill in frontend-rules frontend-validator dry kiss yagni solid clean-code; do
+      for skill in "${UNIVERSAL_SKILLS[@]}"; do
         remove_safe "$dir/skills/$skill" "skills/$skill/"
       done
     fi

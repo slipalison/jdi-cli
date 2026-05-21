@@ -25,10 +25,13 @@ install_claude() {
   else
     dest="$PWD/.claude"
   fi
-  mkdir -p "$dest/agents" "$dest/commands"
+  mkdir -p "$dest/agents" "$dest/commands" "$dest/skills"
 
   cp -R "$ROOT/runtimes/claude/agents/." "$dest/agents/"
   cp -R "$ROOT/runtimes/claude/commands/." "$dest/commands/"
+  if [[ -d "$ROOT/runtimes/claude/skills" ]]; then
+    cp -R "$ROOT/runtimes/claude/skills/." "$dest/skills/"
+  fi
 
   if [[ "$SCOPE" == "project" ]]; then
     cp "$ROOT/runtimes/claude/CLAUDE.md" "$PWD/CLAUDE.md"

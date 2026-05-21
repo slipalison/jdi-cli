@@ -50,6 +50,14 @@ $ErrorActionPreference = 'Stop'
 $ProjectDir = (Get-Location).Path
 $UserHome = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
 
+# Skills universais shipped pelo JDI (runtimes/<rt>/skills/). Mantenha em sync com o ship.
+$UniversalSkills = @(
+  'clean-architecture','clean-code','ddd','dry',
+  'frontend-rules','frontend-validator',
+  'hexagonal','kiss','onion','solid',
+  'the-method','vertical-slice','yagni'
+)
+
 function Confirm-Action {
   param([string]$Message)
   if ($Yes) { return $true }
@@ -105,7 +113,7 @@ function Uninstall-Claude {
     # Remove skills shipped
     $skillsDir = Join-Path $t.Dir 'skills'
     if (Test-Path $skillsDir) {
-      foreach ($skillName in @('frontend-rules','frontend-validator','dry','kiss','yagni','solid','clean-code')) {
+      foreach ($skillName in $UniversalSkills) {
         $sd = Join-Path $skillsDir $skillName
         Remove-Item-Safe $sd "skills/$skillName/"
       }
@@ -174,7 +182,7 @@ function Uninstall-Antigravity {
         Remove-Item-Safe $_.FullName "skills/$($_.Name)/"
       }
       # Remove skills universais
-      foreach ($skillName in @('frontend-rules','frontend-validator','dry','kiss','yagni','solid','clean-code')) {
+      foreach ($skillName in $UniversalSkills) {
         $sd = Join-Path $skillsDir $skillName
         Remove-Item-Safe $sd "skills/$skillName/"
       }
@@ -222,7 +230,7 @@ function Uninstall-Opencode {
 
     $skillsDir = Join-Path $t.Dir 'skills'
     if (Test-Path $skillsDir) {
-      foreach ($skillName in @('frontend-rules','frontend-validator','dry','kiss','yagni','solid','clean-code')) {
+      foreach ($skillName in $UniversalSkills) {
         $sd = Join-Path $skillsDir $skillName
         Remove-Item-Safe $sd "skills/$skillName/"
       }

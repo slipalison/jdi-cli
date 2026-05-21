@@ -43,9 +43,11 @@ function Install-Claude {
   $dest = if ($Scope -eq 'user') { Join-Path $UserHome '.claude' } else { Join-Path $ProjectDir '.claude' }
   New-Item -ItemType Directory -Force -Path "$dest\agents" | Out-Null
   New-Item -ItemType Directory -Force -Path "$dest\commands" | Out-Null
+  New-Item -ItemType Directory -Force -Path "$dest\skills" | Out-Null
 
   Copy-Tree -From "$Root\runtimes\claude\agents" -To "$dest\agents"
   Copy-Tree -From "$Root\runtimes\claude\commands" -To "$dest\commands"
+  Copy-Tree -From "$Root\runtimes\claude\skills" -To "$dest\skills"
 
   if ($Scope -eq 'project') {
     if (Test-Path "$Root\runtimes\claude\CLAUDE.md") {
