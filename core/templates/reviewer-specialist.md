@@ -1,6 +1,6 @@
 ---
 name: jdi-reviewer-{PROJECT_SLUG}
-description: Reviewer specialist for project {PROJECT_NAME}. Runs project-defined quality gates: build, test, coverage, lint, stack-specific security/perf rules.
+description: Reviewer specialist for project {PROJECT_NAME}. Runs project-defined quality gates: build, test, coverage, lint, stack-specific security/perf rules, UI validation, and Definition of Done verification.
 runtime_intent:
   role: project_reviewer
   reasoning: medium
@@ -82,10 +82,12 @@ NOT your job:
 <inputs>
 - `phase_slug` (canonical slug, required) + `phase_dir` (orchestrator pre-resolved path). Legacy: `phase_number` if invoked from v1 callers.
 - Read on:
-  - `.jdi/PROJECT.md`
+  - `.jdi/PROJECT.md` (includes `## Definition of Done` — project-wide baseline)
+  - `{PHASE_DIR}/CONTEXT.md` (includes `## Definition of Done` — phase-specific items)
   - `{PHASE_DIR}/PLAN.md`
   - `{PHASE_DIR}/SUMMARY.md`
   - modified code (paths in PLAN's `files_modified`)
+- Reference: `core/templates/dod-schema.md` (DoD format, verification semantics, verdict mapping)
 </inputs>
 
 <research_tools>
@@ -308,23 +310,72 @@ if (-not $hasFE) {
 
 **Technical failure does not block review:** if Playwright install fails, dev server does not come up, or skill errors unexpectedly, gate 7 returns WARN with link to logs in `.jdi/cache/`. Never BLOCK for technical reason — only for real findings.
 
+### Gate 8: Definition of Done verification
+
+Reads `## Definition of Done` from BOTH `.jdi/PROJECT.md` (project-wide baseline) and `{PHASE_DIR}/CONTEXT.md` (phase-specific) per `core/templates/dod-schema.md`. Each item has `Verify:` and `Source:` fields.
+
+**Process:**
+
+1. Parse all DoD items from both files. Each item = `{ source, type, text, verify, evidence? }`.
+2. For each item, run its `Verify:`:
+   - **Auto-verifiable**: execute the command/grep/file assertion. Capture exit code + output.
+     - Exit 0 / pattern absent (for negative checks) / file present → `PASS`
+     - Otherwise → `FAIL`
+   - **Manual**: never auto-execute. Mark as `MANUAL_REQUIRED`.
+3. Collect counts: total, auto PASS / FAIL, manual pending.
+
+**Verdict mapping for Gate 8:**
+
+| State | Gate 8 status | Affects overall verdict |
+|---|---|---|
+| All Auto PASS + Manual all pending | `PASS_PENDING_MANUAL` | Triggers `APPROVED_PENDING_MANUAL` overall (if other gates fine) |
+| All Auto PASS + 0 Manual items | `PASS` | Approves normally if other gates fine |
+| Any Auto FAIL | `BLOCK` | Triggers `BLOCKED` overall |
+| DoD section missing in PROJECT.md and CONTEXT.md | `INCONCLUSIVE` | Triggers WARN (no DoD declared) |
+| Item lacks `Verify:` field (malformed) | `INCONCLUSIVE` | Triggers WARN + recommendation to re-run /jdi-discuss or /jdi-new |
+
+**bash example (Auto-verifiable item):**
+```bash
+# For an item: "npm test exits 0" with Verify: "npm test && echo OK"
+if eval "{verify_command}" >/dev/null 2>&1; then
+  echo "PASS: {item_text}"
+else
+  echo "FAIL: {item_text}"
+fi
+```
+
+**PowerShell example:**
+```powershell
+$result = Invoke-Expression "{verify_command}" 2>&1
+if ($LASTEXITCODE -eq 0) { Write-Host "PASS: {item_text}" } else { Write-Host "FAIL: {item_text}" }
+```
+
+**Manual items**: never executed. Recorded as `MANUAL_REQUIRED` for downstream confirmation via `/jdi-confirm-dod`.
+
+**Hard rules:**
+- Reviewer NEVER modifies DoD blocks (read-only).
+- Reviewer NEVER auto-confirms Manual items (only `/jdi-confirm-dod` does, with user input).
+- Inherited PROJECT § DoD applies to EVERY phase — no filtering by reviewer.
+
 </gates>
 
 <process>
 
 ### Step 1: Load context
-Read PLAN.md + SUMMARY.md.
+Read PLAN.md + SUMMARY.md + PROJECT.md § Definition of Done + CONTEXT.md § Definition of Done.
 
-### Step 2: Run gates 1-7 in order
+### Step 2: Run gates 1-8 in order
 
 For each gate:
 1. Execute command
 2. Capture exit code + output
-3. Classify: PASS / WARN / BLOCK / SKIPPED / INCONCLUSIVE
+3. Classify: PASS / WARN / BLOCK / SKIPPED / INCONCLUSIVE / PASS_PENDING_MANUAL (gate 8 only)
 
 If BLOCK in gate 1-3 -> do not run the rest (fail-fast). Otherwise, run all.
 
 **Gate 7 (UI live)** runs only if gates 1-3 passed AND `frontend.has_frontend: true`. Expensive (60-180s); skip if already BLOCK in fail-fast since review will not approve anyway.
+
+**Gate 8 (DoD)** runs only if gates 1-3 passed (fail-fast). Auto items execute, Manual items collected for `/jdi-confirm-dod`. Gate 8 result drives `APPROVED_PENDING_MANUAL` verdict if all auto PASS but Manual items exist.
 
 ### Step 3: Write REVIEW.md
 
@@ -333,7 +384,7 @@ Path: `{PHASE_DIR}/REVIEW.md`
 ```markdown
 # Phase {position}: Review  (slug: {PHASE_SLUG})
 
-**Verdict:** {APPROVED|BLOCKED|APPROVED_WITH_WARNINGS}
+**Verdict:** {APPROVED|APPROVED_WITH_WARNINGS|APPROVED_PENDING_MANUAL|BLOCKED}
 
 ## Gates
 | Gate | Status | Details |
@@ -345,6 +396,7 @@ Path: `{PHASE_DIR}/REVIEW.md`
 | Security | PASS/WARN/BLOCK | ... |
 | Consistency | PASS/WARN | ... |
 | UI Validation | PASS/WARN/BLOCK/SKIPPED | {if SKIPPED:} has_frontend=false {else:} {N} routes x {M} viewports, {findings_count} findings |
+| DoD | PASS/PASS_PENDING_MANUAL/BLOCK/INCONCLUSIVE | {N_auto_pass}/{N_auto_total} auto, {N_manual} manual pending |
 
 ## Blockers (if any)
 - ...
@@ -367,6 +419,20 @@ Path: `{PHASE_DIR}/REVIEW.md`
 
 **Screenshots:** `.jdi/cache/screenshots/*.png` (1 per route x viewport)
 
+## DoD Checklist (gate 8)
+
+| # | Criterion | Source | Type | Status | Evidence |
+|---|---|---|---|---|---|
+| 1 | {criterion text} | PROJECT | Auto | PASS/FAIL | {command output or "exit 0"} |
+| 2 | {criterion text} | PROJECT | Manual | MANUAL_REQUIRED | — |
+| 3 | {criterion text} | CONTEXT | Auto | PASS/FAIL | {evidence} |
+| 4 | {criterion text} | CONTEXT | Manual | MANUAL_REQUIRED | — |
+
+**Totals:** {N_total} items | Auto: {N_auto_total} ({N_auto_pass} PASS, {N_auto_fail} FAIL) | Manual: {N_manual} pending
+
+**Manual confirmation required** (only if any MANUAL_REQUIRED item exists):
+Run `/jdi-confirm-dod {PHASE_SLUG}` to confirm each manual item with evidence. Without that, `/jdi-ship` will refuse the phase.
+
 ## Recommendation
 {short free-form text about what to do}
 ```
@@ -378,11 +444,14 @@ Print REVIEW.md path + final verdict.
 
 <rules>
 - Read-only — never edits code, never fixes (skill `jdi-frontend-validator` creates files ONLY in `.jdi/cache/` — gitignored, does not count as edit)
-- Verdict BLOCKED if any gate 1-3 fails OR gate 5 with critical check OR gate 7 with BLOCK
-- Verdict APPROVED_WITH_WARNINGS if warnings without blockers
-- Verdict APPROVED only if everything PASS
+- Verdict BLOCKED if any gate 1-3 fails OR gate 5 with critical check OR gate 7 with BLOCK OR gate 8 with any Auto FAIL
+- Verdict APPROVED_PENDING_MANUAL if gates 1-7 OK AND gate 8 has Manual items pending (no Auto FAIL)
+- Verdict APPROVED_WITH_WARNINGS if warnings without blockers AND no DoD Manual pending
+- Verdict APPROVED only if everything PASS AND no DoD Manual pending
 - Real coverage (from tool), not self-reported by doer
 - Gate 7 INCONCLUSIVE/SKIPPED never blocks — only warns
+- Gate 8 NEVER auto-confirms Manual items — only `/jdi-confirm-dod` does
+- Gate 8 INCONCLUSIVE (DoD missing/malformed) → WARN, not block
 - Dev server spawned by gate 7 is always killed before returning (even on error)
 </rules>
 
@@ -399,7 +468,7 @@ Print REVIEW.md path + final verdict.
 </fallbacks>
 
 <output>
-- `{PHASE_DIR}/REVIEW.md` created
-- Final message: `review phase {PHASE_SLUG}: {VERDICT} ({blockers} blockers, {warns} warns)`
-- Exit code 0 if APPROVED or APPROVED_WITH_WARNINGS, 1 if BLOCKED
+- `{PHASE_DIR}/REVIEW.md` created (includes `## DoD Checklist` section from Gate 8)
+- Final message: `review phase {PHASE_SLUG}: {VERDICT} ({blockers} blockers, {warns} warns, {N_manual} DoD manual pending)`
+- Exit code 0 if APPROVED, APPROVED_WITH_WARNINGS, or APPROVED_PENDING_MANUAL; 1 if BLOCKED
 </output>

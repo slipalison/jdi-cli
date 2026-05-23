@@ -1,6 +1,6 @@
 ---
 name: jdi-verify
-description: Runs phase quality gates via reviewer specialist. Build, tests, coverage, lint, security checks. Verdict APPROVED / APPROVED_WITH_WARNINGS / BLOCKED. Accepts slug or position.
+description: Runs phase quality gates via reviewer specialist. Build, tests, coverage, lint, security checks, UI validation, Definition of Done. Verdict APPROVED / APPROVED_WITH_WARNINGS / APPROVED_PENDING_MANUAL / BLOCKED. Accepts slug or position.
 argument_hint: "<slug|position>"
 runtime_intent:
   invokes_agent: dynamic
@@ -105,11 +105,13 @@ Reviewers are read-only. Wait for completion before next.
 ```bash
 test -f "$PHASE_DIR/REVIEW.md" || { echo "REVIEW.md not created"; exit 1; }
 
-VERDICTS=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|BLOCKED)' "$PHASE_DIR/REVIEW.md" | awk '{print $2}')
+VERDICTS=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|APPROVED_PENDING_MANUAL|BLOCKED)' "$PHASE_DIR/REVIEW.md" | awk '{print $2}')
 
-# Worst-case wins: BLOCK > WARNINGS > APPROVED
+# Worst-case wins: BLOCK > PENDING_MANUAL > WARNINGS > APPROVED
 if echo "$VERDICTS" | grep -q BLOCKED; then
   VERDICT=BLOCKED
+elif echo "$VERDICTS" | grep -q APPROVED_PENDING_MANUAL; then
+  VERDICT=APPROVED_PENDING_MANUAL
 elif echo "$VERDICTS" | grep -q APPROVED_WITH_WARNINGS; then
   VERDICT=APPROVED_WITH_WARNINGS
 else
@@ -122,9 +124,9 @@ fi
 ```markdown
 current_phase: $PHASE_POSITION
 current_phase_slug: $PHASE_SLUG
-phase_status: {verified|blocked}
-phase_verdict: {APPROVED|APPROVED_WITH_WARNINGS|BLOCKED}
-next_step: {if APPROVED or WITH_WARNINGS: /jdi-ship $PHASE_SLUG; if BLOCKED: fix and /jdi-do $PHASE_SLUG again}
+phase_status: {verified|blocked|pending_manual_dod}
+phase_verdict: {APPROVED|APPROVED_WITH_WARNINGS|APPROVED_PENDING_MANUAL|BLOCKED}
+next_step: {if APPROVED or WITH_WARNINGS: /jdi-ship $PHASE_SLUG; if PENDING_MANUAL: /jdi-confirm-dod $PHASE_SLUG; if BLOCKED: fix and /jdi-do $PHASE_SLUG again}
 ```
 
 ```bash
@@ -144,6 +146,14 @@ Phase $PHASE_SLUG: APPROVED. Next: /jdi-ship $PHASE_SLUG
 Phase $PHASE_SLUG: APPROVED_WITH_WARNINGS ({count} warnings).
 REVIEW.md: $PHASE_DIR/REVIEW.md
 Next: /jdi-ship $PHASE_SLUG (or fix first)
+```
+
+**APPROVED_PENDING_MANUAL:**
+```
+Phase $PHASE_SLUG: APPROVED_PENDING_MANUAL ({N} DoD manual items pending).
+All auto gates passed; manual DoD items need explicit confirmation before ship.
+REVIEW.md: $PHASE_DIR/REVIEW.md
+Next: /jdi-confirm-dod $PHASE_SLUG
 ```
 
 **BLOCKED:**
