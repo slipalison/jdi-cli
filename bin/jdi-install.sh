@@ -25,13 +25,18 @@ install_claude() {
   else
     dest="$PWD/.claude"
   fi
-  mkdir -p "$dest/agents" "$dest/commands" "$dest/skills"
+  mkdir -p "$dest/agents" "$dest/commands" "$dest/skills" "$dest/hooks"
 
   cp -R "$ROOT/runtimes/claude/agents/." "$dest/agents/"
   cp -R "$ROOT/runtimes/claude/commands/." "$dest/commands/"
   if [[ -d "$ROOT/runtimes/claude/skills" ]]; then
     cp -R "$ROOT/runtimes/claude/skills/." "$dest/skills/"
   fi
+
+  # Hooks: copy update-notifier scripts (jdi-check-update.js, worker, banner).
+  # Additive only — settings.json is NEVER modified by install. User opts in
+  # via `jdi enable-update-check`.
+  install_jdi_hooks "$dest/hooks"
 
   if [[ "$SCOPE" == "project" ]]; then
     cp "$ROOT/runtimes/claude/CLAUDE.md" "$PWD/CLAUDE.md"
@@ -43,6 +48,33 @@ install_claude() {
   fi
 
   echo "Claude Code instalado em: $dest (scope=$SCOPE)"
+  echo "  -> hooks copiados pra $dest/hooks/ (opt-in via: npx jdi-cli enable-update-check)"
+}
+
+# Copy update-notifier hooks to <runtime-dir>/hooks/ and stamp the installed
+# version. settings.json is NOT touched — opt-in via `jdi enable-update-check`.
+install_jdi_hooks() {
+  local hooks_dest="$1"
+  mkdir -p "$hooks_dest"
+
+  local pkg_version
+  pkg_version=$(node -p "require('$ROOT/package.json').version" 2>/dev/null)
+  if [[ -z "$pkg_version" ]]; then
+    pkg_version=$(grep -oE '"version":[[:space:]]*"[^"]+"' "$ROOT/package.json" | head -1 | sed 's/.*"\([^"]*\)"/\1/')
+  fi
+
+  for hook in jdi-check-update.js jdi-check-update-worker.js jdi-update-banner.js; do
+    local src="$ROOT/bin/lib/$hook"
+    local dst="$hooks_dest/$hook"
+    if [[ -f "$src" ]]; then
+      # Strip BOM (line 1) + substitute {{JDI_VERSION}}. Node refuses BOM before shebang.
+      sed -e '1s/^\xEF\xBB\xBF//' -e "s/{{JDI_VERSION}}/$pkg_version/g" "$src" > "$dst"
+      chmod +x "$dst" 2>/dev/null || true
+    fi
+  done
+
+  # Stamp JDI_VERSION sibling file via printf — no BOM, no trailing newline
+  printf '%s' "$pkg_version" > "$hooks_dest/JDI_VERSION"
 }
 
 install_copilot() {

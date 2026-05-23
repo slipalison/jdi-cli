@@ -5,6 +5,30 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.10] - 2026-05-23
+
+### Added — Update notifier (opt-in)
+- `bin/lib/jdi-check-update.js` — SessionStart hook entry. Spawns detached worker, exits immediately. Never blocks session start.
+- `bin/lib/jdi-check-update-worker.js` — background worker. Reads installed version (env var → sibling `JDI_VERSION` file → walk-up package.json). Fetches `npm view jdi-cli version`. Custom semver compare. Writes cache to `~/.cache/jdi/jdi-update-check.json`. Fails silent on any error.
+- `bin/lib/jdi-update-banner.js` — reads cache, emits `{"systemMessage": "jdi-cli update available: X → Y. Run \`npm install -g jdi-cli@latest\`"}` JSON envelope on SessionStart. 24h rate-limit on parse-error warnings.
+- `bin/lib/jdi-toggle-update-check.js` — JSON-safe enable/disable for Claude Code's `settings.json`. Always backs up to `.bak` before edit. Idempotent.
+- `npx jdi-cli enable-update-check [--scope user|project]` — merges 2 entries (check + banner) into `hooks.SessionStart` of `settings.json`. Preserves all other fields.
+- `npx jdi-cli disable-update-check [--scope user|project]` — filters out JDI entries from `hooks.SessionStart`, keeps everything else. Hooks files remain on disk for fast re-enable.
+- `JDI_NO_UPDATE_CHECK=1` env var — disables banner + worker at runtime, no settings edit needed.
+
+### Changed
+- `jdi install claude` now also copies the 3 update-notifier hooks to `<claude-dir>/hooks/` and stamps `{{JDI_VERSION}}` via `sed` / `Replace`. **`settings.json` is NEVER modified by install** — opt-in via `enable-update-check`.
+- Install scripts (`.sh` and `.ps1`) strip BOM from hook source files at copy time (defense in depth — Node refuses BOM before shebang).
+- `bin/jdi.js` help output lists the 2 new subcommands.
+
+### Retrocompat invariant
+- Users on 0.1.9 that re-run `jdi install` get hooks added to `.claude/hooks/` but **nothing else changes**. Banner stays off until explicit `enable-update-check`.
+- Users who never re-install keep the 0.1.9 behavior verbatim. No silent behavior change ever.
+- E2E test (`jdi-poc-todo/test-update-notifier.sh`, 32 checks) verifies a pre-existing `settings.json` (with `PreToolUse` hooks, `model` setting) is **byte-identical** before and after `jdi install`.
+
+### Architecture credit
+- Update-notifier pattern adapted from `gsd-build/get-shit-done`'s hook architecture (`hooks/gsd-check-update*.js` + `hooks/gsd-update-banner.js`). Cache location and JSON envelope shape are JDI-namespaced.
+
 ## [0.1.9] - 2026-05-21
 
 ### Added
