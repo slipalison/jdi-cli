@@ -204,6 +204,29 @@ No flags. Used inside the JDI source repo after editing `core/`.
 npx jdi-cli@latest build
 ```
 
+### `enable-update-check` / `disable-update-check` — opt-in update banner (Claude Code only)
+
+JDI ships with an optional SessionStart hook that surfaces a banner when a newer `jdi-cli` version is available on npm. It is **off by default** and **never modifies `settings.json` automatically**.
+
+```bash
+# Turn on (per-project)
+npx jdi-cli@latest enable-update-check --scope project
+
+# Turn off
+npx jdi-cli@latest disable-update-check --scope project
+
+# Disable at runtime without editing settings
+JDI_NO_UPDATE_CHECK=1 claude
+```
+
+How it works:
+- `jdi install claude` copies 3 hook scripts to `<claude-dir>/hooks/` (additive — `settings.json` untouched).
+- `enable-update-check` merges 2 entries into `hooks.SessionStart` of `settings.json`. A `.bak` backup is always written. Idempotent re-runs are a no-op.
+- On next session, a detached worker checks `npm view jdi-cli version`, writes cache to `~/.cache/jdi/jdi-update-check.json`. A banner appears next session if update is available.
+- `disable-update-check` removes only JDI entries (preserves all other hooks). Hooks remain on disk for fast re-enable.
+
+**Runtime support:** only Claude Code has SessionStart hooks today. OpenCode, GitHub Copilot, and Antigravity do not expose lifecycle hooks in their config schemas, so the banner is currently a Claude-only feature. Users of other runtimes still see version info when running `npx jdi-cli@latest --version` or `npx jdi-cli doctor` manually.
+
 ### Misc
 
 ```bash
