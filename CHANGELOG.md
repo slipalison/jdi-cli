@@ -35,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Only `/jdi-confirm-dod` produces Manual confirmations (with mandatory evidence).
 - Cap: 8 items in PROJECT § DoD; 10 items in CONTEXT § DoD per phase.
 
+### Fixed
+- `package.json` `files:` whitelist now includes `CHANGELOG.md` (was missing in 0.1.8 — file existed locally but was NOT shipped via npm publish).
+- `dod-schema.md` `no TODO without issue` example: replaced PCRE look-ahead `(?!...)` with portable pipe pattern (`! { grep -RIn 'TODO' ... | grep -vE '#[0-9]+' | grep -q .; }`) so the example works on BSD grep (Mac default) and Git Bash without `-P` flag.
+
 ## [0.1.8] - 2026-05-21
 
 ### Fixed

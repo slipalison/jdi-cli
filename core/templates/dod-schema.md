@@ -180,7 +180,7 @@ On Convert to D-XX: write to DECISIONS.md as new D-{date}-{slug}-{seq} (asker on
       **Verify:** parse `coverage/lcov.info`, line percentage >= 80
       **Source:** PROJECT
 - [ ] No `TODO` without linked issue reference
-      **Verify:** `! grep -RInE 'TODO(?!.*#[0-9]+)' src/`
+      **Verify:** `! { grep -RIn 'TODO' src/ | grep -vE '#[0-9]+' | grep -q .; }`
       **Source:** PROJECT
 
 ### Manual
