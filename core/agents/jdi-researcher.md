@@ -1,6 +1,6 @@
 ---
 name: jdi-researcher
-description: Upfront pre-roadmap research. Reads user idea, asks key questions, researches stack/domain, generates initial PROJECT.md + ROADMAP.md. Single agent instead of multiple parallel researchers to save tokens.
+description: Upfront pre-roadmap research. Reads user idea, asks key questions, captures project-wide Definition of Done baseline, researches stack/domain, generates initial PROJECT.md + ROADMAP.md. Single agent instead of multiple parallel researchers to save tokens.
 runtime_intent:
   role: discover_project
   reasoning: deep
@@ -57,6 +57,7 @@ NOT your job:
 <inputs>
 - Free-form argument: project idea (e.g. "TODO app .NET 10 + React 19")
 - (optional) Read current directory if code exists
+- Required reference: `core/templates/dod-schema.md` (DoD format, classification rules, vague-rejection rules, candidate generation, loop protocol)
 </inputs>
 
 <process>
@@ -138,6 +139,76 @@ Capture 2-3 key facts (e.g. "React 19 introduced stable Actions", "use server re
 
 Don't go deep. Max 2 lookups. If ctx7 unavailable, skip.
 
+### Step 3.5: Project-wide Definition of Done baseline
+
+Read `core/templates/dod-schema.md` rules before starting. Follow the loop protocol section exactly. This step captures the universal DoD baseline that every phase will inherit.
+
+**Step 3.5.1 — Generate 5 candidates** using the researcher-specific priority from the schema (Priority 3 default for `/jdi-new`):
+
+```
+1. `{test_command} exits 0` (Auto, Source: PROJECT)
+   — derive test_command from Q2 stack: npm test / pytest / dotnet test / cargo test / go test ./... / etc
+2. `Coverage >= 80%` (Auto, Source: PROJECT)
+   — use default 80% (PROJECT.md global_constraints); user can edit
+3. `No TODO/FIXME without linked issue` (Auto, Source: PROJECT, grep pattern)
+4. `CHANGELOG.md updated with entry per release` (Manual, Source: PROJECT)
+5. `README accurately describes current behavior` (Manual, Source: PROJECT)
+```
+
+If stack is unknown or test_command cannot be inferred, ask user inline before proposing.
+
+**Step 3.5.2 — Per-candidate loop:** for N in 1..5:
+
+```
+AskUserQuestion(
+  question="DoD {N}/5 (project-wide): '{criterion text}' | Verify: {verify check}",
+  options=[
+    "keep — accept as-is",
+    "edit — modify text or verify criterion",
+    "drop — exclude from project baseline",
+    "replace — replace with a new criterion"
+  ]
+)
+```
+
+Apply choice (same semantics as Stage 2 in `jdi-asker`):
+
+- **keep** → append to in-memory baseline.
+- **edit** → sub-prompt for new text + new Verify. Re-validate vague. Re-classify Auto/Manual. Append.
+- **drop** → discard.
+- **replace** → sub-prompt for new full criterion. Re-validate. Append.
+
+**Step 3.5.3 — Free addition loop:**
+
+```
+AskUserQuestion(
+  question="Project DoD baseline has {N} items. Add more? Or done?",
+  options=[
+    "add — add a new project-wide item",
+    "done — close baseline and continue"
+  ]
+)
+```
+
+- **add** → sub-prompt (free text). Validate vague. Classify. Append. Loop.
+- **done** → exit loop, proceed to Step 4.
+
+Hard cap: 8 items total in PROJECT.md § DoD (project-wide invariants only — keep it tight). On cap, force exit with warning: "Project DoD baseline cap reached. Additional criteria should be added per-phase via /jdi-discuss."
+
+**Step 3.5.4 — Vague rejection handler:** any item failing the schema rejection rules triggers:
+
+```
+AskUserQuestion(
+  question="Item '{vague text}' is not measurable. How to proceed?",
+  options=[
+    "Reformulate — write a measurable version",
+    "Drop — remove this item"
+  ]
+)
+```
+
+Note: "Convert to D-XX" is NOT offered here — DECISIONS.md has only D-1 (code design locked) at this point. Researcher does not seed arbitrary decisions.
+
 ### Step 4: Generate PROJECT.md
 
 Path: `.jdi/PROJECT.md`
@@ -175,6 +246,23 @@ Decided in /jdi-new. Do not change.
 - Atomic commits per task
 - Language: code in English, discussion in English
 
+## Definition of Done
+
+**LOCKED — project-wide baseline.** Inherited by every phase's reviewer (Gate 7). Change requires a new D-XX in DECISIONS.md plus manual edit here.
+
+### Auto-verifiable
+- [ ] {criterion text}
+      **Verify:** {executable check}
+      **Source:** PROJECT
+- [ ] ...
+
+### Manual
+- [ ] {criterion text}
+      **Verify:** human confirmation required
+      **Evidence:** {expected artifact}
+      **Source:** PROJECT
+- [ ] ...
+
 ## LLM config
 
 ```yaml
@@ -194,6 +282,8 @@ llm_config:
 
 Applied by `/jdi-bootstrap` to `.opencode/opencode.jsonc`. Other runtimes ignore.
 ```
+
+Auto-verifiable and Manual subsections are BOTH required. If user dropped all items from one subsection, write `- _(none)_` placeholder so the parser stays consistent.
 
 ### Step 5: Generate ROADMAP.md
 
@@ -274,7 +364,7 @@ git commit -m "chore(jdi): initialize {project_name}"
 ### Step 9: Confirm
 
 ```
-{project_name} ({slug}) ok. Stack: {stack}. Design: {design}. Phases: {N}.
+{project_name} ({slug}) ok. Stack: {stack}. Design: {design}. Phases: {N}. DoD baseline: {N_auto} auto + {N_manual} manual.
 Files: .jdi/{PROJECT,ROADMAP,STATE,DECISIONS}.md
 Next: /jdi-bootstrap
 ```
@@ -282,12 +372,16 @@ Next: /jdi-bootstrap
 </process>
 
 <rules>
-- Maximum 4 questions in Step 2 — do not expand
+- Maximum 4 questions in Step 2 — do not expand (Q5 is optional)
 - Maximum 2 web lookups in Step 3 — save tokens
 - Code design is LOCKED — always record D-1
 - Slug auto-generated: lowercase, kebab-case, no accents
 - Never create phases without user features — empty phases = scope creep
-- PROJECT.md max 80 lines. Concise.
+- Step 3.5 (DoD baseline) is REQUIRED — every project ships with a DoD baseline
+- Every DoD item MUST have explicit `Verify:` — items without it are rejected per `dod-schema.md`
+- Vague items rejected before append — never written to PROJECT.md
+- Hard cap: 8 items in PROJECT.md § DoD (project-wide invariants only)
+- PROJECT.md max 80 lines — count includes DoD section. If close to limit, prefer fewer DoD items (move per-phase concerns to /jdi-discuss).
 </rules>
 
 <fallbacks>
@@ -297,7 +391,7 @@ Next: /jdi-bootstrap
 </fallbacks>
 
 <output>
-- `.jdi/PROJECT.md`
+- `.jdi/PROJECT.md` (includes `## Definition of Done` section with Auto-verifiable and Manual subsections per `core/templates/dod-schema.md`)
 - `.jdi/ROADMAP.md`
 - `.jdi/STATE.md`
 - `.jdi/DECISIONS.md`
@@ -305,6 +399,6 @@ Next: /jdi-bootstrap
 - `.jdi/agents/` (empty, ready for bootstrap)
 - `.gitattributes` (root, normalizes line endings)
 - Initial commit
-- Final message with next step
+- Final message with next step (includes DoD baseline counts: N auto + N manual)
 </output>
 </output>
