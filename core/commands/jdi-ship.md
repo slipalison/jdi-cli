@@ -48,10 +48,36 @@ test -f "$PHASE_DIR/REVIEW.md" || {
 }
 
 # Read verdict
-VERDICT=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|BLOCKED)' "$PHASE_DIR/REVIEW.md" | awk '{print $2}')
+VERDICT=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|APPROVED_PENDING_MANUAL|BLOCKED)' "$PHASE_DIR/REVIEW.md" | awk '{print $2}')
 
 if [ "$VERDICT" = "BLOCKED" ]; then
   echo "Phase $PHASE_SLUG BLOCKED. Fix before ship."
+  exit 1
+fi
+
+if [ "$VERDICT" = "APPROVED_PENDING_MANUAL" ]; then
+  PENDING=$(grep -cE 'MANUAL_REQUIRED' "$PHASE_DIR/REVIEW.md")
+  cat <<MSG
+Phase $PHASE_SLUG: APPROVED_PENDING_MANUAL ($PENDING DoD manual items pending).
+Ship refused — manual DoD items must be confirmed first.
+
+Next: /jdi-confirm-dod $PHASE_SLUG
+MSG
+  exit 1
+fi
+```
+
+### Step 2.5: Re-verify DoD confirmation freshness
+
+If the phase already passed through `/jdi-confirm-dod`, the REVIEW.md contains a `## DoD Manual Confirmations` section appended to it. Confirm that ALL items previously marked MANUAL_REQUIRED have a matching confirmation entry. If any drifted (e.g., reviewer re-ran after a code change and reclassified items), abort:
+
+```bash
+MANUAL_COUNT=$(grep -cE 'MANUAL_REQUIRED' "$PHASE_DIR/REVIEW.md" || echo 0)
+CONFIRMED_COUNT=$(awk '/^## DoD Manual Confirmations/,/^## /' "$PHASE_DIR/REVIEW.md" | grep -cE '^- \[x\]' || echo 0)
+
+if [ "$MANUAL_COUNT" -gt 0 ] && [ "$CONFIRMED_COUNT" -lt "$MANUAL_COUNT" ]; then
+  echo "Phase $PHASE_SLUG: $MANUAL_COUNT manual DoD items but only $CONFIRMED_COUNT confirmed."
+  echo "Next: /jdi-confirm-dod $PHASE_SLUG"
   exit 1
 fi
 ```
@@ -174,12 +200,14 @@ Phase $PHASE_SLUG shipped.
 </process>
 
 <gates>
-- pre: REVIEW.md exists + verdict != BLOCKED
+- pre: REVIEW.md exists + verdict ∉ {BLOCKED, APPROVED_PENDING_MANUAL} + all DoD manual items confirmed
 - post: ROADMAP.md + STATE.md updated + old phases archived (if applicable) + commit (+ optional tag)
 </gates>
 
 <errors>
 - REVIEW missing → /jdi-verify
 - Verdict BLOCKED → abort
+- Verdict APPROVED_PENDING_MANUAL → abort, suggest /jdi-confirm-dod
+- Manual DoD items unconfirmed (count mismatch) → abort, suggest /jdi-confirm-dod
 - Already shipped → abort with warning
 </errors>

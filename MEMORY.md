@@ -87,11 +87,26 @@ Decidido em /jdi-new (D-1). Nao mudar.
 - Conventional Commits
 - Atomic commits por task
 - Idioma: codigo en, discussao pt-BR
+
+## Definition of Done
+
+**LOCKED — project-wide baseline.** Inherited by every phase's reviewer (Gate 8).
+
+### Auto-verifiable
+- [ ] `{test_command}` exits 0
+      **Verify:** {executable check}
+      **Source:** PROJECT
+
+### Manual
+- [ ] CHANGELOG.md updated with entry per release
+      **Verify:** human confirmation required
+      **Evidence:** new `## [version]` heading in CHANGELOG.md
+      **Source:** PROJECT
 ```
 
-**Quem edita:** `/jdi-new` cria. Posterior: edit manual (sem comando dedicado). Agentes nao mexem.
+**Quem edita:** `/jdi-new` cria (incluindo `## Definition of Done`). Posterior: edit manual via D-XX em DECISIONS.md (mudar baseline = decisão locked). Agentes nao mexem.
 
-**Tamanho:** max 80 linhas. Conciso.
+**Tamanho:** max 80 linhas. Conciso. Cap 8 itens em DoD.
 
 ---
 
@@ -127,8 +142,8 @@ schema_version: 2
 specialists_ready: true | false
 current_phase: 1                   # display mirror (legacy v1 readers)
 current_phase_slug: setup-api      # v2 canonical phase ID
-phase_status: ready | discussed | planned | executed | verified | done | looping | paused | blocked
-phase_verdict: APPROVED | APPROVED_WITH_WARNINGS | BLOCKED  (apos verify)
+phase_status: ready | discussed | planned | executed | verified | pending_manual_dod | done | looping | paused | blocked
+phase_verdict: APPROVED | APPROVED_WITH_WARNINGS | APPROVED_PENDING_MANUAL | BLOCKED  (apos verify)
 next_step: /jdi-discuss setup-api
 ```
 
@@ -291,11 +306,26 @@ D-4 (2026-05-10, phase 2): Validacao via FluentValidation. Razao: ...
 
 ## Scope creep capturado em todos.md
 {lista, ou "(nenhum)"}
+
+## Definition of Done
+
+### Auto-verifiable
+- [ ] {criterion text}
+      **Verify:** {executable check}
+      **Source:** CONTEXT
+
+### Manual
+- [ ] {criterion text}
+      **Verify:** human confirmation required
+      **Evidence:** {expected artifact}
+      **Source:** CONTEXT
 ```
 
-**Quem edita:** `/jdi-discuss` cria.
+**Quem edita:** `/jdi-discuss` cria (Stage 1 decisões + Stage 2 DoD).
 
-**Tamanho:** max 1500 tokens (~80 linhas). Conciso.
+**Tamanho:** max 1500 tokens (~80 linhas). Conciso. Cap 10 itens em DoD.
+
+**LOCKED após `/jdi-discuss`:** DoD e D-XX nunca editados retroativamente. Mudança = nova D-XX que registra o motivo + manual edit.
 
 ---
 
@@ -381,7 +411,7 @@ D-4 (2026-05-10, phase 2): Validacao via FluentValidation. Razao: ...
 ```markdown
 # Phase {N}: Review
 
-**Veredicto:** APPROVED | APPROVED_WITH_WARNINGS | BLOCKED
+**Veredicto:** APPROVED | APPROVED_WITH_WARNINGS | APPROVED_PENDING_MANUAL | BLOCKED
 
 ## Gates
 | Gate | Status | Detalhes |
@@ -392,12 +422,31 @@ D-4 (2026-05-10, phase 2): Validacao via FluentValidation. Razao: ...
 | 4. Lint | PASS/WARN | ... |
 | 5. Security | PASS/WARN/BLOCK | ... |
 | 6. Consistency | PASS/WARN | ... |
+| 7. UI Validation | PASS/WARN/BLOCK/SKIPPED | (só se has_frontend=true) |
+| 8. DoD | PASS/PASS_PENDING_MANUAL/BLOCK/INCONCLUSIVE | {N_auto_pass}/{N_auto_total} auto, {N_manual} manual pending |
 
 ## Blockers (se houver)
 - ...
 
 ## Warnings (se houver)
 - ...
+
+## DoD Checklist
+| # | Criterion | Source | Type | Status | Evidence |
+|---|---|---|---|---|---|
+| 1 | {criterion text} | PROJECT | Auto | PASS/FAIL | {output} |
+| 2 | {criterion text} | CONTEXT | Manual | MANUAL_REQUIRED | — |
+
+## DoD Manual Confirmations (apos /jdi-confirm-dod)
+- [x] {criterion text}
+      **Confirmed at:** {ISO timestamp}
+      **By:** {git user}
+      **Evidence:** {user input}
+
+## DoD Rejected (post-hoc, opcional)
+- {criterion text}
+      **Rejected at:** {ISO timestamp}
+      **Reason:** {justification}
 
 ## Recomendacao
 {texto curto sobre o que fazer}

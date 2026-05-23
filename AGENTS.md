@@ -6,7 +6,7 @@
 
 ### `jdi-researcher` (Opus)
 
-**Funcao:** Discover do projeto antes do roadmap.
+**Funcao:** Discover do projeto antes do roadmap + captura DoD baseline project-wide.
 
 **Spawned por:** `/jdi-new`
 
@@ -15,13 +15,23 @@
 **Inputs:**
 - Argumento livre: ideia do projeto
 - Read em diretorio atual
+- Referência: `core/templates/dod-schema.md`
 
 **Outputs:**
-- `.jdi/PROJECT.md` (visao + stack + code-design LOCKED)
+- `.jdi/PROJECT.md` (visao + stack + code-design LOCKED + `## Definition of Done` LOCKED)
 - `.jdi/ROADMAP.md` (1 phase por feature MVP)
 - `.jdi/STATE.md`
 - `.jdi/DECISIONS.md` (com D-1)
 - `.gitattributes` (normaliza line endings)
+
+**Stages:**
+- **Step 2 — 4 perguntas chave** (visão, stack, code-design, MVP features, opcional Q5 LLM provider)
+- **Step 3.5 — DoD baseline:** propõe 5 candidatos project-wide (test command, coverage threshold, no-TODO, CHANGELOG, README), per-item keep/edit/drop/replace, free-add cap 8
+
+**Regras DoD baseline:**
+- Vague items rejeitados (sem `Verify:` field não passa)
+- Cap 8 itens em PROJECT § DoD (project-wide invariants only)
+- Sem opção "convert to D-XX" (DECISIONS.md tem só D-1 nesse momento)
 
 **Permissoes:** Read, Write, WebSearch (max 2 lookups via ctx7), AskUserQuestion.
 
@@ -45,24 +55,31 @@
 
 ### `jdi-asker` (Sonnet)
 
-**Funcao:** Loop adaptativo de perguntas pra capturar decisoes locked.
+**Funcao:** Loop interativo em duas etapas — captura decisoes locked + Definition of Done da phase.
 
 **Spawned por:** `/jdi-discuss <N>`
 
 **Inputs:**
 - `phase_number`
-- Read em PROJECT.md, ROADMAP.md, DECISIONS.md, ate 2 CONTEXT.md anteriores
+- Read em PROJECT.md (inclui § DoD), ROADMAP.md, DECISIONS.md, ate 2 CONTEXT.md anteriores
+- Referência: `core/templates/dod-schema.md`
 
 **Outputs:**
-- `.jdi/phases/{NN-slug}/CONTEXT.md`
+- `.jdi/phases/{NN-slug}/CONTEXT.md` (inclui `## Definition of Done`)
 - `.jdi/DECISIONS.md` (append D-XX)
 - `.jdi/todos.md` (se scope creep)
 
+**Stages:**
+- **Stage 1 — Decisões:** identifica 3-5 gray areas especificas, max 5 perguntas, cada resposta vira D-XX
+- **Stage 2 — DoD:** propõe 5 candidatos derivados de D-XX + phase-type templates, per-item keep/edit/drop/replace, free-add cap 10
+
 **Regras:**
-- Max 5 perguntas por sessao
-- Max 5 D-XX por sessao
+- Max 5 perguntas em Stage 1, max 5 D-XX por sessao
+- Stage 2 obrigatório — toda phase ship com DoD declarada
+- Cada item DoD requer `Verify:` (comando OU "human confirmation required")
+- Vague items rejeitados na captura (oferece reformulate/drop/convert-to-D-XX)
 - Identifica gray areas especificas (nao categorias genericas)
-- Para quando user diz "chega" / "go" / 5 perguntas
+- Para quando user diz "chega" / "go" / 5 perguntas (Stage 1) ou "done" (Stage 2)
 
 **Permissoes:** Read, Write, AskUserQuestion.
 
@@ -168,13 +185,21 @@
 4. Lint/Format
 5. Security/Perf rules da stack (sem secrets, sem TODO sem issue, sem localStorage tokens, etc)
 6. Plan consistency (commits batem com files_modified)
+7. UI Validation (conditional — só se `frontend.has_frontend: true`)
+8. Definition of Done — parse `PROJECT.md § DoD` + `CONTEXT.md § DoD`, roda `Verify:` per item, classifica Auto PASS/FAIL e Manual MANUAL_REQUIRED
 
 **Veredictos:**
-- APPROVED — todos PASS
-- APPROVED_WITH_WARNINGS — sem blockers, com warns
-- BLOCKED — gate 1-3 falhou OU gate 5 critical
+- APPROVED — todos PASS, sem DoD manual pendente
+- APPROVED_WITH_WARNINGS — sem blockers, com warns, sem DoD manual pendente
+- **APPROVED_PENDING_MANUAL** — gates 1-7 OK, DoD auto PASS, Manual items aguardando `/jdi-confirm-dod`
+- BLOCKED — gate 1-3 falhou OU gate 5 critical OU gate 8 com Auto FAIL OU gate 7 BLOCK
 
 **Permissoes:** Read-only por design. Read + Bash (so pra rodar comandos de gate). **Sem Write, sem Edit.**
+
+**Gate 8 hard rules:**
+- Nunca modifica DoD blocks (PROJECT.md/CONTEXT.md são LOCKED)
+- Nunca auto-confirma Manual items (`/jdi-confirm-dod` é o único caminho)
+- PROJECT § DoD aplica a TODA phase (herdado automaticamente)
 
 ## Resumo visual
 

@@ -1,6 +1,6 @@
 # JDI — Commands
 
-11 comandos. 7 no loop principal + roadmap mutation (2) + ralph mode (1) + migration (1) + meta (1).
+12 comandos. 7 no loop principal + DoD confirm (1) + roadmap mutation (2) + ralph mode (1) + migration (1) + meta (1).
 
 Todo comando que toma uma phase aceita **slug** (`auth-flow`, canonical) OU **posição inteira** (`2`, display). Slug é estável entre branches; posição renumera no insert/remove. Schema v2 usa slug-as-ID; projetos legacy v1 (numeric) continuam funcionando até rodar `/jdi-migrate-phases`.
 
@@ -19,7 +19,8 @@ Faz:
 2. Spawn `jdi-researcher`:
    - 4 perguntas chave (visao, stack, code-design, MVP features)
    - Research focado opcional via ctx7 (max 2 lookups)
-   - Gera `PROJECT.md` (visao + stack + code-design LOCKED)
+   - **Stage 2 — DoD baseline**: 5 candidatos project-wide (test command, coverage threshold, no-TODO, CHANGELOG, README), per-item keep/edit/drop/replace, free-add cap 8
+   - Gera `PROJECT.md` (visao + stack + code-design LOCKED + `## Definition of Done` LOCKED)
    - Gera `ROADMAP.md` (1 phase por feature do MVP)
    - Gera `STATE.md` + `DECISIONS.md` (D-1: code design)
    - Cria `.gitattributes` (normaliza CRLF)
@@ -56,11 +57,11 @@ Captura decisoes locked da phase.
 Faz:
 1. Validacao: phase existe em ROADMAP.md
 2. Spawn `jdi-asker`:
-   - Identifica 3-5 gray areas especificas da phase
-   - Pergunta uma por vez (max 5 D-XX por sessao)
-   - Captura cada resposta como D-XX em DECISIONS.md
+   - **Stage 1 — decisões**: 3-5 gray areas especificas, max 5 D-XX por sessao, append em DECISIONS.md
    - Scope creep -> `.jdi/todos.md`
-   - Escreve `.jdi/phases/{phase_dir}/CONTEXT.md`
+   - **Stage 2 — DoD phase-specific**: 5 candidatos derivados de D-XX + phase-type templates, per-item keep/edit/drop/replace, free-add cap 10
+   - Vague items rejeitados (sem `Verify:` field não passa)
+   - Escreve `.jdi/phases/{phase_dir}/CONTEXT.md` com `## Definition of Done` section
 3. Commit: `docs({phase_dir}): capture phase context`
 
 **Proximo:** `/jdi-plan <slug>`
@@ -122,13 +123,19 @@ Faz:
    - Gate 4: Lint/Format
    - Gate 5: Security/Perf rules da stack
    - Gate 6: Plan consistency (commits batem com files_modified)
-4. Reviewer escreve `.jdi/phases/{phase_dir}/REVIEW.md` com veredicto:
-   - APPROVED — todos gates PASS
-   - APPROVED_WITH_WARNINGS — sem blockers, alguns warns
-   - BLOCKED — gate 1-3 falhou OU gate 5 critical
+   - Gate 7: UI Validation (conditional — só se `frontend.has_frontend: true`)
+   - Gate 8: Definition of Done — parse `PROJECT.md § DoD` + `CONTEXT.md § DoD`, roda `Verify:` per item, classifica Auto PASS/FAIL e Manual MANUAL_REQUIRED
+4. Reviewer escreve `.jdi/phases/{phase_dir}/REVIEW.md` com veredicto + `## DoD Checklist` table:
+   - APPROVED — todos gates PASS, sem DoD manual pendente
+   - APPROVED_WITH_WARNINGS — sem blockers, alguns warns, sem DoD manual pendente
+   - **APPROVED_PENDING_MANUAL** — gates 1-7 OK, DoD auto PASS, mas Manual items aguardando confirmação humana
+   - BLOCKED — gate 1-3 falhou OU gate 5 critical OU gate 8 com Auto FAIL OU gate 7 BLOCK
 5. Commit: `docs({phase_dir}): verify phase ({VERDICT})`
 
-**Proximo:** `/jdi-ship <slug>` (se nao BLOCKED) — ou `/jdi-loop <slug>` se quiser auto-fix loop
+**Proximo:**
+- `APPROVED` / `APPROVED_WITH_WARNINGS` → `/jdi-ship <slug>`
+- `APPROVED_PENDING_MANUAL` → `/jdi-confirm-dod <slug>`
+- `BLOCKED` → `/jdi-loop <slug>` (auto-fix) ou fix manual + `/jdi-do <slug>` + `/jdi-verify <slug>`
 
 ### `/jdi-loop <slug|position> [--max-iter=5] [--max-resets=3]`
 
@@ -175,14 +182,46 @@ Faz:
 Finaliza phase, avanca pra proxima.
 
 Faz:
-1. Validacao: REVIEW.md existe + veredicto != BLOCKED
-2. Se WITH_WARNINGS: pergunta "ship mesmo assim?"
-3. Atualiza ROADMAP.md (phase corrente: status `done`, próxima phase: status `ready`)
-4. Atualiza STATE.md (`current_phase` + `current_phase_slug` apontam pra próxima)
-5. Commit: `feat(<slug>): ship phase ({VERDICT})`
-6. Tag opcional: `phase-<slug>` (se PROJECT.md tem `tag_phases: true`)
+1. Validacao: REVIEW.md existe + veredicto ∉ `{BLOCKED, APPROVED_PENDING_MANUAL}`
+2. Re-verifica frescor das confirmações DoD: count `MANUAL_REQUIRED` na DoD Checklist vs count `[x]` em `## DoD Manual Confirmations`. Mismatch → abort, sugere `/jdi-confirm-dod`
+3. Se WITH_WARNINGS: pergunta "ship mesmo assim?"
+4. Atualiza ROADMAP.md (phase corrente: status `done`, próxima phase: status `ready`)
+5. Atualiza STATE.md (`current_phase` + `current_phase_slug` apontam pra próxima)
+6. Commit: `feat(<slug>): ship phase ({VERDICT})`
+7. Tag opcional: `phase-<slug>` (se PROJECT.md tem `tag_phases: true`)
 
 **Proximo:** `/jdi-discuss <next-slug>` (ou done)
+
+### `/jdi-confirm-dod <slug|position>`
+
+Loop interativo pra confirmar items DoD `MANUAL_REQUIRED` que sobraram do `/jdi-verify`. Bloqueia `/jdi-ship` até que todos estejam confirmados ou rejeitados.
+
+```
+/jdi-confirm-dod auth-flow
+```
+
+Faz:
+1. Validacao: REVIEW.md existe + veredicto ∈ `{APPROVED_PENDING_MANUAL, APPROVED, APPROVED_WITH_WARNINGS com MANUAL_REQUIRED}`
+2. Extrai linhas `MANUAL_REQUIRED` da `## DoD Checklist`
+3. Per-item AskUserQuestion:
+   - `Confirm` (com evidence text obrigatório — URL/sha/path/descrição)
+   - `Skip` (deixa pendente, não bloqueia comando — mas bloqueia ship)
+   - `Reject DoD item` (com justificativa obrigatória — item passa pra `## DoD Rejected (post-hoc)`)
+4. Append em `## DoD Manual Confirmations` e/ou `## DoD Rejected` no REVIEW.md (idempotente)
+5. Recompute verdict:
+   - Todos resolvidos (confirm/reject) → upgrade pra APPROVED ou APPROVED_WITH_WARNINGS (mantém warnings prévios)
+   - Algum skipped → mantém APPROVED_PENDING_MANUAL
+6. Commit: `docs(<slug>): confirm DoD manual items (X confirmed, Y rejected, Z skipped, verdict <NEW>)`
+
+**Idempotente:** re-rodar pula items já confirmados/rejected, oferece resume nos skipped.
+
+**Hard rules:**
+- Evidence sempre obrigatória (free text) — vazio = inválido, re-pergunta
+- Rejection sempre requer justificativa — vazio = inválido
+- Confirmações são append-only, nunca apagadas
+- Comando NUNCA edita PROJECT.md/CONTEXT.md DoD blocks (read-only nesses)
+
+**Proximo:** `/jdi-ship <slug>` (se tudo resolvido)
 
 ## Roadmap mutation
 

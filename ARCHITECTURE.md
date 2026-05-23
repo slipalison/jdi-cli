@@ -51,13 +51,14 @@ bin/lib/                 <- helpers compartilhados (shipped via npm files whitel
 ## Ciclo de vida
 
 ```
-/jdi-new "<descricao>"          -> PROJECT.md + ROADMAP.md + STATE.md (schema v2) + DECISIONS.md
-/jdi-bootstrap                  -> .jdi/agents/jdi-doer-{slug} + jdi-reviewer-{slug}
-/jdi-discuss <slug|position>    -> phases/<slug>/CONTEXT.md
-/jdi-plan    <slug|position>    -> phases/<slug>/PLAN.md (tasks + waves)
-/jdi-do      <slug|position>    -> commits atomicos + phases/<slug>/SUMMARY.md
-/jdi-verify  <slug|position>    -> phases/<slug>/REVIEW.md (gates)
-/jdi-ship    <slug|position>    -> ROADMAP advance + tag (opcional) + STATE atualizado
+/jdi-new "<descricao>"           -> PROJECT.md (+ § DoD baseline) + ROADMAP.md + STATE.md (schema v2) + DECISIONS.md
+/jdi-bootstrap                   -> .jdi/agents/jdi-doer-{slug} + jdi-reviewer-{slug}
+/jdi-discuss <slug|position>     -> phases/<slug>/CONTEXT.md (+ § DoD phase-specific)
+/jdi-plan    <slug|position>     -> phases/<slug>/PLAN.md (tasks + waves)
+/jdi-do      <slug|position>     -> commits atomicos + phases/<slug>/SUMMARY.md
+/jdi-verify  <slug|position>     -> phases/<slug>/REVIEW.md (gates 1-8 + DoD Checklist)
+/jdi-confirm-dod <slug|position> -> phases/<slug>/REVIEW.md atualizado (DoD Manual Confirmations)
+/jdi-ship    <slug|position>     -> ROADMAP advance + tag (opcional) + STATE atualizado
 ```
 
 Phase ID dual: slug (canonical) ou posição int (display/legacy). Resolver (`bin/lib/jdi-resolve-phase.sh|.ps1`) normaliza para `{slug, dir, position, schema_version, folder_exists}`. v1 → v2 via `/jdi-migrate-phases` (non-destructive).
@@ -66,12 +67,14 @@ Gates entre etapas:
 
 | De | Para | Gate |
 |---|---|---|
-| /jdi-new | /jdi-bootstrap | PROJECT.md + ROADMAP.md exist |
+| /jdi-new | /jdi-bootstrap | PROJECT.md + ROADMAP.md exist (PROJECT § DoD presente) |
 | /jdi-bootstrap | /jdi-discuss | .jdi/agents/jdi-doer-* + jdi-reviewer-* exist |
-| /jdi-discuss | /jdi-plan | CONTEXT.md exist + decisoes locked claras |
+| /jdi-discuss | /jdi-plan | CONTEXT.md exist + decisoes locked claras + CONTEXT § DoD presente |
 | /jdi-plan | /jdi-do | PLAN.md valido (tasks + acceptance + files_modified) |
 | /jdi-do | /jdi-verify | SUMMARY.md exist (todas tasks concluidas ou marcadas blocked) |
-| /jdi-verify | /jdi-ship | REVIEW.md verdict != BLOCKED |
+| /jdi-verify | /jdi-confirm-dod | REVIEW.md verdict == APPROVED_PENDING_MANUAL (DoD manual pendente) |
+| /jdi-confirm-dod | /jdi-ship | REVIEW.md DoD Manual Confirmations cobrindo todos os MANUAL_REQUIRED |
+| /jdi-verify | /jdi-ship | REVIEW.md verdict ∈ {APPROVED, APPROVED_WITH_WARNINGS} (sem manual pendente) |
 
 ## Permissoes (least privilege)
 
@@ -142,15 +145,41 @@ Por task no PLAN.md:
 
 ## Review pos-execucao (jdi-reviewer-{slug})
 
-`/jdi-verify N` dispara reviewer. 6 gates:
+`/jdi-verify N` dispara reviewer. 8 gates:
 1. Build
 2. Tests
 3. Coverage (>= threshold do PROJECT.md, default 80%)
 4. Lint/Format
 5. Security/Perf rules da stack
 6. Plan consistency (commits batem com files_modified)
+7. UI Validation (condicional — só se `frontend.has_frontend: true`)
+8. Definition of Done — parse `PROJECT.md § DoD` + `CONTEXT.md § DoD`, roda `Verify:` per item, classifica Auto PASS/FAIL e Manual MANUAL_REQUIRED
 
-Veredicto: APPROVED / APPROVED_WITH_WARNINGS / BLOCKED. BLOCKED bloqueia /jdi-ship.
+Veredicto:
+- APPROVED — todos gates PASS, sem DoD manual pendente
+- APPROVED_WITH_WARNINGS — sem blockers, com warns
+- **APPROVED_PENDING_MANUAL** — gates 1-7 OK, DoD auto PASS, mas Manual items aguardando confirmação humana via `/jdi-confirm-dod`
+- BLOCKED — gate 1-3 falhou OU gate 5 critical OU gate 8 com Auto FAIL OU gate 7 BLOCK
+
+BLOCKED bloqueia `/jdi-ship`. APPROVED_PENDING_MANUAL também bloqueia `/jdi-ship` — exige `/jdi-confirm-dod` primeiro.
+
+## Definition of Done (DoD)
+
+DoD é capturado em duas camadas e verificado no Gate 8:
+
+| Camada | Onde | Quando | Quem | Cap |
+|---|---|---|---|---|
+| Project-wide | `PROJECT.md § Definition of Done` (LOCKED) | `/jdi-new` Stage 2 | jdi-researcher | 8 itens |
+| Phase-specific | `phases/<slug>/CONTEXT.md § Definition of Done` (LOCKED) | `/jdi-discuss` Stage 2 | jdi-asker | 10 itens |
+| Task acceptance | `PLAN.md` por task | `/jdi-plan` | jdi-planner | 8 tasks/phase |
+
+Cada item DoD tem `Verify:` obrigatório (comando OU "human confirmation required"). Vague items rejeitados na captura. Formato canônico em `core/templates/dod-schema.md`.
+
+Fluxo:
+- Captura → `/jdi-new` (PROJECT) + `/jdi-discuss` (CONTEXT)
+- Verificação → Gate 8 do reviewer roda Auto items; coleta Manual items como MANUAL_REQUIRED
+- Confirmação manual → `/jdi-confirm-dod` walka cada MANUAL_REQUIRED, exige evidence
+- Ship → `/jdi-ship` exige `verdict ∈ {APPROVED, APPROVED_WITH_WARNINGS}` + DoD Manual Confirmations matching MANUAL_REQUIRED count
 
 ## Read-depth scaling (token budget)
 
