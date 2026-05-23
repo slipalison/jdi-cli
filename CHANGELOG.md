@@ -5,6 +5,16 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.11] - 2026-05-23
+
+### Documentation
+- README: new `enable-update-check` / `disable-update-check` section with explicit Claude-only runtime support note (OpenCode/Copilot/Antigravity schemas have no SessionStart hooks).
+- README: explicit retrocompat invariant — `jdi install` never touches `settings.json`.
+- README: `JDI_NO_UPDATE_CHECK=1` env var documented for runtime disable.
+
+### Fixed
+- `package.json` `description`: was "10 commands" (stale since 0.1.9). Now reflects current state — 15 slash commands, DoD as reviewer Gate 8, opt-in update notifier.
+
 ## [0.1.10] - 2026-05-23
 
 ### Added — Update notifier (opt-in)
