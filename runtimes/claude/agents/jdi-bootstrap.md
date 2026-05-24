@@ -205,11 +205,14 @@ Read `llm_config` from PROJECT.md.
 
 ### Step 5: Update STATE
 
+Read first phase slug from `.jdi/ROADMAP.md` (look for first `- **Slug:**` value in the phases list) OR from existing `.jdi/STATE.md current_phase_slug` if present. Fall back to integer `1` only if neither file declares a slug (legacy schema v1 projects pre-1.6).
+
 Edit `.jdi/STATE.md`:
 ```markdown
 specialists_ready: true
 project_slug: {slug}
-next_step: /jdi-discuss 1
+current_phase_slug: {first_phase_slug}
+next_step: /jdi-discuss {first_phase_slug}
 ```
 
 ```bash
@@ -222,7 +225,7 @@ git commit -m "chore(state): specialists ready for {slug}"
 Architect already printed confirmation at S8. Bootstrap only emits:
 
 ```
-Bootstrap ok. Next: /jdi-discuss 1
+Bootstrap ok. Next: /jdi-discuss {first_phase_slug}
 ```
 
 </process>

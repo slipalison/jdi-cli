@@ -5,6 +5,13 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.12] - 2026-05-24
+
+### Fixed
+- `jdi-bootstrap` no longer writes hardcoded `next_step: /jdi-discuss 1` in STATE.md and orchestrator hints. Now reads first phase slug from `ROADMAP.md` and uses canonical slug (schema v2 default since 0.1.6). Integer fallback to `1` retained only for legacy v1 projects without slugs.
+- Confirmation message after bootstrap now shows correct slug instead of `1`.
+- Reported on OpenCode runtime but bug was runtime-agnostic — affected all 4 adapters.
+
 ## [0.1.11] - 2026-05-23
 
 ### Documentation

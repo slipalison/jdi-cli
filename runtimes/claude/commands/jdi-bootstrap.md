@@ -39,8 +39,16 @@ test -f .jdi/PROJECT.md || { echo "PROJECT.md missing. Run /jdi-new first."; exi
 Invoke agent. Wait.
 
 ### Step 3: Verify result
-- created -> show confirmation, suggest `/jdi-discuss 1`
-- already-exists + keep -> show "already ready", suggest `/jdi-discuss 1`
+
+Determine first phase identifier from `.jdi/ROADMAP.md` — extract the first `- **Slug:**` value under the phases section. Fall back to integer `1` only on legacy schema v1 projects that lack slugs.
+
+```bash
+FIRST_SLUG=$(awk '/^- \*\*Slug:\*\*/{print $NF; exit}' .jdi/ROADMAP.md 2>/dev/null)
+NEXT_ID="${FIRST_SLUG:-1}"
+```
+
+- created -> show confirmation, suggest `/jdi-discuss $NEXT_ID`
+- already-exists + keep -> show "already ready", suggest `/jdi-discuss $NEXT_ID`
 - cancelled -> exit clean
 - failed -> show error
 
