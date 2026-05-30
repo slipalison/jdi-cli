@@ -110,7 +110,7 @@ If `.jdi/config.json` does not yet exist, write default identical to `/jdi-new`:
 
 ```json
 {
-  "$schema_version": "1.1",
+  "$schema_version": "1.2",
   "context_window": 200000,
   "thresholds": {
     "warn_pct": 60,
@@ -125,9 +125,21 @@ If `.jdi/config.json` does not yet exist, write default identical to `/jdi-new`:
     "keep_phases": 2,
     "archive_after": 5
   },
+  "orchestration": {
+    "mode": "standard",
+    "source": "default"
+  },
   "coverage_min": 80
 }
 ```
+
+#### Step 4b: Enhanced orchestration opt-in (host-neutral capability flag)
+
+Identical to `/jdi-new` Step 4b. `orchestration.mode` lets later commands use optional multi-agent layers only when the host can fan out — default `standard` keeps every command byte-identical otherwise. Decide **here, in this top-level turn** (sub-agents cannot see host capability signals; the choice must live in the file):
+
+1. **Default:** if this session runs under an enhanced / high-effort multi-agent orchestration mode, pre-select `enhanced` (`source: "detected"`); else `standard`.
+2. **Confirm** (AskUserQuestion; fallback: numbered prompt): "Enable enhanced multi-agent orchestration when your assistant supports it? Adds opt-in advisory critics (e.g. a DoD re-check at /jdi-verify); standard path unchanged when unavailable." Options: `[Enhanced — use extra agents when available]` / `[Standard — single-agent always (default)]`.
+3. Write `mode` into the `orchestration` block; set `source` to `"user"` (or keep `"detected"`). Never store a token budget — boolean capability switch, not a ledger.
 
 ### Step 5: Confirm
 

@@ -211,6 +211,18 @@ if [[ -d "$PROJECT_DIR/.jdi" ]]; then
     PHASE_COUNT=$(find "$PROJECT_DIR/.jdi/phases" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
     ok ".jdi/phases/ com $PHASE_COUNT phase(s)"
   fi
+
+  CFG="$PROJECT_DIR/.jdi/config.json"
+  if [[ -f "$CFG" ]]; then
+    # "mode" only appears in the orchestration block — unambiguous via grep (jq optional)
+    OMODE=$(grep -oE '"mode"[[:space:]]*:[[:space:]]*"(standard|enhanced)"' "$CFG" 2>/dev/null | grep -oE '(standard|enhanced)' | head -1)
+    [[ -z "$OMODE" ]] && OMODE=standard
+    if [[ "$OMODE" == "enhanced" ]]; then
+      ok ".jdi/config.json orchestration: enhanced (advisory multi-agent layers opt-in; degrade when host cannot fan out)"
+    else
+      note ".jdi/config.json orchestration: standard (single-agent path)"
+    fi
+  fi
 else
   warn ".jdi/ ausente. Rode /jdi-new ou esta fora de um projeto JDI."
 fi

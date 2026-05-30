@@ -81,6 +81,7 @@ NOT your job:
 
 <inputs>
 - `phase_slug` (canonical slug, required) + `phase_dir` (orchestrator pre-resolved path). Legacy: `phase_number` if invoked from v1 callers.
+- `mode` (optional, default `verify`): `verify` = full gate review; `dod-critic` = read-only DoD re-check (see `<dod_critic_mode>`). Only `/jdi-verify` Step 4.5 sets `dod-critic`, and only when `orchestration.mode=enhanced` in `.jdi/config.json`.
 - Read on:
   - `.jdi/PROJECT.md` (includes `## Definition of Done` — project-wide baseline)
   - `{PHASE_DIR}/CONTEXT.md` (includes `## Definition of Done` — phase-specific items)
@@ -359,7 +360,32 @@ if ($LASTEXITCODE -eq 0) { Write-Host "PASS: {item_text}" } else { Write-Host "F
 
 </gates>
 
+<dod_critic_mode>
+Triggered by `mode=dod-critic` (opt-in enhanced orchestration; spawned by `/jdi-verify` Step 4.5 AFTER the primary review already wrote REVIEW.md). This mode exists because Gate 8 maps `exit 0 → PASS` for Auto rows with no semantic scrutiny.
+
+**Goal:** catch HOLLOW Gate-8 Auto PASS rows — a DoD item whose `Verify:` command exits 0 without actually proving the criterion (a grep that matches a heading still present for unrelated reasons; a test file present but asserting nothing; a positive grep on stale text).
+
+**Steps:**
+1. Read `{PHASE_DIR}/REVIEW.md` § DoD Checklist. Select ONLY rows with `Type=Auto` AND `Status=PASS`. Ignore Manual / FAIL / INCONCLUSIVE — not your job (other gates and `/jdi-confirm-dod` own those).
+2. For each selected row, re-derive what its criterion REQUIRES and inspect the real artifact (the referenced code/spec/test), NOT just the recorded exit code. Classify:
+   - `hollow=true, objective=true` — you can OBJECTIVELY show the command passes without proving the criterion. Cite the artifact (`file:line`, the stale heading, the empty test).
+   - `hollow=true, objective=false` — suspicious but not provable (judgment only).
+   - `hollow=false` — the command genuinely proves the criterion.
+3. Return findings ONLY, as a JSON array: `[{row, hollow, objective, evidence}]`. **WRITE NOTHING.** The orchestrator (`/jdi-verify`) folds this into REVIEW.md and recomputes the verdict — you never touch REVIEW.md, STATE.md, or any file.
+
+**Hard rules (this mode):**
+- Read-only. No Write/Edit, no file output, no git ops. (Same privilege profile as a normal review — Write/Edit already denied.)
+- You can only ever make a verdict STRICTER. Never suggest upgrading a verdict, never re-approve a blocked one.
+- Do NOT re-run gates 1-7 and do NOT re-execute the `Verify:` commands — you inspect the ARTIFACT the criterion is about, not the command. Bounded to the Auto/PASS rows already in REVIEW.md.
+- Fail-open: if REVIEW.md or its DoD Checklist is absent/empty, return `[]`. The primary review stands.
+</dod_critic_mode>
+
 <process>
+
+### Step 0: Mode dispatch
+This reviewer runs in one of two modes, set by the `mode=` field in the spawn prompt:
+- `mode=verify` (default / absent): full review — run gates 1-8, write REVIEW.md, return verdict (Steps 1-4 below).
+- `mode=dod-critic`: read-only adversarial re-check of an EXISTING REVIEW.md — run NO gates, write NO file. Execute `<dod_critic_mode>` instead of Steps 1-4 and return the findings array to the orchestrator.
 
 ### Step 1: Load context
 Read PLAN.md + SUMMARY.md + PROJECT.md § Definition of Done + CONTEXT.md § Definition of Done.
@@ -468,7 +494,11 @@ Print REVIEW.md path + final verdict.
 </fallbacks>
 
 <output>
+**mode=verify (default):**
 - `{PHASE_DIR}/REVIEW.md` created (includes `## DoD Checklist` section from Gate 8)
 - Final message: `review phase {PHASE_SLUG}: {VERDICT} ({blockers} blockers, {warns} warns, {N_manual} DoD manual pending)`
 - Exit code 0 if APPROVED, APPROVED_WITH_WARNINGS, or APPROVED_PENDING_MANUAL; 1 if BLOCKED
+
+**mode=dod-critic:**
+- Writes NOTHING. Returns findings only: `[{row, hollow, objective, evidence}]` (empty `[]` if REVIEW.md/DoD absent). The orchestrator folds them into REVIEW.md and recomputes the verdict downward.
 </output>

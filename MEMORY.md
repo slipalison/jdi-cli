@@ -164,7 +164,7 @@ next_step: /jdi-discuss setup-api
 
 ```json
 {
-  "$schema_version": "1.1",
+  "$schema_version": "1.2",
   "context_window": 200000,
   "thresholds": {
     "warn_pct": 60,
@@ -178,6 +178,10 @@ next_step: /jdi-discuss setup-api
   "compaction": {
     "keep_phases": 2,
     "archive_after": 5
+  },
+  "orchestration": {
+    "mode": "standard",
+    "source": "default"
   },
   "coverage_min": 80
 }
@@ -193,10 +197,14 @@ next_step: /jdi-discuss setup-api
 - `compaction.keep_phases` — quantas phases anteriores ficam ativas em `.jdi/phases/`. Resto vai pra `.jdi/archive/`.
 - `compaction.archive_after` — phases acima deste delta movem pra archive (executado por `/jdi-ship`).
 - `coverage_min` — overrideavel por PROJECT.md. Reviewer usa.
+- `orchestration.mode` — `standard` (default) ou `enhanced`. Flag host-neutra: quando `enhanced` E o host sabe orquestrar sub-agentes, commands PODEM rodar camadas multi-agente opcionais (criticos advisory); senao degradam pro caminho padrao. Off-path byte-identico. Boolean de capability, NAO ledger de tokens.
+- `orchestration.source` — `default` | `user` | `detected`. Procedencia/auditoria apenas, nunca dirige comportamento.
 
 **Lifespan:** vida do projeto. Versionado em git.
 
-**Lido por:** `/jdi-do`, `/jdi-plan`, `/jdi-verify`, `/jdi-ship` (para compaction). Specialists (doer/reviewer) leem `coverage_min`.
+**Lido por:** `/jdi-do`, `/jdi-plan`, `/jdi-verify`, `/jdi-ship` (para compaction). Specialists (doer/reviewer) leem `coverage_min`. `orchestration.mode` lido por `/jdi-verify` (e futuros consumidores) no turno top-level; sub-agentes so enxergam via este arquivo, nunca via sessao do host.
+
+**Escrito por:** `/jdi-new` e `/jdi-adopt` (Step 4b — opt-in de orchestration, default determinado no turno top-level onde o sinal de capability do host eh visivel).
 
 ---
 
