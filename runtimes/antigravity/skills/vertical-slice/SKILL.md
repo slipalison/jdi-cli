@@ -1,4 +1,4 @@
-﻿---
+---
 name: vertical-slice
 description: Vertical Slice Architecture (Jimmy Bogard). Organize by feature, not by technical layer. Each feature owns its full request-to-response path with minimal sharing. Language-agnostic rigid rules. Mutually exclusive with The Method, DDD, Clean Architecture, Hexagonal, Onion.
 triggers:

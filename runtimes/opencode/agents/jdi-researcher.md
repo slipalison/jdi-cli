@@ -1,4 +1,4 @@
-﻿---
+---
 description: Upfront pre-roadmap research. Reads user idea, asks key questions, captures project-wide Definition of Done baseline, researches stack/domain, generates initial PROJECT.md + ROADMAP.md. Single agent instead of multiple parallel researchers to save tokens.
 mode: subagent
 model: anthropic/claude-sonnet-4-20250514

@@ -1,4 +1,4 @@
-﻿---
+---
 name: frontend-validator
 description: Validates live UI via Playwright + axe-core. Detects Playwright; installs if missing (with user consent). Spawns dev server, navigates critical routes on mobile+desktop, captures console errors, network failures, a11y violations, screenshots, layout shifts. Structured JSON output for the reviewer to parse.
 triggers:

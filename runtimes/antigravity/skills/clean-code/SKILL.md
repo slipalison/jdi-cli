@@ -1,4 +1,4 @@
-﻿---
+---
 name: clean-code
 description: Clean Code. Human-readable code, optimized for reading (read 10x more than written). Names reveal intent, small functions, no redundant comments, explicit error handling, no magic numbers. Applies in any language.
 triggers:

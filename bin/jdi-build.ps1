@@ -52,6 +52,14 @@ function Read-MdSource {
   return @{ Frontmatter = ''; Body = $content }
 }
 
+# Escreve UTF-8 SEM BOM (consistente com bin/jdi-build.sh e pwsh 7+).
+# `Set-Content -Encoding UTF8` emite BOM no Windows PowerShell 5.1 — isso gera
+# churn cross-shell gigante em runtimes/ (skills com BOM, commands sem).
+function Write-Utf8NoBom {
+  param([string]$Path, [string]$Content)
+  [System.IO.File]::WriteAllText($Path, $Content, [System.Text.UTF8Encoding]::new($false))
+}
+
 # Extrai sub-bloco do frontmatter sob `runtime_overrides.<runtime>:`.
 # Retorna hashtable { key = value } com parsing simples de "key: value" indented.
 function Get-RuntimeOverride {
@@ -170,7 +178,7 @@ function Build-ClaudeAgent {
   [void]$fm.AppendLine('---')
 
   $content = $fm.ToString() + $src.Body
-  Set-Content -Path $dst -Value $content -Encoding UTF8 -NoNewline
+  Write-Utf8NoBom -Path $dst -Content $content
   Write-Host "  claude/agents/$name.md"
 }
 
@@ -192,7 +200,7 @@ function Build-CopilotAgent {
   [void]$fm.AppendLine('---')
 
   $content = $fm.ToString() + $src.Body
-  Set-Content -Path $dst -Value $content -Encoding UTF8 -NoNewline
+  Write-Utf8NoBom -Path $dst -Content $content
   Write-Host "  copilot/agents/$name.agent.md"
 }
 
@@ -224,7 +232,7 @@ function Build-AntigravitySkill {
   [void]$fm.AppendLine('---')
 
   $content = $fm.ToString() + $src.Body
-  Set-Content -Path $dst -Value $content -Encoding UTF8 -NoNewline
+  Write-Utf8NoBom -Path $dst -Content $content
   Write-Host "  antigravity/skills/$name/SKILL.md"
 }
 
@@ -254,7 +262,7 @@ function Build-OpencodeAgent {
   [void]$fm.AppendLine('---')
 
   $content = $fm.ToString() + $src.Body
-  Set-Content -Path $dst -Value $content -Encoding UTF8 -NoNewline
+  Write-Utf8NoBom -Path $dst -Content $content
   Write-Host "  opencode/agents/$name.md"
 }
 
@@ -311,7 +319,7 @@ function Build-StandaloneSkill {
   [void]$fm.AppendLine('---')
 
   $content = $fm.ToString() + $src.Body
-  Set-Content -Path (Join-Path $DestRoot 'SKILL.md') -Value $content -Encoding UTF8 -NoNewline
+  Write-Utf8NoBom -Path (Join-Path $DestRoot 'SKILL.md') -Content $content
 
   # Copia subdirs opcionais (references/, scripts/)
   foreach ($subdir in @('references', 'scripts')) {
