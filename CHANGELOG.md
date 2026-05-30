@@ -5,6 +5,18 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.13] - 2026-05-30
+
+### Added — Enhanced orchestration (opt-in, host-neutral)
+- `.jdi/config.json` gains `orchestration: { mode, source }` (`$schema_version` → `1.2`). `mode` defaults to `standard`; `enhanced` lets commands run optional multi-agent advisory layers when the host can fan out, degrading to the standard single-agent path otherwise. Off-path is byte-identical — a legacy config without the block reads as `standard`. Boolean capability switch, not a token ledger.
+- `/jdi-new` and `/jdi-adopt` Step 4b: opt-in determined once at the top-level command turn (host capability seeds the default, user confirms) and persisted to config — sub-agents read it only from the file, never from host session state.
+- `/jdi-verify` Step 4.5: reference consumer — opt-in, read-only Gate-8 Definition-of-Done critic that re-checks `Type=Auto/Status=PASS` rows for hollow passes. Emits a `## DoD Critic` REVIEW.md segment whose verdict the existing worst-case aggregation picks up. Can only tighten the verdict, never loosen it.
+- `reviewer-specialist` template: `mode=dod-critic` branch (read-only, returns findings, writes nothing; orchestrator stays sole writer).
+- `jdi-doctor` (`.sh` + `.ps1`): reports the active orchestration mode for the current project.
+
+### Fixed
+- `bin/jdi-build.ps1` now emits BOM-less UTF-8 (`Write-Utf8NoBom`) for all generated agents/skills. `Set-Content -Encoding UTF8` prepended a UTF-8 BOM under Windows PowerShell 5.1 (but not pwsh 7+), leaving `runtimes/` inconsistent with `jdi-build.sh` and causing ~60-file spurious churn across shells. Normalizes all 62 agent/skill adapters; since CI publishes committed `runtimes/` as-is, this removes the BOM from the published package.
+
 ## [0.1.12] - 2026-05-24
 
 ### Fixed
