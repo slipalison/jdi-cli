@@ -1,16 +1,16 @@
 name: Publish to npm
 
-# Dispara quando voce empurra uma tag no formato v*.*.* (ex: v1.6.0).
+# Dispara quando voce PUBLICA uma GitHub Release (a Release cria a tag).
 # Fluxo recomendado:
-#   1. Bump em package.json
-#   2. Commit + push main
-#   3. git tag -a v1.6.0 -m "..." && git push origin v1.6.0
-#   4. Action publica automatico
+#   1. Bump em package.json + CHANGELOG, commit, merge na main
+#   2. GitHub UI > Releases > Draft a new release
+#   3. Tag: vX.Y.Z (deve bater com package.json) | Target: main | Publish release
+#   4. Action publica automatico no npm
+# (Para republicar uma tag ja existente, use o trigger manual em Actions > Run workflow.)
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
+  release:
+    types: [published]
   # Permite trigger manual no UI tambem (Actions tab > Run workflow)
   workflow_dispatch:
     inputs:
@@ -36,7 +36,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          RAW="${{ github.event.inputs.tag || github.ref_name }}"
+          RAW="${{ github.event.inputs.tag || github.event.release.tag_name || github.ref_name }}"
           # Normaliza: garante prefixo v
           if [[ "$RAW" != v* ]]; then
             RAW="v${RAW}"
