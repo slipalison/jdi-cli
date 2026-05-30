@@ -1,4 +1,4 @@
-﻿---
+---
 name: yagni
 description: YAGNI (You Aren't Gonna Need It). Build only what the current requirement asks for. Generalize after the 3rd real case, never before. Code not written is code with no bug, no maintenance cost, no pending test. Applies in any language.
 triggers:

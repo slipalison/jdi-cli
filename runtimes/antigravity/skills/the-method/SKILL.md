@@ -1,4 +1,4 @@
-﻿---
+---
 name: the-method
 description: The Method (Juval Löwy, "Righting Software"). Volatility-based decomposition with universal hierarchy (Clients, Managers, Engines, ResourceAccess, Resources, Utilities). Strict communication rules. Language-agnostic. Mutually exclusive with DDD, Clean Architecture, Hexagonal, Onion, Vertical Slice.
 triggers:

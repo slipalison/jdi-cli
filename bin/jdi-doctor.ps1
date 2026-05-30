@@ -213,6 +213,21 @@ if (Test-Path "$ProjectDir\.jdi") {
     $phaseCount = (Get-ChildItem -Path "$ProjectDir\.jdi\phases" -Directory -ErrorAction SilentlyContinue).Count
     Write-OK ".jdi/phases/ com $phaseCount phase(s)"
   }
+
+  $cfgPath = Join-Path $ProjectDir '.jdi\config.json'
+  if (Test-Path $cfgPath) {
+    try {
+      $cfg  = Get-Content $cfgPath -Raw | ConvertFrom-Json
+      $mode = if ($cfg.orchestration -and $cfg.orchestration.mode) { $cfg.orchestration.mode } else { 'standard' }
+      if ($mode -eq 'enhanced') {
+        Write-OK ".jdi/config.json orchestration: enhanced (advisory multi-agent layers opt-in; degrade when host cannot fan out)"
+      } else {
+        Write-Note ".jdi/config.json orchestration: standard (single-agent path)"
+      }
+    } catch {
+      Write-WARN ".jdi/config.json present but not valid JSON"
+    }
+  }
 } else {
   Write-WARN '.jdi/ ausente. Rode /jdi-new ou esta fora de um projeto JDI.'
 }

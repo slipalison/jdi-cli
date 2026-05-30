@@ -1,4 +1,4 @@
-﻿---
+---
 name: kiss
 description: KISS (Keep It Simple, Stupid). The simplest solution that solves the problem wins. Complexity only justified by real measured pain. Each layer/abstraction must pay its own cost. Applies in any language.
 ---

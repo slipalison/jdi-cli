@@ -1,4 +1,4 @@
-﻿---
+---
 name: ddd
 description: Domain-Driven Design (Eric Evans). Strategic patterns (Bounded Context, Ubiquitous Language, Context Map) plus tactical patterns (Aggregates, Entities, Value Objects, Domain Services, Repositories, Domain Events). Language-agnostic rigid rules. Mutually exclusive with The Method, Clean Architecture, Hexagonal, Onion, Vertical Slice.
 triggers:

@@ -1,4 +1,4 @@
-﻿---
+---
 name: hexagonal
 description: Hexagonal Architecture / Ports and Adapters (Alistair Cockburn). Application core in the center, surrounded by Ports (interfaces owned by the core) and Adapters (implementations). Driving (primary) vs Driven (secondary) sides. Language-agnostic rigid rules. Mutually exclusive with The Method, DDD, Clean Architecture, Onion, Vertical Slice.
 triggers:

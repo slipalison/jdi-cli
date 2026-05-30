@@ -1,4 +1,4 @@
-﻿---
+---
 name: solid
 description: SOLID. Robert C. Martin's 5 OO design principles - SRP, OCP, LSP, ISP, DIP. Applicable in any language with types/classes/interfaces (C#, Java, TS, Python, Go, Rust, Kotlin, Swift, etc). Direct summary + anti-patterns + detection heuristics.
 ---

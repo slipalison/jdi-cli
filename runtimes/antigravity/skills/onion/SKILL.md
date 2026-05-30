@@ -1,4 +1,4 @@
-﻿---
+---
 name: onion
 description: Onion Architecture (Jeffrey Palermo). Concentric shells with the Domain Model at the absolute center. Dependencies invert across shells - outer depends on inner, inner knows nothing of outer. Language-agnostic rigid rules. Mutually exclusive with The Method, DDD, Clean Architecture, Hexagonal, Vertical Slice.
 triggers:

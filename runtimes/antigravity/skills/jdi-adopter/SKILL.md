@@ -1,4 +1,4 @@
-﻿---
+---
 name: jdi-adopter
 description: Adopt mode for brownfield projects. Scans existing repo (manifests, layout, git, docs), infers stack/code-design, confirms with user, generates PROJECT.md + ROADMAP.md with adopted=true flag. Replaces /jdi-new for projects with code already written.
 triggers:

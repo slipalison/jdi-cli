@@ -100,6 +100,42 @@ Each reviewer scopes its gates to its `file_glob` (from frontmatter `scope.file_
 
 Reviewers are read-only. Wait for completion before next.
 
+### Step 4.5: Enhanced DoD critic (opt-in, capability-gated)
+
+Read `.jdi/config.json`. Run this step ONLY if **`orchestration.mode == "enhanced"`** AND this runtime can spawn read-only sub-agents (`Agent`/`Task` available). Otherwise SKIP entirely — go to Step 5 with `REVIEW.md` untouched. The off-path is byte-identical; this is the "use the resource only when available" contract.
+
+Why: Gate 8 (Definition of Done) maps `exit 0 → PASS` for `Type=Auto` rows with no semantic scrutiny. A command can exit 0 without proving its criterion (a grep on a heading that still exists, a test asserting nothing). This critic re-examines those rows and can only ever make the verdict **stricter** — it can never raise a blocked verdict to approved.
+
+**If it runs:**
+
+1. Spawn ONE read-only critic — single sequential `Agent()` call, never `run_in_background`, never mid-wave, so there is zero `.git/config.lock` exposure. Reuse the project reviewer (already read-only) in critic mode; multi-stack uses the first reviewer (DoD is project-global, evaluated once):
+
+```
+CRITIC=$(echo "$REVIEWERS" | head -1)
+Agent(
+  subagent_type="$CRITIC",
+  description="DoD critic phase $PHASE_SLUG",
+  prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, mode=dod-critic.
+          For every DoD row in REVIEW.md with Type=Auto AND Status=PASS, decide whether the gate
+          command PROVES the criterion or merely exits 0. Return findings ONLY as
+          [{row, hollow:true|false, objective:true|false, evidence}]. Write nothing to disk."
+)
+```
+
+2. The critic returns findings; **the orchestrator (this command) is the sole writer.** Append ONE segment to `$PHASE_DIR/REVIEW.md`:
+
+```markdown
+## DoD Critic (enhanced)
+
+{for each hollow=true finding: "- DoD row «{row}»: {evidence}"}
+
+**Verdict:** {BLOCKED if any (hollow && objective); APPROVED_WITH_WARNINGS if any (hollow && !objective); otherwise APPROVED}
+```
+
+3. Fall through to Step 5 unchanged — its worst-case grep already aggregates this new `**Verdict:**` line (objective disproof → BLOCKED; suspicion → APPROVED_WITH_WARNINGS; clean → no change).
+
+Invariants: critic is read-only and writes nothing itself; orchestrator owns the single `REVIEW.md` write; the segment can only tighten the aggregate; one sequential agent. Fail-open: if the critic errors or returns nothing, treat as APPROVED and proceed — the deterministic gates already ran in Step 4. (Natural next step: teach `reviewer-specialist` a `mode=dod-critic` branch; until then the explicit prompt above guides the read-only pass.)
+
 ### Step 5: Read aggregate verdict
 
 ```bash

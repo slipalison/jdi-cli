@@ -1,4 +1,4 @@
-﻿---
+---
 description: Adaptive question loop to capture locked decisions + Definition of Done before the plan. Writes CONTEXT.md.
 mode: subagent
 model: anthropic/claude-sonnet-4-20250514

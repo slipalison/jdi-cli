@@ -1,4 +1,4 @@
-﻿---
+---
 name: jdi-architect
 description: Creates new JDI agents and skills. Create mode = generic agent/skill in core. Specialist mode = per-project doer/reviewer in .jdi/agents/.
 triggers:

@@ -1,4 +1,4 @@
-﻿---
+---
 name: clean-architecture
 description: Clean Architecture (Robert C. Martin). 4 concentric layers - Entities, Use Cases, Interface Adapters, Frameworks & Drivers. The Dependency Rule points strictly inward. Language-agnostic rigid rules. Mutually exclusive with The Method, DDD, Hexagonal, Onion, Vertical Slice.
 triggers:

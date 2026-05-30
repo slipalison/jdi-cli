@@ -89,7 +89,7 @@ If `.jdi/config.json` does not yet exist, write the default below. Defaults (200
 
 ```json
 {
-  "$schema_version": "1.1",
+  "$schema_version": "1.2",
   "context_window": 200000,
   "thresholds": {
     "warn_pct": 60,
@@ -104,11 +104,31 @@ If `.jdi/config.json` does not yet exist, write the default below. Defaults (200
     "keep_phases": 2,
     "archive_after": 5
   },
+  "orchestration": {
+    "mode": "standard",
+    "source": "default"
+  },
   "coverage_min": 80
 }
 ```
 
 Canonical reference for the default also lives in `templates-jdi-folder/config.json` (shipped by npm package) — for users wanting to regenerate manually.
+
+#### Step 4b: Enhanced orchestration opt-in (host-neutral capability flag)
+
+`orchestration.mode` tells later commands whether they MAY use optional multi-agent layers (advisory critics, parallel analysis), always degrading to the standard path when the host cannot fan out. Default `standard` keeps every command byte-identical on hosts without the capability — never assume it.
+
+Determine the value **once, here, in this top-level command turn** — host capability signals are only visible now; sub-agents spawned by later commands cannot see them, so the choice MUST be persisted to the file:
+
+1. **Default:** if this session is running under an enhanced / high-effort multi-agent orchestration mode, pre-select `enhanced` and set `source: "detected"`. Otherwise `standard`.
+2. **Confirm** (AskUserQuestion; fallback: numbered prompt — see `<fallbacks>` convention):
+   ```
+   Enable enhanced multi-agent orchestration when your assistant supports it?
+   Adds opt-in advisory critics (e.g. a Definition-of-Done re-check at /jdi-verify).
+   The standard single-agent path is used unchanged whenever it is unavailable.
+   ```
+   Options: `[Enhanced — use extra agents when available]` / `[Standard — single-agent always (default)]`
+3. Write the chosen `mode` into the `orchestration` block; set `source` to `"user"` (or keep `"detected"` if the user accepts the detected default without changing it). **Never** store a token budget here — this is a boolean capability switch, not an accounting ledger.
 
 ### Step 5: Confirm
 
