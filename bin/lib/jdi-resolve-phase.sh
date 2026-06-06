@@ -159,6 +159,17 @@ if echo "$CANONICAL_SLUG" | grep -qE '^[0-9]+-'; then
   CANONICAL_SLUG=$(echo "$CANONICAL_SLUG" | sed -E 's/^[0-9]+-//')
 fi
 
+# Re-validate slugs sourced from ROADMAP.md (not just the CLI arg). These
+# values are emitted as KEY='value' for callers to `eval`, so a tampered
+# ROADMAP slug carrying shell metacharacters would otherwise inject. The CLI
+# arg is already checked above; the ROADMAP content is not trusted blindly.
+for _s in "$RAW_SLUG" "$CANONICAL_SLUG"; do
+  if ! echo "$_s" | grep -qE '^[a-z0-9][a-z0-9-]{2,49}$'; then
+    echo "ERROR: corrupt slug in ROADMAP.md: '$_s'" >&2
+    exit 4
+  fi
+done
+
 # --- Folder resolution --------------------------------------------------
 # Search order (first match wins):
 #   1. .jdi/phases/<canonical_slug>/    (v2 layout)

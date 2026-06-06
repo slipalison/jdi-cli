@@ -73,7 +73,11 @@ fi
 mkdir -p "$BASE_DIR"
 
 echo "  Cloning..."
-git clone --depth 1 "$REPO" "$TARGET" 2>&1 | sed 's/^/    /'
+case "$REPO" in
+  https://*|git@*) : ;;
+  *) echo "Repo invalido (esperado https:// ou git@): $REPO" >&2; exit 1 ;;
+esac
+git clone --depth 1 -- "$REPO" "$TARGET" 2>&1 | sed 's/^/    /'
 
 if [ $? -ne 0 ]; then
   echo "git clone failed."
