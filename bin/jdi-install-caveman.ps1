@@ -68,7 +68,11 @@ if (Test-Path $target) {
 New-Item -ItemType Directory -Force -Path $baseDir | Out-Null
 
 Write-Host "  Cloning..."
-& git clone --depth 1 $Repo $target 2>&1 | ForEach-Object { Write-Host "    $_" }
+if ($Repo -notmatch '^(https://|git@)[\w.@:/-]+$') {
+  Write-Error "Repo invalido (esperado https:// ou git@): $Repo"
+  exit 1
+}
+& git clone --depth 1 -- $Repo $target 2>&1 | ForEach-Object { Write-Host "    $_" }
 
 if ($LASTEXITCODE -ne 0) {
   Write-Error "git clone failed (exit $LASTEXITCODE)."

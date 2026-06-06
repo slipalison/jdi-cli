@@ -18,7 +18,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
+const https = require('https');
 
 const cacheFile = process.env.JDI_CACHE_FILE;
 if (!cacheFile) {
@@ -84,25 +84,50 @@ function writeCache(result) {
 }
 
 function npmViewLatest(callback) {
-  // On Windows `npm` is `npm.cmd`. Node's execFile does not consult PATHEXT,
-  // so we route through the shell on win32. POSIX stays direct.
-  execFile(
-    'npm',
-    ['view', PACKAGE_NAME, 'version'],
+  // Query the npm registry directly over HTTPS instead of shelling out to the
+  // `npm` binary. Avoids PATH/PATHEXT resolution (and the Windows CWD-search
+  // hazard of `shell: true`), needs no npm on PATH, and stays stdlib-only.
+  const url = `https://registry.npmjs.org/${PACKAGE_NAME}/latest`;
+  let settled = false;
+  const done = (v) => {
+    if (settled) return;
+    settled = true;
+    callback(v);
+  };
+
+  const req = https.get(
+    url,
     {
-      encoding: 'utf8',
       timeout: NPM_TIMEOUT_MS,
-      windowsHide: true,
-      shell: process.platform === 'win32',
+      headers: { Accept: 'application/vnd.npm.install-v1+json' },
     },
-    (err, stdout) => {
-      if (err || !stdout) {
-        callback(null);
+    (res) => {
+      if (res.statusCode !== 200) {
+        res.resume();
+        done(null);
         return;
       }
-      callback(String(stdout).trim());
+      let body = '';
+      res.on('data', (chunk) => {
+        body += chunk;
+        // Defensive cap: a well-formed manifest is a few KB.
+        if (body.length > 1e6) {
+          req.destroy();
+          done(null);
+        }
+      });
+      res.on('end', () => {
+        try {
+          const version = JSON.parse(body).version;
+          done(version ? String(version).trim() : null);
+        } catch (_e) {
+          done(null);
+        }
+      });
     }
   );
+  req.on('timeout', () => req.destroy());
+  req.on('error', () => done(null));
 }
 
 const installed = readInstalledVersion();
