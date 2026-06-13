@@ -22,6 +22,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 JDI_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROJECT_DIR="$PWD"
 
+# Literais repetidos extraidos pra constante (S1192)
+readonly JDI_AGENT_GLOB='jdi-*.md'
+readonly PLAYWRIGHT_KEY='"playwright"'
+
 # Cores (sem cor se nao for tty)
 if [[ -t 1 ]]; then
   GRN=$'\033[32m'; YLW=$'\033[33m'; RED=$'\033[31m'; DIM=$'\033[2m'; RST=$'\033[0m'
@@ -32,11 +36,11 @@ fi
 FAILS=0
 WARNS=0
 
-ok()   { echo "  ${GRN}OK${RST}    $1"; }
-warn() { echo "  ${YLW}WARN${RST}  $1"; ((WARNS++)) || true; }
-fail() { echo "  ${RED}FAIL${RST}  $1"; ((FAILS++)) || true; }
-note() { [[ "$VERBOSE" == "--verbose" ]] && echo "  ${DIM}note  $1${RST}" || true; }
-section() { echo; echo "${1}"; }
+ok()   { local msg="$1"; echo "  ${GRN}OK${RST}    $msg"; return 0; }
+warn() { local msg="$1"; echo "  ${YLW}WARN${RST}  $msg"; ((WARNS++)) || true; return 0; }
+fail() { local msg="$1"; echo "  ${RED}FAIL${RST}  $msg"; ((FAILS++)) || true; return 0; }
+note() { local msg="$1"; [[ "$VERBOSE" == "--verbose" ]] && echo "  ${DIM}note  $msg${RST}" || true; return 0; }
+section() { local title="$1"; echo; echo "${title}"; return 0; }
 
 # ---------------------------------------------------------------------------
 section "1. Dependencias bash"
@@ -164,6 +168,7 @@ for rt in claude copilot antigravity opencode; do
       copilot)     count=$(find "$JDI_ROOT/runtimes/copilot/agents" -name "*.agent.md" 2>/dev/null | wc -l | tr -d ' ') ;;
       antigravity) count=$(find "$JDI_ROOT/runtimes/antigravity/skills" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ') ;;
       opencode)    count=$(find "$JDI_ROOT/runtimes/opencode/agents" -name "*.md" 2>/dev/null | wc -l | tr -d ' ') ;;
+      *)           count=0 ;;
     esac
 
     if [[ "$count" -gt 0 ]]; then
@@ -233,7 +238,7 @@ section "7. Runtime instalado no projeto"
 INSTALL_FOUND=false
 
 if [[ -d "$PROJECT_DIR/.claude/agents" ]]; then
-  count=$(find "$PROJECT_DIR/.claude/agents" -name "jdi-*.md" 2>/dev/null | wc -l | tr -d ' ')
+  count=$(find "$PROJECT_DIR/.claude/agents" -name "$JDI_AGENT_GLOB" 2>/dev/null | wc -l | tr -d ' ')
   if [[ "$count" -gt 0 ]]; then
     ok ".claude/agents/ com $count agents JDI"
     INSTALL_FOUND=true
@@ -259,7 +264,7 @@ if [[ -d "$PROJECT_DIR/.gemini/antigravity/skills" ]]; then
 fi
 
 if [[ -d "$PROJECT_DIR/.opencode/agents" ]]; then
-  count=$(find "$PROJECT_DIR/.opencode/agents" -name "jdi-*.md" 2>/dev/null | wc -l | tr -d ' ')
+  count=$(find "$PROJECT_DIR/.opencode/agents" -name "$JDI_AGENT_GLOB" 2>/dev/null | wc -l | tr -d ' ')
   if [[ "$count" -gt 0 ]]; then
     ok ".opencode/agents/ com $count agents JDI"
     INSTALL_FOUND=true
@@ -267,19 +272,17 @@ if [[ -d "$PROJECT_DIR/.opencode/agents" ]]; then
 fi
 
 if [[ -d "$HOME/.claude/agents" ]]; then
-  count=$(find "$HOME/.claude/agents" -name "jdi-*.md" 2>/dev/null | wc -l | tr -d ' ')
+  count=$(find "$HOME/.claude/agents" -name "$JDI_AGENT_GLOB" 2>/dev/null | wc -l | tr -d ' ')
   [[ "$count" -gt 0 ]] && ok "~/.claude/agents/ com $count agents JDI (scope user)" && INSTALL_FOUND=true
 fi
 
 if [[ -d "$HOME/.config/opencode/agents" ]]; then
-  count=$(find "$HOME/.config/opencode/agents" -name "jdi-*.md" 2>/dev/null | wc -l | tr -d ' ')
+  count=$(find "$HOME/.config/opencode/agents" -name "$JDI_AGENT_GLOB" 2>/dev/null | wc -l | tr -d ' ')
   [[ "$count" -gt 0 ]] && ok "~/.config/opencode/agents/ com $count agents JDI (scope user)" && INSTALL_FOUND=true
 fi
 
-if ! $INSTALL_FOUND; then
-  if [[ -d "$PROJECT_DIR/.jdi" ]]; then
-    fail "Projeto eh JDI mas nenhum runtime instalado. Rode: $JDI_ROOT/bin/jdi-install.sh <runtime>"
-  fi
+if ! $INSTALL_FOUND && [[ -d "$PROJECT_DIR/.jdi" ]]; then
+  fail "Projeto eh JDI mas nenhum runtime instalado. Rode: $JDI_ROOT/bin/jdi-install.sh <runtime>"
 fi
 
 # ---------------------------------------------------------------------------
@@ -318,39 +321,39 @@ fi
 # ---------------------------------------------------------------------------
 section "10. Playwright + MCP (optional)"
 
-if [ -f "$PROJECT_DIR/package.json" ] && grep -q '"@playwright/test"' "$PROJECT_DIR/package.json" 2>/dev/null; then
+if [[ -f "$PROJECT_DIR/package.json" ]] && grep -q '"@playwright/test"' "$PROJECT_DIR/package.json" 2>/dev/null; then
   ok "@playwright/test in package.json"
 else
   note "@playwright/test not installed (run: npx jdi-cli install-playwright)"
 fi
 
-if [ -f "$PROJECT_DIR/.claude/settings.local.json" ]; then
-  if grep -q '"playwright"' "$PROJECT_DIR/.claude/settings.local.json" 2>/dev/null; then
+if [[ -f "$PROJECT_DIR/.claude/settings.local.json" ]]; then
+  if grep -q "$PLAYWRIGHT_KEY" "$PROJECT_DIR/.claude/settings.local.json" 2>/dev/null; then
     ok "Claude Code MCP playwright configured"
   else
     note "Claude Code settings.local.json present but no MCP playwright entry"
   fi
 fi
 
-if [ -f "$PROJECT_DIR/.opencode/opencode.jsonc" ]; then
-  if grep -q '"playwright"' "$PROJECT_DIR/.opencode/opencode.jsonc" 2>/dev/null; then
+if [[ -f "$PROJECT_DIR/.opencode/opencode.jsonc" ]]; then
+  if grep -q "$PLAYWRIGHT_KEY" "$PROJECT_DIR/.opencode/opencode.jsonc" 2>/dev/null; then
     ok "OpenCode MCP playwright configured"
   else
     note "OpenCode opencode.jsonc present but no MCP playwright entry"
   fi
 fi
 
-if [ -f "$PROJECT_DIR/.vscode/mcp.json" ]; then
-  if grep -q '"playwright"' "$PROJECT_DIR/.vscode/mcp.json" 2>/dev/null; then
+if [[ -f "$PROJECT_DIR/.vscode/mcp.json" ]]; then
+  if grep -q "$PLAYWRIGHT_KEY" "$PROJECT_DIR/.vscode/mcp.json" 2>/dev/null; then
     ok "Copilot (VS Code) MCP playwright configured"
   else
     note ".vscode/mcp.json present but no playwright entry"
   fi
 fi
 
-if [ -f "$HOME/.gemini/settings.json" ] && grep -q '"playwright"' "$HOME/.gemini/settings.json" 2>/dev/null; then
+if [[ -f "$HOME/.gemini/settings.json" ]] && grep -q "$PLAYWRIGHT_KEY" "$HOME/.gemini/settings.json" 2>/dev/null; then
   ok "Antigravity MCP playwright configured (user scope)"
-elif [ -f "$PROJECT_DIR/.gemini/settings.json" ] && grep -q '"playwright"' "$PROJECT_DIR/.gemini/settings.json" 2>/dev/null; then
+elif [[ -f "$PROJECT_DIR/.gemini/settings.json" ]] && grep -q "$PLAYWRIGHT_KEY" "$PROJECT_DIR/.gemini/settings.json" 2>/dev/null; then
   ok "Antigravity MCP playwright configured (project scope)"
 fi
 
@@ -360,12 +363,12 @@ section "12. Specialists (single vs multi-stack)"
 SPEC_PATH="$PROJECT_DIR/.jdi/specialists.md"
 REV_PATH="$PROJECT_DIR/.jdi/reviewers.md"
 
-if [ -f "$SPEC_PATH" ]; then
+if [[ -f "$SPEC_PATH" ]]; then
   DOERS=$(grep -oE 'jdi-doer-[a-z0-9-]+' "$SPEC_PATH" | sort -u)
   DOER_COUNT=$(echo "$DOERS" | grep -c .)
-  if [ "$DOER_COUNT" -eq 0 ]; then
+  if [[ "$DOER_COUNT" -eq 0 ]]; then
     note "specialists.md exists but no doer registered"
-  elif [ "$DOER_COUNT" -eq 1 ]; then
+  elif [[ "$DOER_COUNT" -eq 1 ]]; then
     ok "Single-stack: $DOERS"
   else
     ok "Multi-stack: $DOER_COUNT doer specialists"
@@ -375,9 +378,9 @@ else
   note ".jdi/specialists.md missing (run /jdi-bootstrap)"
 fi
 
-if [ -f "$REV_PATH" ]; then
+if [[ -f "$REV_PATH" ]]; then
   REVS=$(grep -oE 'jdi-reviewer-[a-z0-9-]+' "$REV_PATH" | sort -u | wc -l)
-  if [ "$REVS" -gt 1 ]; then
+  if [[ "$REVS" -gt 1 ]]; then
     note "  Reviewer chain length: $REVS (multi-stack /jdi-verify)"
   fi
 fi
@@ -388,9 +391,9 @@ section "11. Caveman plugin (optional)"
 CAVEMAN_USER="$HOME/.claude/plugins/caveman"
 CAVEMAN_PROJECT="$PROJECT_DIR/.claude/plugins/caveman"
 
-if [ -d "$CAVEMAN_USER" ]; then
+if [[ -d "$CAVEMAN_USER" ]]; then
   ok "Caveman installed (user scope: $CAVEMAN_USER)"
-elif [ -d "$CAVEMAN_PROJECT" ]; then
+elif [[ -d "$CAVEMAN_PROJECT" ]]; then
   ok "Caveman installed (project scope: $CAVEMAN_PROJECT)"
 else
   note "Caveman plugin not installed (run: npx jdi-cli install-caveman)"

@@ -25,7 +25,7 @@ CONTEXT_WINDOW=200000
 WARN_PCT=60
 CRITICAL_PCT=70
 
-if [ -f "$CONFIG" ]; then
+if [[ -f "$CONFIG" ]]; then
   if command -v jq >/dev/null 2>&1; then
     CONTEXT_WINDOW=$(jq -r '.context_window // 200000' "$CONFIG")
     WARN_PCT=$(jq -r '.thresholds.warn_pct // 60' "$CONFIG")
@@ -41,7 +41,7 @@ fi
 # Soma chars dos paths informados
 TOTAL_CHARS=0
 for p in "$@"; do
-  if [ -f "$p" ]; then
+  if [[ -f "$p" ]]; then
     SZ=$(wc -c < "$p" | tr -d ' ')
     TOTAL_CHARS=$((TOTAL_CHARS + SZ))
   fi
@@ -51,13 +51,13 @@ done
 TOKENS=$((TOTAL_CHARS / 4))
 PCT=$((TOKENS * 100 / CONTEXT_WINDOW))
 
-if [ "$PCT" -ge "$CRITICAL_PCT" ]; then
+if [[ "$PCT" -ge "$CRITICAL_PCT" ]]; then
   STATE="CRITICAL"
   HINT="fracture zone — considere /jdi-thread (proxima phase em sessao nova)"
-elif [ "$PCT" -ge "$WARN_PCT" ]; then
+elif [[ "$PCT" -ge "$WARN_PCT" ]]; then
   STATE="WARN"
   HINT="context aquecendo — checkpoint recomendado"
-elif [ "$PCT" -ge 30 ]; then
+elif [[ "$PCT" -ge 30 ]]; then
   STATE="GOOD"
   HINT=""
 else
@@ -65,7 +65,7 @@ else
   HINT=""
 fi
 
-if [ -n "$HINT" ]; then
+if [[ -n "$HINT" ]]; then
   echo "[jdi-monitor] $STATE ${PCT}% (~${TOKENS} tokens / ${CONTEXT_WINDOW}). $HINT" >&2
 else
   echo "[jdi-monitor] $STATE ${PCT}% (~${TOKENS} tokens / ${CONTEXT_WINDOW})" >&2

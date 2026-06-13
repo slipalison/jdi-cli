@@ -24,7 +24,7 @@ SKIP_MCP=0
 RUNTIME=all
 AG_SCOPE=user
 
-while [ $# -gt 0 ]; do
+while [[ $# -gt 0 ]]; do
   case "$1" in
     --skip-browser)      SKIP_BROWSER=1; shift ;;
     --skip-mcp)          SKIP_MCP=1; shift ;;
@@ -45,25 +45,25 @@ case "$AG_SCOPE" in
 esac
 
 detect_pm() {
-  if [ -f "$PROJECT_DIR/pnpm-lock.yaml" ]; then echo pnpm
-  elif [ -f "$PROJECT_DIR/yarn.lock" ];     then echo yarn
-  elif [ -f "$PROJECT_DIR/bun.lockb" ];     then echo bun
+  if [[ -f "$PROJECT_DIR/pnpm-lock.yaml" ]]; then echo pnpm
+  elif [[ -f "$PROJECT_DIR/yarn.lock" ]];     then echo yarn
+  elif [[ -f "$PROJECT_DIR/bun.lockb" ]];     then echo bun
   else echo npm
   fi
 }
 
 has_pw_dep() {
   local pkg="$PROJECT_DIR/package.json"
-  [ -f "$pkg" ] || { echo 0; return; }
+  [[ -f "$pkg" ]] || { echo 0; return; }
   if grep -qE '"@playwright/test"' "$pkg"; then echo 1; else echo 0; fi
 }
 
 install_pw_dep() {
-  if [ "$(has_pw_dep)" = "1" ]; then
+  if [[ "$(has_pw_dep)" == "1" ]]; then
     echo "  [skip] @playwright/test already in package.json"
     return 0
   fi
-  if [ ! -f "$PROJECT_DIR/package.json" ]; then
+  if [[ ! -f "$PROJECT_DIR/package.json" ]]; then
     echo "  [warn] package.json not found. Run 'npm init -y' first."
     return 1
   fi
@@ -81,7 +81,7 @@ install_pw_dep() {
 }
 
 install_chromium() {
-  if [ "$SKIP_BROWSER" = "1" ]; then
+  if [[ "$SKIP_BROWSER" == "1" ]]; then
     echo "  [skip] --skip-browser flag set"
     return 0
   fi
@@ -94,13 +94,13 @@ install_chromium() {
 
 inject_claude_mcp() {
   local dir="$PROJECT_DIR/.claude"
-  if [ ! -d "$dir" ]; then
+  if [[ ! -d "$dir" ]]; then
     echo "  [skip] .claude/ not present (Claude Code not installed)"
     return
   fi
 
   local f="$dir/settings.local.json"
-  if [ -f "$f" ] && grep -qE '"playwright"\s*:' "$f"; then
+  if [[ -f "$f" ]] && grep -qE '"playwright"\s*:' "$f"; then
     echo "  [skip] mcpServers.playwright already present in settings.local.json"
     return
   fi
@@ -135,7 +135,7 @@ NODE_EOF
 
 inject_opencode_mcp() {
   local dir="$PROJECT_DIR/.opencode"
-  if [ ! -d "$dir" ]; then
+  if [[ ! -d "$dir" ]]; then
     echo "  [skip] .opencode/ not present (OpenCode not installed)"
     return
   fi
@@ -179,7 +179,7 @@ inject_copilot_mcp() {
   local vscode_dir="$PROJECT_DIR/.vscode"
   local f="$vscode_dir/mcp.json"
 
-  if [ -f "$f" ] && grep -q '"playwright"' "$f" 2>/dev/null; then
+  if [[ -f "$f" ]] && grep -q '"playwright"' "$f" 2>/dev/null; then
     echo "  [skip] servers.playwright already present in .vscode/mcp.json"
     return
   fi
@@ -213,14 +213,14 @@ NODE_EOF
 
 inject_antigravity_mcp() {
   local base
-  if [ "$AG_SCOPE" = "user" ]; then
+  if [[ "$AG_SCOPE" == "user" ]]; then
     base="$USER_HOME/.gemini"
   else
     base="$PROJECT_DIR/.gemini"
   fi
   local f="$base/settings.json"
 
-  if [ -f "$f" ] && grep -q '"playwright"' "$f" 2>/dev/null; then
+  if [[ -f "$f" ]] && grep -q '"playwright"' "$f" 2>/dev/null; then
     echo "  [skip] mcpServers.playwright already present in $f"
     return
   fi
@@ -266,13 +266,13 @@ echo ""
 echo "Step 2: Install browser"
 install_chromium
 
-if [ "$SKIP_MCP" != "1" ]; then
+if [[ "$SKIP_MCP" != "1" ]]; then
   echo ""
   echo "Step 3: Inject MCP config in detected runtimes"
-  if [ "$RUNTIME" = "claude" ]      || [ "$RUNTIME" = "all" ]; then inject_claude_mcp; fi
-  if [ "$RUNTIME" = "opencode" ]    || [ "$RUNTIME" = "all" ]; then inject_opencode_mcp; fi
-  if [ "$RUNTIME" = "copilot" ]     || [ "$RUNTIME" = "all" ]; then inject_copilot_mcp; fi
-  if [ "$RUNTIME" = "antigravity" ] || [ "$RUNTIME" = "all" ]; then inject_antigravity_mcp; fi
+  if [[ "$RUNTIME" == "claude" ]]      || [[ "$RUNTIME" == "all" ]]; then inject_claude_mcp; fi
+  if [[ "$RUNTIME" == "opencode" ]]    || [[ "$RUNTIME" == "all" ]]; then inject_opencode_mcp; fi
+  if [[ "$RUNTIME" == "copilot" ]]     || [[ "$RUNTIME" == "all" ]]; then inject_copilot_mcp; fi
+  if [[ "$RUNTIME" == "antigravity" ]] || [[ "$RUNTIME" == "all" ]]; then inject_antigravity_mcp; fi
 fi
 
 echo ""

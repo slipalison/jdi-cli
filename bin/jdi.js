@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const { spawn, spawnSync } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawn, spawnSync } = require('node:child_process');
 const ui = require('./lib/ui');
 const { c, sym } = ui;
 
@@ -29,11 +29,11 @@ function parseArgs(argv) {
 
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
-    if (a === '--scope' || a === '-s') {
+    if (['--scope', '-s'].includes(a)) {
       flags.scope = rest[++i];
-    } else if (a === '--verbose' || a === '-v') {
+    } else if (['--verbose', '-v'].includes(a)) {
       flags.verbose = true;
-    } else if (a === '--help' || a === '-h') {
+    } else if (['--help', '-h'].includes(a)) {
       flags.help = true;
     } else if (a === '--version') {
       flags.version = true;
@@ -82,6 +82,20 @@ function runShellScript(scriptName, scriptArgs = []) {
   });
 
   return { code: result.status ?? 0 };
+}
+
+// Build CLI args from a flag spec, picking the platform-correct flag name.
+// spec: [{ key, win, nix, value? }]. value:true forwards the flag's value.
+function buildFlagArgs(flags, spec) {
+  const args = [];
+  for (const s of spec) {
+    const present = flags[s.key];
+    if (!present) continue;
+    const name = isWindows ? s.win : s.nix;
+    if (s.value) args.push(name, present);
+    else args.push(name);
+  }
+  return args;
 }
 
 // =================================================================
@@ -195,16 +209,11 @@ async function cmdUpdate({ flags }) {
   ui.info(`Diretorio: ${c.dim}${process.cwd()}${c.reset}`);
   console.log('');
 
-  const args = [];
-  if (isWindows) {
-    if (flags['force-specialists']) args.push('-ForceSpecialists');
-    if (flags['skip-specialists']) args.push('-SkipSpecialists');
-    if (flags['dry-run']) args.push('-DryRun');
-  } else {
-    if (flags['force-specialists']) args.push('--force-specialists');
-    if (flags['skip-specialists']) args.push('--skip-specialists');
-    if (flags['dry-run']) args.push('--dry-run');
-  }
+  const args = buildFlagArgs(flags, [
+    { key: 'force-specialists', win: '-ForceSpecialists', nix: '--force-specialists' },
+    { key: 'skip-specialists', win: '-SkipSpecialists', nix: '--skip-specialists' },
+    { key: 'dry-run', win: '-DryRun', nix: '--dry-run' },
+  ]);
 
   const { code } = runShellScript('jdi-update', args);
 
@@ -223,20 +232,14 @@ async function cmdUninstall({ positional, flags }) {
   const runtime = positional[0] || 'all';
   ensureRuntime(runtime);
 
-  const args = [];
-  if (isWindows) {
-    args.push('-Runtime', runtime);
-    if (flags.scope) args.push('-Scope', flags.scope);
-    if (flags.purge) args.push('-Purge');
-    if (flags.yes) args.push('-Yes');
-    if (flags['dry-run']) args.push('-DryRun');
-  } else {
-    args.push('--runtime', runtime);
-    if (flags.scope) args.push('--scope', flags.scope);
-    if (flags.purge) args.push('--purge');
-    if (flags.yes) args.push('--yes');
-    if (flags['dry-run']) args.push('--dry-run');
-  }
+  const args = (isWindows ? ['-Runtime', runtime] : ['--runtime', runtime]).concat(
+    buildFlagArgs(flags, [
+      { key: 'scope', win: '-Scope', nix: '--scope', value: true },
+      { key: 'purge', win: '-Purge', nix: '--purge' },
+      { key: 'yes', win: '-Yes', nix: '--yes' },
+      { key: 'dry-run', win: '-DryRun', nix: '--dry-run' },
+    ])
+  );
 
   const { code } = runShellScript('jdi-uninstall', args);
 
@@ -252,16 +255,11 @@ async function cmdInstallPlaywright({ flags }) {
   ui.info(`Directory: ${c.dim}${process.cwd()}${c.reset}`);
   console.log('');
 
-  const args = [];
-  if (isWindows) {
-    if (flags['skip-browser']) args.push('-SkipBrowser');
-    if (flags['skip-mcp'])     args.push('-SkipMcp');
-    if (flags.runtime)         args.push('-Runtime', flags.runtime);
-  } else {
-    if (flags['skip-browser']) args.push('--skip-browser');
-    if (flags['skip-mcp'])     args.push('--skip-mcp');
-    if (flags.runtime)         args.push('--runtime', flags.runtime);
-  }
+  const args = buildFlagArgs(flags, [
+    { key: 'skip-browser', win: '-SkipBrowser', nix: '--skip-browser' },
+    { key: 'skip-mcp', win: '-SkipMcp', nix: '--skip-mcp' },
+    { key: 'runtime', win: '-Runtime', nix: '--runtime', value: true },
+  ]);
 
   const { code } = runShellScript('jdi-install-playwright', args);
 
@@ -289,16 +287,11 @@ async function cmdInstallCaveman({ flags }) {
   ui.info(`Directory: ${c.dim}${process.cwd()}${c.reset}`);
   console.log('');
 
-  const args = [];
-  if (isWindows) {
-    if (flags.repo)  args.push('-Repo', flags.repo);
-    if (flags.scope) args.push('-Scope', flags.scope);
-    if (flags.force) args.push('-Force');
-  } else {
-    if (flags.repo)  args.push('--repo', flags.repo);
-    if (flags.scope) args.push('--scope', flags.scope);
-    if (flags.force) args.push('--force');
-  }
+  const args = buildFlagArgs(flags, [
+    { key: 'repo', win: '-Repo', nix: '--repo', value: true },
+    { key: 'scope', win: '-Scope', nix: '--scope', value: true },
+    { key: 'force', win: '-Force', nix: '--force' },
+  ]);
 
   const { code } = runShellScript('jdi-install-caveman', args);
 
@@ -381,7 +374,10 @@ async function cmdDoctor({ flags }) {
   ui.info(`Diretorio atual: ${c.dim}${process.cwd()}${c.reset}`);
   console.log('');
 
-  const args = flags.verbose ? (isWindows ? ['-Verbose'] : ['--verbose']) : [];
+  let args = [];
+  if (flags.verbose) {
+    args = isWindows ? ['-Verbose'] : ['--verbose'];
+  }
   const { code } = runShellScript('jdi-doctor', args);
 
   if (code !== 0) {
@@ -465,11 +461,11 @@ function cmdVersion() {
 async function main() {
   const parsed = parseArgs(process.argv);
 
-  if (parsed.flags && parsed.flags.noColor) {
+  if (parsed.flags?.noColor) {
     process.env.NO_COLOR = '1';
   }
 
-  if (parsed.flags && parsed.flags.version) {
+  if (parsed.flags?.version) {
     cmdVersion();
     return;
   }
@@ -523,6 +519,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  ui.fail(err && err.message ? err.message : String(err));
+  ui.fail(err?.message ? err.message : String(err));
   process.exit(1);
 });

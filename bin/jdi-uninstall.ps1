@@ -71,62 +71,95 @@ function Remove-Item-Safe {
   if (-not (Test-Path $Path)) { return }
 
   if ($DryRun) {
-    Write-Host "  [dry-run] removeria: $Path" -ForegroundColor DarkGray
+    Write-Output "  [dry-run] removeria: $Path"
     return
   }
 
   Remove-Item -Path $Path -Recurse -Force -ErrorAction SilentlyContinue
-  Write-Host "  removido: $Label" -ForegroundColor Green
+  Write-Output "  removido: $Label"
+}
+
+# Constroi a lista de targets (Dir + Scope label) a partir do scope escolhido.
+# $ProjectPath e $UserPath sao os diretorios base de cada scope.
+function Resolve-ScopeTargets {
+  param(
+    [string]$ScopeChoice,
+    [string]$ProjectPath,
+    [string]$UserPath
+  )
+  $targets = @()
+  if ($ScopeChoice -in @('project','both')) {
+    $targets += @{ Dir = $ProjectPath; Scope = 'project' }
+  }
+  if ($ScopeChoice -in @('user','both')) {
+    $targets += @{ Dir = $UserPath; Scope = 'user' }
+  }
+  return $targets
+}
+
+# Remove arquivos jdi-* (por filtro) dentro de um subdiretorio, se ele existir.
+function Remove-PrefixedFiles {
+  param(
+    [string]$BaseDir,
+    [string]$SubDir,
+    [string]$Filter
+  )
+  $dir = Join-Path $BaseDir $SubDir
+  if (-not (Test-Path $dir)) { return }
+  Get-ChildItem $dir -Filter $Filter -ErrorAction SilentlyContinue | ForEach-Object {
+    Remove-Item-Safe $_.FullName "$SubDir/$($_.Name)"
+  }
+}
+
+# Remove as skills universais shipped dentro de <BaseDir>/skills/, se existir.
+function Remove-UniversalSkills {
+  param([string]$BaseDir)
+  $skillsDir = Join-Path $BaseDir 'skills'
+  if (-not (Test-Path $skillsDir)) { return }
+  foreach ($skillName in $UniversalSkills) {
+    $sd = Join-Path $skillsDir $skillName
+    Remove-Item-Safe $sd "skills/$skillName/"
+  }
+}
+
+# Remove um arquivo unico apos confirmacao, se ele existir.
+function Remove-FileWithConfirm {
+  param(
+    [string]$Path,
+    [string]$Label,
+    [string]$Prompt
+  )
+  if (-not (Test-Path $Path)) { return }
+  if (Confirm-Action $Prompt) {
+    Remove-Item-Safe $Path $Label
+  }
 }
 
 function Uninstall-Claude {
   param([string]$ScopeChoice)
-  $targets = @()
-  if ($ScopeChoice -in @('project','both')) {
-    $targets += @{ Dir = (Join-Path $ProjectDir '.claude'); Scope = 'project' }
-  }
-  if ($ScopeChoice -in @('user','both')) {
-    $targets += @{ Dir = (Join-Path $UserHome '.claude'); Scope = 'user' }
-  }
+  $targets = Resolve-ScopeTargets -ScopeChoice $ScopeChoice `
+    -ProjectPath (Join-Path $ProjectDir '.claude') `
+    -UserPath (Join-Path $UserHome '.claude')
 
   foreach ($t in $targets) {
     if (-not (Test-Path $t.Dir)) { continue }
-    Write-Host ""
-    Write-Host "Claude ($($t.Scope) scope) em: $($t.Dir)" -ForegroundColor Cyan
+    Write-Output ""
+    Write-Output "Claude ($($t.Scope) scope) em: $($t.Dir)"
 
     # Remove agents jdi-*
-    $agentsDir = Join-Path $t.Dir 'agents'
-    if (Test-Path $agentsDir) {
-      Get-ChildItem $agentsDir -Filter 'jdi-*.md' -ErrorAction SilentlyContinue | ForEach-Object {
-        Remove-Item-Safe $_.FullName "agents/$($_.Name)"
-      }
-    }
+    Remove-PrefixedFiles -BaseDir $t.Dir -SubDir 'agents' -Filter 'jdi-*.md'
 
     # Remove commands jdi-*
-    $cmdDir = Join-Path $t.Dir 'commands'
-    if (Test-Path $cmdDir) {
-      Get-ChildItem $cmdDir -Filter 'jdi-*.md' -ErrorAction SilentlyContinue | ForEach-Object {
-        Remove-Item-Safe $_.FullName "commands/$($_.Name)"
-      }
-    }
+    Remove-PrefixedFiles -BaseDir $t.Dir -SubDir 'commands' -Filter 'jdi-*.md'
 
     # Remove skills shipped
-    $skillsDir = Join-Path $t.Dir 'skills'
-    if (Test-Path $skillsDir) {
-      foreach ($skillName in $UniversalSkills) {
-        $sd = Join-Path $skillsDir $skillName
-        Remove-Item-Safe $sd "skills/$skillName/"
-      }
-    }
+    Remove-UniversalSkills -BaseDir $t.Dir
 
     # CLAUDE.md (project scope only) - so se identico ao shipped
     if ($t.Scope -eq 'project') {
-      $cmd = Join-Path $ProjectDir 'CLAUDE.md'
-      if (Test-Path $cmd) {
-        if (Confirm-Action "Remover CLAUDE.md? (pode ter sido editado)") {
-          Remove-Item-Safe $cmd "CLAUDE.md"
-        }
-      }
+      Remove-FileWithConfirm -Path (Join-Path $ProjectDir 'CLAUDE.md') `
+        -Label "CLAUDE.md" `
+        -Prompt "Remover CLAUDE.md? (pode ter sido editado)"
     }
   }
 }
@@ -135,45 +168,27 @@ function Uninstall-Copilot {
   $dest = Join-Path $ProjectDir '.github'
   if (-not (Test-Path $dest)) { return }
 
-  Write-Host ""
-  Write-Host "Copilot (project scope) em: $dest" -ForegroundColor Cyan
+  Write-Output ""
+  Write-Output "Copilot (project scope) em: $dest"
 
-  $agentsDir = Join-Path $dest 'agents'
-  if (Test-Path $agentsDir) {
-    Get-ChildItem $agentsDir -Filter 'jdi-*.agent.md' -ErrorAction SilentlyContinue | ForEach-Object {
-      Remove-Item-Safe $_.FullName "agents/$($_.Name)"
-    }
-  }
+  Remove-PrefixedFiles -BaseDir $dest -SubDir 'agents' -Filter 'jdi-*.agent.md'
+  Remove-PrefixedFiles -BaseDir $dest -SubDir 'prompts' -Filter 'jdi-*.prompt.md'
 
-  $promptsDir = Join-Path $dest 'prompts'
-  if (Test-Path $promptsDir) {
-    Get-ChildItem $promptsDir -Filter 'jdi-*.prompt.md' -ErrorAction SilentlyContinue | ForEach-Object {
-      Remove-Item-Safe $_.FullName "prompts/$($_.Name)"
-    }
-  }
-
-  $instr = Join-Path $dest 'copilot-instructions.md'
-  if (Test-Path $instr) {
-    if (Confirm-Action "Remover .github/copilot-instructions.md? (pode ter sido editado)") {
-      Remove-Item-Safe $instr ".github/copilot-instructions.md"
-    }
-  }
+  Remove-FileWithConfirm -Path (Join-Path $dest 'copilot-instructions.md') `
+    -Label ".github/copilot-instructions.md" `
+    -Prompt "Remover .github/copilot-instructions.md? (pode ter sido editado)"
 }
 
 function Uninstall-Antigravity {
   param([string]$ScopeChoice)
-  $targets = @()
-  if ($ScopeChoice -in @('project','both')) {
-    $targets += @{ Dir = (Join-Path $ProjectDir '.gemini/antigravity'); Scope = 'project' }
-  }
-  if ($ScopeChoice -in @('user','both')) {
-    $targets += @{ Dir = (Join-Path $UserHome '.gemini/antigravity'); Scope = 'user' }
-  }
+  $targets = Resolve-ScopeTargets -ScopeChoice $ScopeChoice `
+    -ProjectPath (Join-Path $ProjectDir '.gemini/antigravity') `
+    -UserPath (Join-Path $UserHome '.gemini/antigravity')
 
   foreach ($t in $targets) {
     if (-not (Test-Path $t.Dir)) { continue }
-    Write-Host ""
-    Write-Host "Antigravity ($($t.Scope) scope) em: $($t.Dir)" -ForegroundColor Cyan
+    Write-Output ""
+    Write-Output "Antigravity ($($t.Scope) scope) em: $($t.Dir)"
 
     $skillsDir = Join-Path $t.Dir 'skills'
     if (Test-Path $skillsDir) {
@@ -181,74 +196,40 @@ function Uninstall-Antigravity {
       Get-ChildItem $skillsDir -Directory -Filter 'jdi-*' -ErrorAction SilentlyContinue | ForEach-Object {
         Remove-Item-Safe $_.FullName "skills/$($_.Name)/"
       }
-      # Remove skills universais
-      foreach ($skillName in $UniversalSkills) {
-        $sd = Join-Path $skillsDir $skillName
-        Remove-Item-Safe $sd "skills/$skillName/"
-      }
     }
+    # Remove skills universais
+    Remove-UniversalSkills -BaseDir $t.Dir
 
     if ($t.Scope -eq 'project') {
-      $agm = Join-Path $ProjectDir 'agents.md'
-      if (Test-Path $agm) {
-        if (Confirm-Action "Remover agents.md (Antigravity)? (pode ter sido editado)") {
-          Remove-Item-Safe $agm "agents.md"
-        }
-      }
+      Remove-FileWithConfirm -Path (Join-Path $ProjectDir 'agents.md') `
+        -Label "agents.md" `
+        -Prompt "Remover agents.md (Antigravity)? (pode ter sido editado)"
     }
   }
 }
 
 function Uninstall-Opencode {
   param([string]$ScopeChoice)
-  $targets = @()
-  if ($ScopeChoice -in @('project','both')) {
-    $targets += @{ Dir = (Join-Path $ProjectDir '.opencode'); Scope = 'project' }
-  }
-  if ($ScopeChoice -in @('user','both')) {
-    $targets += @{ Dir = (Join-Path $UserHome '.config/opencode'); Scope = 'user' }
-  }
+  $targets = Resolve-ScopeTargets -ScopeChoice $ScopeChoice `
+    -ProjectPath (Join-Path $ProjectDir '.opencode') `
+    -UserPath (Join-Path $UserHome '.config/opencode')
 
   foreach ($t in $targets) {
     if (-not (Test-Path $t.Dir)) { continue }
-    Write-Host ""
-    Write-Host "OpenCode ($($t.Scope) scope) em: $($t.Dir)" -ForegroundColor Cyan
+    Write-Output ""
+    Write-Output "OpenCode ($($t.Scope) scope) em: $($t.Dir)"
 
-    $agentsDir = Join-Path $t.Dir 'agents'
-    if (Test-Path $agentsDir) {
-      Get-ChildItem $agentsDir -Filter 'jdi-*.md' -ErrorAction SilentlyContinue | ForEach-Object {
-        Remove-Item-Safe $_.FullName "agents/$($_.Name)"
-      }
-    }
-
-    $cmdDir = Join-Path $t.Dir 'commands'
-    if (Test-Path $cmdDir) {
-      Get-ChildItem $cmdDir -Filter 'jdi-*.md' -ErrorAction SilentlyContinue | ForEach-Object {
-        Remove-Item-Safe $_.FullName "commands/$($_.Name)"
-      }
-    }
-
-    $skillsDir = Join-Path $t.Dir 'skills'
-    if (Test-Path $skillsDir) {
-      foreach ($skillName in $UniversalSkills) {
-        $sd = Join-Path $skillsDir $skillName
-        Remove-Item-Safe $sd "skills/$skillName/"
-      }
-    }
+    Remove-PrefixedFiles -BaseDir $t.Dir -SubDir 'agents' -Filter 'jdi-*.md'
+    Remove-PrefixedFiles -BaseDir $t.Dir -SubDir 'commands' -Filter 'jdi-*.md'
+    Remove-UniversalSkills -BaseDir $t.Dir
 
     if ($t.Scope -eq 'project') {
-      $agm = Join-Path $ProjectDir 'AGENTS.md'
-      if (Test-Path $agm) {
-        if (Confirm-Action "Remover AGENTS.md (OpenCode)? (pode ter sido editado)") {
-          Remove-Item-Safe $agm "AGENTS.md"
-        }
-      }
-      $jsonc = Join-Path $t.Dir 'opencode.jsonc'
-      if (Test-Path $jsonc) {
-        if (Confirm-Action "Remover .opencode/opencode.jsonc? (pode ter config customizada)") {
-          Remove-Item-Safe $jsonc ".opencode/opencode.jsonc"
-        }
-      }
+      Remove-FileWithConfirm -Path (Join-Path $ProjectDir 'AGENTS.md') `
+        -Label "AGENTS.md" `
+        -Prompt "Remover AGENTS.md (OpenCode)? (pode ter sido editado)"
+      Remove-FileWithConfirm -Path (Join-Path $t.Dir 'opencode.jsonc') `
+        -Label ".opencode/opencode.jsonc" `
+        -Prompt "Remover .opencode/opencode.jsonc? (pode ter config customizada)"
     }
   }
 }
@@ -257,18 +238,18 @@ function Uninstall-Opencode {
 # Main
 # =========================================================
 
-Write-Host ""
-Write-Host "JDI Uninstall" -ForegroundColor Cyan
-Write-Host "  Dir:     $ProjectDir"
-Write-Host "  Runtime: $Runtime"
-Write-Host "  Scope:   $Scope"
-if ($Purge) { Write-Host "  Purge:   YES (vai remover .jdi/ tambem)" -ForegroundColor Yellow }
-if ($DryRun) { Write-Host "  Mode:    DRY-RUN (sem mudancas)" -ForegroundColor Yellow }
-Write-Host ""
+Write-Output ""
+Write-Output "JDI Uninstall"
+Write-Output "  Dir:     $ProjectDir"
+Write-Output "  Runtime: $Runtime"
+Write-Output "  Scope:   $Scope"
+if ($Purge) { Write-Output "  Purge:   YES (vai remover .jdi/ tambem)" }
+if ($DryRun) { Write-Output "  Mode:    DRY-RUN (sem mudancas)" }
+Write-Output ""
 
 if (-not $Yes -and -not $DryRun) {
   if (-not (Confirm-Action "Continuar com uninstall? (acao destrutiva)")) {
-    Write-Host "Cancelado."
+    Write-Output "Cancelado."
     exit 0
   }
 }
@@ -286,14 +267,14 @@ foreach ($r in $runtimes) {
 
 # Purge .jdi/ (state) - so com flag explicito
 if ($Purge) {
-  Write-Host ""
+  Write-Output ""
   $jdiDir = Join-Path $ProjectDir '.jdi'
   if (Test-Path $jdiDir) {
-    Write-Host "PURGE: removendo .jdi/ (state files - DECISIONS, ROADMAP, phases, etc)" -ForegroundColor Red
+    Write-Output "PURGE: removendo .jdi/ (state files - DECISIONS, ROADMAP, phases, etc)"
     if (Confirm-Action "TEM CERTEZA? Isso apaga decisoes locked permanentemente") {
       Remove-Item-Safe $jdiDir ".jdi/"
     } else {
-      Write-Host "  .jdi/ preservado." -ForegroundColor DarkGray
+      Write-Output "  .jdi/ preservado."
     }
   }
 
@@ -306,12 +287,12 @@ if ($Purge) {
   }
 }
 
-Write-Host ""
-Write-Host "Uninstall completo." -ForegroundColor Green
+Write-Output ""
+Write-Output "Uninstall completo."
 if ($DryRun) {
-  Write-Host "(dry-run - nada foi mudado)" -ForegroundColor Yellow
+  Write-Output "(dry-run - nada foi mudado)"
 }
 if (-not $Purge) {
-  Write-Host ""
-  Write-Host "Nota: .jdi/ preservado (state files). Use --purge pra remover tambem." -ForegroundColor DarkGray
+  Write-Output ""
+  Write-Output "Nota: .jdi/ preservado (state files). Use --purge pra remover tambem."
 }

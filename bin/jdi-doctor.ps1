@@ -21,20 +21,18 @@ $JdiRoot    = Split-Path -Parent $PSScriptRoot
 $ProjectDir = (Get-Location).Path
 $UserHome   = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
 
-# cores
-$useColor = $Host.UI.RawUI -ne $null -and -not $env:NO_COLOR
-function Write-OK    { param($m) if ($useColor) { Write-Host "  OK   " -ForegroundColor Green -NoNewline; Write-Host " $m" } else { Write-Host "  OK    $m" } }
-function Write-WARN  { param($m) if ($useColor) { Write-Host "  WARN " -ForegroundColor Yellow -NoNewline; Write-Host " $m" } else { Write-Host "  WARN  $m" } ; $script:Warns++ }
-function Write-FAIL  { param($m) if ($useColor) { Write-Host "  FAIL " -ForegroundColor Red -NoNewline; Write-Host " $m" } else { Write-Host "  FAIL  $m" } ; $script:Fails++ }
-function Write-Note  { param($m) if ($VerbosePreference -eq 'Continue') { if ($useColor) { Write-Host "  note  $m" -ForegroundColor DarkGray } else { Write-Host "  note  $m" } } }
-function Write-Section { param($t) Write-Host ""; Write-Host $t }
+function Write-OK    { param($m) Write-Output "  OK    $m" }
+function Write-WARN  { param($m) Write-Output "  WARN  $m" ; $script:Warns++ }
+function Write-FAIL  { param($m) Write-Output "  FAIL  $m" ; $script:Fails++ }
+function Write-Note  { param($m) if ($VerbosePreference -eq 'Continue') { Write-Output "  note  $m" } }
+function Write-Section { param($t) Write-Output ""; Write-Output $t }
 
 $script:Fails = 0
 $script:Warns = 0
 
 function Test-Cmd {
   param([string]$Name)
-  return (Get-Command $Name -ErrorAction SilentlyContinue) -ne $null
+  return $null -ne (Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
 # ---------------------------------------------------------------------------
@@ -304,7 +302,7 @@ if (Test-Path $pkgPath) {
     if ($pkg.dependencies)    { $pkg.dependencies.PSObject.Properties    | ForEach-Object { $allDeps[$_.Name] = $_.Value } }
     if ($pkg.devDependencies) { $pkg.devDependencies.PSObject.Properties | ForEach-Object { $allDeps[$_.Name] = $_.Value } }
     if ($allDeps.ContainsKey('@playwright/test')) { $hasPwDep = $true }
-  } catch { }
+  } catch { Write-Verbose "package.json parse failed: $($_.Exception.Message)" }
 }
 
 if ($hasPwDep) {
@@ -395,24 +393,13 @@ if (Test-Path $cavemanUser) {
 Write-Section 'Resumo'
 
 if ($script:Fails -gt 0) {
-  if ($useColor) {
-    Write-Host "  $($script:Fails) FAIL" -ForegroundColor Red -NoNewline
-    Write-Host ", $($script:Warns) WARN" -ForegroundColor Yellow
-  } else {
-    Write-Host "  $($script:Fails) FAIL, $($script:Warns) WARN"
-  }
-  Write-Host '  -> Resolva os FAIL antes de usar JDI.'
+  Write-Output "  $($script:Fails) FAIL, $($script:Warns) WARN"
+  Write-Output '  -> Resolva os FAIL antes de usar JDI.'
   exit 1
 } elseif ($script:Warns -gt 0) {
-  if ($useColor) {
-    Write-Host "  $($script:Warns) WARN" -ForegroundColor Yellow -NoNewline
-    Write-Host ' (JDI funciona mas com limitacoes)'
-  } else {
-    Write-Host "  $($script:Warns) WARN (JDI funciona mas com limitacoes)"
-  }
+  Write-Output "  $($script:Warns) WARN (JDI funciona mas com limitacoes)"
   exit 0
 } else {
-  if ($useColor) { Write-Host '  Tudo OK' -ForegroundColor Green -NoNewline; Write-Host '. JDI pronto pra rodar.' }
-  else { Write-Host '  Tudo OK. JDI pronto pra rodar.' }
+  Write-Output '  Tudo OK. JDI pronto pra rodar.'
   exit 0
 }

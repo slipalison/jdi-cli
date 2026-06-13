@@ -18,19 +18,19 @@ set -euo pipefail
 PATH_IN="${1:-}"
 BUDGET="${2:-8192}"
 
-if [ -z "$PATH_IN" ]; then
+if [[ -z "$PATH_IN" ]]; then
   echo "uso: jdi-truncate.sh <path> [char_budget]" >&2
   exit 1
 fi
 
-if [ ! -f "$PATH_IN" ]; then
+if [[ ! -f "$PATH_IN" ]]; then
   echo "arquivo nao encontrado: $PATH_IN" >&2
   exit 1
 fi
 
 SIZE=$(wc -c < "$PATH_IN" | tr -d ' ')
 
-if [ "$SIZE" -le "$BUDGET" ]; then
+if [[ "$SIZE" -le "$BUDGET" ]]; then
   cat "$PATH_IN"
   exit 0
 fi

@@ -10,10 +10,10 @@
 
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const { spawn } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const { spawn } = require('node:child_process');
 
 // Respect explicit disable: env var, used by CI or paranoid users.
 if (process.env.JDI_NO_UPDATE_CHECK === '1' || process.env.JDI_NO_UPDATE_CHECK === 'true') {
@@ -27,9 +27,10 @@ try {
   if (!fs.existsSync(cacheDir)) {
     fs.mkdirSync(cacheDir, { recursive: true });
   }
-} catch (_e) {
+} catch (e) {
   // Best-effort: if cache dir cannot be created, the worker will also fail
   // silently. SessionStart hooks must never produce errors to the runtime.
+  if (process.env.JDI_DEBUG) console.error('[jdi] cache dir create failed:', e && e.message);
   process.exit(0);
 }
 
@@ -47,8 +48,9 @@ try {
     },
   });
   child.unref();
-} catch (_e) {
+} catch (e) {
   // Spawn failure (e.g., worker missing) — silent exit.
+  if (process.env.JDI_DEBUG) console.error('[jdi] worker spawn failed:', e && e.message);
 }
 
 process.exit(0);

@@ -16,9 +16,9 @@
 
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const https = require('https');
+const fs = require('node:fs');
+const path = require('node:path');
+const https = require('node:https');
 
 const cacheFile = process.env.JDI_CACHE_FILE;
 if (!cacheFile) {
@@ -40,7 +40,9 @@ function readInstalledVersion() {
     if (fs.existsSync(versionFile)) {
       return fs.readFileSync(versionFile, 'utf8').trim();
     }
-  } catch (_e) {}
+  } catch (e) {
+    if (process.env.JDI_DEBUG) console.error('[jdi] JDI_VERSION read failed:', e && e.message);
+  }
 
   // 3. Walk up looking for jdi-cli's package.json (case: still inside node_modules)
   try {
@@ -49,7 +51,7 @@ function readInstalledVersion() {
       const pkgFile = path.join(dir, 'package.json');
       if (fs.existsSync(pkgFile)) {
         const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
-        if (pkg && pkg.name === PACKAGE_NAME && pkg.version) {
+        if (pkg?.name === PACKAGE_NAME && pkg?.version) {
           return String(pkg.version).trim();
         }
       }
@@ -57,7 +59,9 @@ function readInstalledVersion() {
       if (parent === dir) break;
       dir = parent;
     }
-  } catch (_e) {}
+  } catch (e) {
+    if (process.env.JDI_DEBUG) console.error('[jdi] package.json walk failed:', e && e.message);
+  }
 
   return '0.0.0';
 }
@@ -77,9 +81,10 @@ function isNewer(a, b) {
 function writeCache(result) {
   try {
     fs.writeFileSync(cacheFile, JSON.stringify(result));
-  } catch (_e) {
+  } catch (e) {
     // Cache write failure: nothing to surface — the banner reads next session,
     // which will simply find no cache and skip.
+    if (process.env.JDI_DEBUG) console.error('[jdi] cache write failed:', e && e.message);
   }
 }
 
@@ -120,7 +125,8 @@ function npmViewLatest(callback) {
         try {
           const version = JSON.parse(body).version;
           done(version ? String(version).trim() : null);
-        } catch (_e) {
+        } catch (e) {
+          if (process.env.JDI_DEBUG) console.error('[jdi] registry parse failed:', e && e.message);
           done(null);
         }
       });

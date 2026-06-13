@@ -14,6 +14,7 @@ set -euo pipefail
 
 PROJECT_DIR="$(pwd)"
 USER_HOME="${HOME:-$HOME}"
+readonly SCOPE_PROJECT="project"
 
 # Skills universais shipped pelo JDI (runtimes/<rt>/skills/). Mantenha em sync com o ship.
 UNIVERSAL_SKILLS=(
@@ -64,7 +65,7 @@ remove_safe() {
 uninstall_claude() {
   local scope="$1"
   local targets=()
-  [[ "$scope" == "project" || "$scope" == "both" ]] && targets+=("$PROJECT_DIR/.claude:project")
+  [[ "$scope" == "$SCOPE_PROJECT" || "$scope" == "both" ]] && targets+=("$PROJECT_DIR/.claude:project")
   [[ "$scope" == "user" || "$scope" == "both" ]] && targets+=("$USER_HOME/.claude:user")
 
   for t in "${targets[@]}"; do
@@ -93,12 +94,8 @@ uninstall_claude() {
       done
     fi
 
-    if [[ "$sc" == "project" ]]; then
-      if [[ -f "$PROJECT_DIR/CLAUDE.md" ]]; then
-        if confirm_action "Remover CLAUDE.md? (pode ter sido editado)"; then
-          remove_safe "$PROJECT_DIR/CLAUDE.md" "CLAUDE.md"
-        fi
-      fi
+    if [[ "$sc" == "$SCOPE_PROJECT" ]] && [[ -f "$PROJECT_DIR/CLAUDE.md" ]] && confirm_action "Remover CLAUDE.md? (pode ter sido editado)"; then
+      remove_safe "$PROJECT_DIR/CLAUDE.md" "CLAUDE.md"
     fi
   done
 }
@@ -122,17 +119,15 @@ uninstall_copilot() {
     done
   fi
 
-  if [[ -f "$dest/copilot-instructions.md" ]]; then
-    if confirm_action "Remover .github/copilot-instructions.md? (pode ter sido editado)"; then
-      remove_safe "$dest/copilot-instructions.md" ".github/copilot-instructions.md"
-    fi
+  if [[ -f "$dest/copilot-instructions.md" ]] && confirm_action "Remover .github/copilot-instructions.md? (pode ter sido editado)"; then
+    remove_safe "$dest/copilot-instructions.md" ".github/copilot-instructions.md"
   fi
 }
 
 uninstall_antigravity() {
   local scope="$1"
   local targets=()
-  [[ "$scope" == "project" || "$scope" == "both" ]] && targets+=("$PROJECT_DIR/.gemini/antigravity:project")
+  [[ "$scope" == "$SCOPE_PROJECT" || "$scope" == "both" ]] && targets+=("$PROJECT_DIR/.gemini/antigravity:project")
   [[ "$scope" == "user" || "$scope" == "both" ]] && targets+=("$USER_HOME/.gemini/antigravity:user")
 
   for t in "${targets[@]}"; do
@@ -154,10 +149,8 @@ uninstall_antigravity() {
       done
     fi
 
-    if [[ "$sc" == "project" && -f "$PROJECT_DIR/agents.md" ]]; then
-      if confirm_action "Remover agents.md (Antigravity)? (pode ter sido editado)"; then
-        remove_safe "$PROJECT_DIR/agents.md" "agents.md"
-      fi
+    if [[ "$sc" == "$SCOPE_PROJECT" && -f "$PROJECT_DIR/agents.md" ]] && confirm_action "Remover agents.md (Antigravity)? (pode ter sido editado)"; then
+      remove_safe "$PROJECT_DIR/agents.md" "agents.md"
     fi
   done
 }
@@ -165,7 +158,7 @@ uninstall_antigravity() {
 uninstall_opencode() {
   local scope="$1"
   local targets=()
-  [[ "$scope" == "project" || "$scope" == "both" ]] && targets+=("$PROJECT_DIR/.opencode:project")
+  [[ "$scope" == "$SCOPE_PROJECT" || "$scope" == "both" ]] && targets+=("$PROJECT_DIR/.opencode:project")
   [[ "$scope" == "user" || "$scope" == "both" ]] && targets+=("$USER_HOME/.config/opencode:user")
 
   for t in "${targets[@]}"; do
@@ -194,16 +187,12 @@ uninstall_opencode() {
       done
     fi
 
-    if [[ "$sc" == "project" ]]; then
-      if [[ -f "$PROJECT_DIR/AGENTS.md" ]]; then
-        if confirm_action "Remover AGENTS.md (OpenCode)? (pode ter sido editado)"; then
-          remove_safe "$PROJECT_DIR/AGENTS.md" "AGENTS.md"
-        fi
+    if [[ "$sc" == "$SCOPE_PROJECT" ]]; then
+      if [[ -f "$PROJECT_DIR/AGENTS.md" ]] && confirm_action "Remover AGENTS.md (OpenCode)? (pode ter sido editado)"; then
+        remove_safe "$PROJECT_DIR/AGENTS.md" "AGENTS.md"
       fi
-      if [[ -f "$dir/opencode.jsonc" ]]; then
-        if confirm_action "Remover .opencode/opencode.jsonc? (pode ter config customizada)"; then
-          remove_safe "$dir/opencode.jsonc" ".opencode/opencode.jsonc"
-        fi
+      if [[ -f "$dir/opencode.jsonc" ]] && confirm_action "Remover .opencode/opencode.jsonc? (pode ter config customizada)"; then
+        remove_safe "$dir/opencode.jsonc" ".opencode/opencode.jsonc"
       fi
     fi
   done
@@ -222,11 +211,9 @@ echo "  Scope:   $SCOPE"
 [[ $DRY_RUN -eq 1 ]] && echo "  Mode:    DRY-RUN (sem mudancas)"
 echo
 
-if [[ $YES -eq 0 && $DRY_RUN -eq 0 ]]; then
-  if ! confirm_action "Continuar com uninstall? (acao destrutiva)"; then
-    echo "Cancelado."
-    exit 0
-  fi
+if [[ $YES -eq 0 && $DRY_RUN -eq 0 ]] && ! confirm_action "Continuar com uninstall? (acao destrutiva)"; then
+  echo "Cancelado."
+  exit 0
 fi
 
 if [[ "$RUNTIME" == "all" ]]; then
@@ -241,6 +228,7 @@ for r in "${runtimes[@]}"; do
     copilot)     uninstall_copilot ;;
     antigravity) uninstall_antigravity "$SCOPE" ;;
     opencode)    uninstall_opencode "$SCOPE" ;;
+    *)           echo "  Runtime desconhecido: $r (ignorado)" ;;
   esac
 done
 
@@ -256,10 +244,8 @@ if [[ $PURGE -eq 1 ]]; then
     fi
   fi
 
-  if [[ -d "$PROJECT_DIR/.githooks" ]]; then
-    if confirm_action "Remover .githooks/?"; then
-      remove_safe "$PROJECT_DIR/.githooks" ".githooks/"
-    fi
+  if [[ -d "$PROJECT_DIR/.githooks" ]] && confirm_action "Remover .githooks/?"; then
+    remove_safe "$PROJECT_DIR/.githooks" ".githooks/"
   fi
 fi
 
