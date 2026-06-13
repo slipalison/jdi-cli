@@ -27,6 +27,7 @@ for arg in "$@"; do
     --force-specialists) FORCE_SPECIALISTS=1 ;;
     --skip-specialists)  SKIP_SPECIALISTS=1 ;;
     --dry-run)           DRY_RUN=1 ;;
+    *) : ;;  # ignora flags desconhecidas
   esac
 done
 
@@ -115,6 +116,10 @@ for runtime in "${detected[@]}"; do
     opencode)
       USER_MARKER="$USER_HOME/.config/opencode/agents/jdi-architect.md"
       PROJ_MARKER="$PROJECT_DIR/.opencode/agents/jdi-architect.md"
+      ;;
+    *)
+      USER_MARKER=""
+      PROJ_MARKER=""
       ;;
   esac
 

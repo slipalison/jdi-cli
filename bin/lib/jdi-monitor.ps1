@@ -34,6 +34,7 @@ if (Test-Path -LiteralPath ".jdi/config.json") {
     }
   } catch {
     # config invalido — usa defaults
+    Write-Verbose "jdi-monitor: failed to parse .jdi/config.json, using defaults: $($_.Exception.Message)"
   }
 }
 

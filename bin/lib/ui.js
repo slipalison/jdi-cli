@@ -132,15 +132,13 @@ function buildFrame({ showHilt, sabersBlade, showTagline }) {
   lines.push('');
 
   // 3 stacked sabers
-  if (!showHilt) {
-    lines.push('');
-    lines.push('');
-    lines.push('');
-  } else {
+  if (showHilt) {
     for (let i = 0; i < 3; i++) {
-      const blade = (sabersBlade && sabersBlade[i] != null) ? sabersBlade[i] : 0;
+      const blade = sabersBlade?.[i] ?? 0;
       lines.push(buildSaberLine(i, blade));
     }
+  } else {
+    lines.push('', '', '');
   }
 
   lines.push('');
@@ -208,10 +206,11 @@ async function bannerAnimated() {
   }
 
   const frames = [];
-  // t=0: letters only, no sabers
-  frames.push({ showHilt: false, sabersBlade: [0, 0, 0], showTagline: false, delay: 80 });
-  // t=80: hilts appear (no blade)
-  frames.push({ showHilt: true, sabersBlade: [0, 0, 0], showTagline: false, delay: 80 });
+  // t=0: letters only, no sabers. t=80: hilts appear (no blade)
+  frames.push(
+    { showHilt: false, sabersBlade: [0, 0, 0], showTagline: false, delay: 80 },
+    { showHilt: true, sabersBlade: [0, 0, 0], showTagline: false, delay: 80 }
+  );
   // Cascade ignition (~480ms)
   for (let t = 80; t <= 560; t += 80) {
     frames.push({ showHilt: true, sabersBlade: snapshot(t), showTagline: false, delay: 80 });

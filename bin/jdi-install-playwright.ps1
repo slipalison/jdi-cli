@@ -68,7 +68,7 @@ function Has-PlaywrightDep {
 
 function Install-PlaywrightDep {
   if (Has-PlaywrightDep) {
-    Write-Host "  [skip] @playwright/test already in package.json"
+    Write-Information -MessageData "  [skip] @playwright/test already in package.json" -InformationAction Continue
     return $true
   }
 
@@ -78,7 +78,7 @@ function Install-PlaywrightDep {
   }
 
   $pm = Detect-PackageManager
-  Write-Host "  Installing @playwright/test via $pm..."
+  Write-Information -MessageData "  Installing @playwright/test via $pm..." -InformationAction Continue
 
   switch ($pm) {
     'pnpm' { & pnpm add -D '@playwright/test' }
@@ -92,10 +92,10 @@ function Install-PlaywrightDep {
 
 function Install-ChromiumBrowser {
   if ($SkipBrowser) {
-    Write-Host "  [skip] -SkipBrowser flag set"
+    Write-Information -MessageData "  [skip] -SkipBrowser flag set" -InformationAction Continue
     return $true
   }
-  Write-Host "  Installing chromium browser (~170MB, may take a minute)..."
+  Write-Information -MessageData "  Installing chromium browser (~170MB, may take a minute)..." -InformationAction Continue
   & npx --yes playwright install chromium
   return ($LASTEXITCODE -eq 0)
 }
@@ -103,7 +103,7 @@ function Install-ChromiumBrowser {
 function Inject-ClaudeMcp {
   $claudeDir = Join-Path $ProjectDir '.claude'
   if (-not (Test-Path $claudeDir)) {
-    Write-Host "  [skip] .claude/ not present (Claude Code not installed)"
+    Write-Output "  [skip] .claude/ not present (Claude Code not installed)"
     return
   }
 
@@ -130,7 +130,7 @@ function Inject-ClaudeMcp {
   }
 
   if ($mcp.ContainsKey('playwright')) {
-    Write-Host "  [skip] mcpServers.playwright already present in settings.local.json"
+    Write-Output "  [skip] mcpServers.playwright already present in settings.local.json"
     return
   }
 
@@ -142,13 +142,13 @@ function Inject-ClaudeMcp {
 
   $json = $settings | ConvertTo-Json -Depth 8
   $json | Out-File -FilePath $settingsPath -Encoding UTF8 -NoNewline
-  Write-Host "  -> wrote .claude/settings.local.json (mcpServers.playwright)"
+  Write-Output "  -> wrote .claude/settings.local.json (mcpServers.playwright)"
 }
 
 function Inject-OpencodeMcp {
   $ocDir = Join-Path $ProjectDir '.opencode'
   if (-not (Test-Path $ocDir)) {
-    Write-Host "  [skip] .opencode/ not present (OpenCode not installed)"
+    Write-Output "  [skip] .opencode/ not present (OpenCode not installed)"
     return
   }
 
@@ -157,7 +157,7 @@ function Inject-OpencodeMcp {
   if (Test-Path $configPath) {
     $raw = Get-Content $configPath -Raw
     if ($raw -match '"playwright"\s*:') {
-      Write-Host "  [skip] mcp.playwright already present in opencode.jsonc"
+      Write-Output "  [skip] mcp.playwright already present in opencode.jsonc"
       return
     }
   } else {
@@ -195,7 +195,7 @@ function Inject-OpencodeMcp {
   $header = "// OpenCode config - JDI managed (mcp.playwright managed; rest is yours)`n"
   $output = $header + $newJson + "`n"
   $output | Out-File -FilePath $configPath -Encoding UTF8 -NoNewline
-  Write-Host "  -> wrote .opencode/opencode.jsonc (mcp.playwright)"
+  Write-Output "  -> wrote .opencode/opencode.jsonc (mcp.playwright)"
 }
 
 function Inject-CopilotMcp {
@@ -204,7 +204,7 @@ function Inject-CopilotMcp {
   $f = Join-Path $vscodeDir 'mcp.json'
 
   if ((Test-Path $f) -and ((Get-Content $f -Raw) -match '"playwright"\s*:')) {
-    Write-Host "  [skip] servers.playwright already present in .vscode/mcp.json"
+    Write-Output "  [skip] servers.playwright already present in .vscode/mcp.json"
     return
   }
 
@@ -236,7 +236,7 @@ function Inject-CopilotMcp {
   $settings['servers'] = $servers
 
   ($settings | ConvertTo-Json -Depth 8) | Out-File -FilePath $f -Encoding UTF8 -NoNewline
-  Write-Host "  -> wrote .vscode/mcp.json (servers.playwright) for Copilot"
+  Write-Output "  -> wrote .vscode/mcp.json (servers.playwright) for Copilot"
 }
 
 function Inject-AntigravityMcp {
@@ -244,7 +244,7 @@ function Inject-AntigravityMcp {
   $f = Join-Path $base 'settings.json'
 
   if ((Test-Path $f) -and ((Get-Content $f -Raw) -match '"playwright"\s*:')) {
-    Write-Host "  [skip] mcpServers.playwright already present in $f"
+    Write-Output "  [skip] mcpServers.playwright already present in $f"
     return
   }
 
@@ -276,44 +276,44 @@ function Inject-AntigravityMcp {
   $settings['mcpServers'] = $mcp
 
   ($settings | ConvertTo-Json -Depth 8) | Out-File -FilePath $f -Encoding UTF8 -NoNewline
-  Write-Host "  -> wrote $f (mcpServers.playwright) for Antigravity"
+  Write-Output "  -> wrote $f (mcpServers.playwright) for Antigravity"
 }
 
 # =====================================================================
 # Main
 # =====================================================================
 
-Write-Host ''
-Write-Host '=== JDI: Install Playwright + MCP ==='
-Write-Host ''
+Write-Output ''
+Write-Output '=== JDI: Install Playwright + MCP ==='
+Write-Output ''
 
-Write-Host 'Step 1: Install dep'
+Write-Output 'Step 1: Install dep'
 $depOk = Install-PlaywrightDep
 if (-not $depOk) {
   Write-Error "Dep install failed. Aborting."
   exit 1
 }
 
-Write-Host ''
-Write-Host 'Step 2: Install browser'
+Write-Output ''
+Write-Output 'Step 2: Install browser'
 $bOk = Install-ChromiumBrowser
 if (-not $bOk) {
   Write-Warning "Browser install failed. You can rerun later: 'npx playwright install chromium'"
 }
 
 if (-not $SkipMcp) {
-  Write-Host ''
-  Write-Host 'Step 3: Inject MCP config in detected runtimes'
+  Write-Output ''
+  Write-Output 'Step 3: Inject MCP config in detected runtimes'
   if ($Runtime -in 'claude','all')      { Inject-ClaudeMcp }
   if ($Runtime -in 'opencode','all')    { Inject-OpencodeMcp }
   if ($Runtime -in 'copilot','all')     { Inject-CopilotMcp }
   if ($Runtime -in 'antigravity','all') { Inject-AntigravityMcp }
 }
 
-Write-Host ''
-Write-Host 'Done. Restart your runtime to pick up MCP changes.'
-Write-Host '  - Claude Code: close + reopen, OR run /mcp to verify'
-Write-Host '  - OpenCode: opencode reload'
-Write-Host '  - Copilot (VS Code): reload window, palette `MCP: List Servers`'
-Write-Host '  - Antigravity: restart antigravity'
-Write-Host ''
+Write-Output ''
+Write-Output 'Done. Restart your runtime to pick up MCP changes.'
+Write-Output '  - Claude Code: close + reopen, OR run /mcp to verify'
+Write-Output '  - OpenCode: opencode reload'
+Write-Output '  - Copilot (VS Code): reload window, palette `MCP: List Servers`'
+Write-Output '  - Antigravity: restart antigravity'
+Write-Output ''

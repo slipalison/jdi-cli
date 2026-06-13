@@ -90,12 +90,12 @@ function Install-Claude {
       $target = Join-Path $dest 'settings.example.json'
       if (-not (Test-Path $target)) {
         Copy-Item -Path "$Root\runtimes\claude\settings.example.json" -Destination $target
-        Write-Host "  -> revise $target e renomeie para settings.json (ou .local.json)"
+        Write-Output "  -> revise $target e renomeie para settings.json (ou .local.json)"
       }
     }
   }
-  Write-Host "Claude Code instalado em: $dest (scope=$Scope)"
-  Write-Host "  -> hooks copiados pra $dest\hooks\ (opt-in via: npx jdi-cli enable-update-check)"
+  Write-Output "Claude Code instalado em: $dest (scope=$Scope)"
+  Write-Output "  -> hooks copiados pra $dest\hooks\ (opt-in via: npx jdi-cli enable-update-check)"
 }
 
 function Install-Copilot {
@@ -109,8 +109,8 @@ function Install-Copilot {
   if (Test-Path "$Root\runtimes\copilot\copilot-instructions.md") {
     Copy-Item -Path "$Root\runtimes\copilot\copilot-instructions.md" -Destination "$dest\copilot-instructions.md" -Force
   }
-  Write-Host "Copilot instalado em: $dest"
-  Write-Host "  -> Copilot e sempre project-scoped via .github/"
+  Write-Output "Copilot instalado em: $dest"
+  Write-Output "  -> Copilot e sempre project-scoped via .github/"
 }
 
 function Install-Antigravity {
@@ -121,7 +121,7 @@ function Install-Antigravity {
   if ($Scope -eq 'project' -and (Test-Path "$Root\runtimes\antigravity\agents.md")) {
     Copy-Item -Path "$Root\runtimes\antigravity\agents.md" -Destination "$ProjectDir\agents.md" -Force
   }
-  Write-Host "Antigravity instalado em: $dest (scope=$Scope)"
+  Write-Output "Antigravity instalado em: $dest (scope=$Scope)"
 }
 
 function Install-Opencode {
@@ -141,10 +141,10 @@ function Install-Opencode {
     $jsoncTarget = Join-Path $dest 'opencode.jsonc'
     if (-not (Test-Path $jsoncTarget) -and (Test-Path "$Root\runtimes\opencode\opencode.example.jsonc")) {
       Copy-Item -Path "$Root\runtimes\opencode\opencode.example.jsonc" -Destination $jsoncTarget
-      Write-Host "  -> revise $jsoncTarget (gerado a partir do exemplo)"
+      Write-Output "  -> revise $jsoncTarget (gerado a partir do exemplo)"
     }
   }
-  Write-Host "OpenCode instalado em: $dest (scope=$Scope)"
+  Write-Output "OpenCode instalado em: $dest (scope=$Scope)"
 }
 
 function Install-GitHooks {
@@ -158,12 +158,12 @@ function Install-GitHooks {
     }
   }
 
-  Write-Host ""
-  Write-Host "Git hooks copiados pra .githooks/. Para ativar:"
-  Write-Host "  git config core.hooksPath .githooks"
-  Write-Host ""
-  Write-Host "  Windows: hooks rodam via git-bash (vem com Git for Windows)."
-  Write-Host "           Sem Git for Windows, hooks sao silenciosamente ignorados."
+  Write-Output ""
+  Write-Output "Git hooks copiados pra .githooks/. Para ativar:"
+  Write-Output "  git config core.hooksPath .githooks"
+  Write-Output ""
+  Write-Output "  Windows: hooks rodam via git-bash (vem com Git for Windows)."
+  Write-Output "           Sem Git for Windows, hooks sao silenciosamente ignorados."
 }
 
 switch ($Runtime) {

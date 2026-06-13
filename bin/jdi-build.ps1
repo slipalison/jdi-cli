@@ -60,6 +60,46 @@ function Write-Utf8NoBom {
   [System.IO.File]::WriteAllText($Path, $Content, [System.Text.UTF8Encoding]::new($false))
 }
 
+# Fecha o sub-bloco atual ($State.CurrentSub) gravando suas linhas em SubBlocks.
+function Close-OverrideSubBlock {
+  param([hashtable]$State)
+  if ($State.CurrentSub) {
+    $State.SubBlocks[$State.CurrentSub] = $State.CurrentSubLines
+    $State.CurrentSub = $null
+    $State.CurrentSubLines = @()
+  }
+}
+
+# Processa uma linha de 4 espacos: par `key: value` (escalar) OU `key:` (abre sub-bloco).
+function Add-OverrideScalarOrSubBlock {
+  param([hashtable]$State, [string]$Key, [string]$Value)
+  Close-OverrideSubBlock -State $State
+  if ([string]::IsNullOrWhiteSpace($Value)) {
+    # sub-bloco abre
+    $State.CurrentSub = $Key
+    $State.CurrentSubLines = @()
+  } else {
+    $State.Scalars[$Key] = $Value
+  }
+}
+
+# Aplica uma linha pertencente ao bloco do runtime alvo ao estado acumulado.
+function Update-OverrideState {
+  param([hashtable]$State, [string]$Line)
+
+  # linhas de 4 espacos: pares key: value, OU key: (sub-bloco)
+  if ($Line -match '^\s{4}(\w[\w-]*):\s*(.*)$') {
+    Add-OverrideScalarOrSubBlock -State $State -Key $Matches[1] -Value $Matches[2]
+  }
+  elseif ($Line -match '^\s{6}\S' -and $State.CurrentSub) {
+    # linha do sub-bloco (6 espacos)
+    $State.CurrentSubLines += ($Line -replace '^\s{4}', '')
+  }
+  elseif ($Line -match '^\s{4}- ' -and $State.CurrentSub) {
+    $State.CurrentSubLines += ($Line -replace '^\s{4}', '')
+  }
+}
+
 # Extrai sub-bloco do frontmatter sob `runtime_overrides.<runtime>:`.
 # Retorna hashtable { key = value } com parsing simples de "key: value" indented.
 function Get-RuntimeOverride {
@@ -67,14 +107,15 @@ function Get-RuntimeOverride {
     [string]$Frontmatter,
     [string]$Runtime
   )
-  $result = [ordered]@{}
+  $state = @{
+    Scalars         = [ordered]@{}
+    SubBlocks       = [ordered]@{}
+    CurrentSub      = $null
+    CurrentSubLines = @()
+  }
   $lines = $Frontmatter -split "`r?`n"
   $inOverrides = $false
   $inRuntime   = $false
-  $runtimeIndent = -1
-  $subBlocks = [ordered]@{}
-  $currentSub = $null
-  $currentSubLines = @()
 
   foreach ($line in $lines) {
     if ($line -match '^runtime_overrides:\s*$') { $inOverrides = $true; continue }
@@ -84,49 +125,19 @@ function Get-RuntimeOverride {
 
     if ($line -match "^\s{2}${Runtime}:\s*$") {
       $inRuntime = $true
-      $runtimeIndent = 2
       continue
     }
 
     if ($inRuntime) {
       if ($line -match '^\s{2}\S') { break }  # outro runtime — fim do bloco
-
-      # linhas de 4 espacos: pares key: value, OU key: (sub-bloco)
-      if ($line -match '^\s{4}(\w[\w-]*):\s*(.*)$') {
-        $k = $Matches[1]
-        $v = $Matches[2]
-
-        # commit subbloco anterior
-        if ($currentSub) {
-          $subBlocks[$currentSub] = $currentSubLines
-          $currentSub = $null
-          $currentSubLines = @()
-        }
-
-        if ([string]::IsNullOrWhiteSpace($v)) {
-          # sub-bloco abre
-          $currentSub = $k
-          $currentSubLines = @()
-        } else {
-          $result[$k] = $v
-        }
-      }
-      elseif ($line -match '^\s{6}\S' -and $currentSub) {
-        # linha do sub-bloco (6 espacos)
-        $currentSubLines += ($line -replace '^\s{4}', '')
-      }
-      elseif ($line -match '^\s{4}- ' -and $currentSub) {
-        $currentSubLines += ($line -replace '^\s{4}', '')
-      }
+      Update-OverrideState -State $state -Line $line
     }
   }
 
   # commit ultimo subbloco
-  if ($currentSub) {
-    $subBlocks[$currentSub] = $currentSubLines
-  }
+  Close-OverrideSubBlock -State $state
 
-  return @{ Scalars = $result; SubBlocks = $subBlocks }
+  return @{ Scalars = $state.Scalars; SubBlocks = $state.SubBlocks }
 }
 
 # Pega valor escalar do frontmatter base (ex: description, name, triggers).
@@ -179,7 +190,7 @@ function Build-ClaudeAgent {
 
   $content = $fm.ToString() + $src.Body
   Write-Utf8NoBom -Path $dst -Content $content
-  Write-Host "  claude/agents/$name.md"
+  Write-Output "  claude/agents/$name.md"
 }
 
 function Build-CopilotAgent {
@@ -201,7 +212,7 @@ function Build-CopilotAgent {
 
   $content = $fm.ToString() + $src.Body
   Write-Utf8NoBom -Path $dst -Content $content
-  Write-Host "  copilot/agents/$name.agent.md"
+  Write-Output "  copilot/agents/$name.agent.md"
 }
 
 function Build-AntigravitySkill {
@@ -233,7 +244,7 @@ function Build-AntigravitySkill {
 
   $content = $fm.ToString() + $src.Body
   Write-Utf8NoBom -Path $dst -Content $content
-  Write-Host "  antigravity/skills/$name/SKILL.md"
+  Write-Output "  antigravity/skills/$name/SKILL.md"
 }
 
 function Build-OpencodeAgent {
@@ -263,7 +274,7 @@ function Build-OpencodeAgent {
 
   $content = $fm.ToString() + $src.Body
   Write-Utf8NoBom -Path $dst -Content $content
-  Write-Host "  opencode/agents/$name.md"
+  Write-Output "  opencode/agents/$name.md"
 }
 
 function Build-Command {
@@ -279,7 +290,7 @@ function Build-Command {
 
   Copy-Item -Path $SrcPath -Destination (Join-Path "$Out\opencode\commands" "$name.md") -Force
 
-  Write-Host "  command: $name"
+  Write-Output "  command: $name"
 }
 
 # Standalone skill em core/skills/<name>/SKILL.md (com optional references/ + scripts/).
@@ -331,59 +342,76 @@ function Build-StandaloneSkill {
     }
   }
 
-  Write-Host "  $Runtime/skills/$name/SKILL.md"
+  Write-Output "  $Runtime/skills/$name/SKILL.md"
 }
 
-function Main {
-  Ensure-Dirs
-  Write-Host "JDI build (PowerShell) - gerando runtimes a partir de core/"
-
-  $agentFiles = Get-ChildItem -Path "$Core\agents" -Filter '*.md' -File | Sort-Object Name
+# Gera os agents por runtime, respeitando $Target. Header por runtime so quando ativo.
+function Build-AgentsForTargets {
+  param([System.IO.FileInfo[]]$AgentFiles)
 
   if ($Target -in 'claude','all') {
-    Write-Host "`nclaude:"
-    foreach ($f in $agentFiles) { Build-ClaudeAgent -SrcPath $f.FullName }
+    Write-Output "`nclaude:"
+    foreach ($f in $AgentFiles) { Build-ClaudeAgent -SrcPath $f.FullName }
   }
   if ($Target -in 'copilot','all') {
-    Write-Host "`ncopilot:"
-    foreach ($f in $agentFiles) { Build-CopilotAgent -SrcPath $f.FullName }
+    Write-Output "`ncopilot:"
+    foreach ($f in $AgentFiles) { Build-CopilotAgent -SrcPath $f.FullName }
   }
   if ($Target -in 'antigravity','all') {
-    Write-Host "`nantigravity:"
-    foreach ($f in $agentFiles) { Build-AntigravitySkill -SrcPath $f.FullName }
+    Write-Output "`nantigravity:"
+    foreach ($f in $AgentFiles) { Build-AntigravitySkill -SrcPath $f.FullName }
   }
   if ($Target -in 'opencode','all') {
-    Write-Host "`nopencode:"
-    foreach ($f in $agentFiles) { Build-OpencodeAgent -SrcPath $f.FullName }
+    Write-Output "`nopencode:"
+    foreach ($f in $AgentFiles) { Build-OpencodeAgent -SrcPath $f.FullName }
   }
+}
 
-  Write-Host "`ncommands (todos os runtimes):"
-  $cmdFiles = Get-ChildItem -Path "$Core\commands" -Filter '*.md' -File | Sort-Object Name
-  foreach ($f in $cmdFiles) { Build-Command -SrcPath $f.FullName }
+# Gera uma standalone skill (core/skills/<name>/) para cada runtime alvo.
+# Copilot nao tem conceito nativo de skill - skip.
+function Build-StandaloneSkillForTargets {
+  param([System.IO.DirectoryInfo]$SkillDir)
 
-  # Standalone skills em core/skills/<name>/SKILL.md
+  if ($Target -in 'claude','all') {
+    Build-StandaloneSkill -SrcDir $SkillDir.FullName -Runtime 'claude' -DestRoot (Join-Path "$Out\claude\skills" $SkillDir.Name)
+  }
+  if ($Target -in 'opencode','all') {
+    Build-StandaloneSkill -SrcDir $SkillDir.FullName -Runtime 'opencode' -DestRoot (Join-Path "$Out\opencode\skills" $SkillDir.Name)
+  }
+  if ($Target -in 'antigravity','all') {
+    Build-StandaloneSkill -SrcDir $SkillDir.FullName -Runtime 'antigravity' -DestRoot (Join-Path "$Out\antigravity\skills" $SkillDir.Name)
+  }
+}
+
+# Descobre e gera todas as standalone skills em core/skills/<name>/SKILL.md.
+function Build-StandaloneSkills {
   $skillDirs = @()
   if (Test-Path "$Core\skills") {
     $skillDirs = Get-ChildItem -Path "$Core\skills" -Directory -ErrorAction SilentlyContinue | Sort-Object Name
   }
 
   if ($skillDirs.Count -gt 0) {
-    Write-Host "`nskills (standalone):"
+    Write-Output "`nskills (standalone):"
     foreach ($d in $skillDirs) {
-      if ($Target -in 'claude','all') {
-        Build-StandaloneSkill -SrcDir $d.FullName -Runtime 'claude' -DestRoot (Join-Path "$Out\claude\skills" $d.Name)
-      }
-      if ($Target -in 'opencode','all') {
-        Build-StandaloneSkill -SrcDir $d.FullName -Runtime 'opencode' -DestRoot (Join-Path "$Out\opencode\skills" $d.Name)
-      }
-      if ($Target -in 'antigravity','all') {
-        Build-StandaloneSkill -SrcDir $d.FullName -Runtime 'antigravity' -DestRoot (Join-Path "$Out\antigravity\skills" $d.Name)
-      }
-      # Copilot: nao tem conceito nativo de skill - skip
+      Build-StandaloneSkillForTargets -SkillDir $d
     }
   }
+}
 
-  Write-Host "`nBuild completo. Veja runtimes/$Target/"
+function Main {
+  Ensure-Dirs
+  Write-Output "JDI build (PowerShell) - gerando runtimes a partir de core/"
+
+  $agentFiles = Get-ChildItem -Path "$Core\agents" -Filter '*.md' -File | Sort-Object Name
+  Build-AgentsForTargets -AgentFiles $agentFiles
+
+  Write-Output "`ncommands (todos os runtimes):"
+  $cmdFiles = Get-ChildItem -Path "$Core\commands" -Filter '*.md' -File | Sort-Object Name
+  foreach ($f in $cmdFiles) { Build-Command -SrcPath $f.FullName }
+
+  Build-StandaloneSkills
+
+  Write-Output "`nBuild completo. Veja runtimes/$Target/"
 }
 
 Main

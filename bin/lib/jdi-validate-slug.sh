@@ -23,9 +23,9 @@ set -u
 
 SLUG="${1:-}"
 CHECK_UNIQUE=false
-[ "${2:-}" = "--check-unique" ] && CHECK_UNIQUE=true
+[[ "${2:-}" == "--check-unique" ]] && CHECK_UNIQUE=true
 
-if [ -z "$SLUG" ]; then
+if [[ -z "$SLUG" ]]; then
   echo "ERROR: slug required" >&2
   exit 1
 fi
@@ -49,15 +49,15 @@ fi
 # --- Rule 2: reserved words ---
 RESERVED="current all none archive removed history latest pending ready done blocked partial"
 for word in $RESERVED; do
-  if [ "$SLUG" = "$word" ]; then
+  if [[ "$SLUG" == "$word" ]]; then
     echo "ERROR: slug '$SLUG' is reserved (JDI keyword)" >&2
     exit 2
   fi
 done
 
 # --- Rule 3 + 4: uniqueness vs current repo state ---
-if [ "$CHECK_UNIQUE" = true ]; then
-  if [ ! -d .jdi/phases ]; then
+if [[ "$CHECK_UNIQUE" == true ]]; then
+  if [[ ! -d .jdi/phases ]]; then
     # No phases yet — definitely unique
     echo "$SLUG"
     exit 0
@@ -66,27 +66,26 @@ if [ "$CHECK_UNIQUE" = true ]; then
   # Folder collision: any folder whose canonical slug equals $SLUG
   COLLISIONS=""
   for dir in .jdi/phases/*/; do
-    [ -d "$dir" ] || continue
+    [[ -d "$dir" ]] || continue
     name=$(basename "$dir")
     canonical=$(echo "$name" | sed -E 's/^[0-9]+-//')
-    if [ "$canonical" = "$SLUG" ] || [ "$name" = "$SLUG" ]; then
+    if [[ "$canonical" == "$SLUG" ]] || [[ "$name" == "$SLUG" ]]; then
       COLLISIONS="$COLLISIONS $name"
     fi
   done
 
   COLL_COUNT=$(echo "$COLLISIONS" | tr -s ' ' '\n' | grep -c . || true)
-  if [ "$COLL_COUNT" -ge 2 ]; then
+  if [[ "$COLL_COUNT" -ge 2 ]]; then
     echo "ERROR: ambiguous existing folders for slug '$SLUG':$COLLISIONS (repo state corrupt — run /jdi-migrate-phases)" >&2
     exit 4
   fi
-  if [ "$COLL_COUNT" -eq 1 ]; then
+  if [[ "$COLL_COUNT" -eq 1 ]]; then
     echo "ERROR: slug '$SLUG' already exists (folder:$COLLISIONS)" >&2
     exit 3
   fi
 
   # ROADMAP collision: any phase whose Slug field (raw or canonical) equals $SLUG
-  if [ -f .jdi/ROADMAP.md ]; then
-    if awk -v target="$SLUG" '
+  if [[ -f .jdi/ROADMAP.md ]] && awk -v target="$SLUG" '
       /^- \*\*Slug:\*\*/ {
         sub(/^- \*\*Slug:\*\*[[:space:]]*/, "")
         raw = $0
@@ -96,9 +95,8 @@ if [ "$CHECK_UNIQUE" = true ]; then
       }
       END { exit (found ? 0 : 1) }
     ' .jdi/ROADMAP.md; then
-      echo "ERROR: slug '$SLUG' already listed in ROADMAP.md" >&2
-      exit 3
-    fi
+    echo "ERROR: slug '$SLUG' already listed in ROADMAP.md" >&2
+    exit 3
   fi
 fi
 

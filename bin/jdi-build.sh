@@ -12,6 +12,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CORE="${ROOT}/core"
 OUT="${ROOT}/runtimes"
 TARGET="${1:-all}"
+readonly ANTIGRAVITY="antigravity"
 
 ensure_dirs() {
   mkdir -p "${OUT}/claude/agents" "${OUT}/claude/commands" "${OUT}/claude/skills"
@@ -220,7 +221,7 @@ build_standalone_skill() {
     echo "name: ${name}"
     [[ -n "$desc" ]] && echo "description: ${desc}"
 
-    if [[ "$runtime" == "antigravity" ]]; then
+    if [[ "$runtime" == "$ANTIGRAVITY" ]]; then
       # Antigravity descobre skills por triggers - extrai runtime_overrides.antigravity.triggers
       local triggers
       triggers=$(awk '
@@ -282,7 +283,7 @@ main() {
     done
   fi
 
-  if [[ "$TARGET" == "antigravity" || "$TARGET" == "all" ]]; then
+  if [[ "$TARGET" == "$ANTIGRAVITY" || "$TARGET" == "all" ]]; then
     echo
     echo "antigravity:"
     for f in "$CORE"/agents/*.md; do
@@ -318,8 +319,8 @@ main() {
       if [[ "$TARGET" == "opencode" || "$TARGET" == "all" ]]; then
         build_standalone_skill "$skill_dir" "opencode" "${OUT}/opencode/skills/${skill_name}"
       fi
-      if [[ "$TARGET" == "antigravity" || "$TARGET" == "all" ]]; then
-        build_standalone_skill "$skill_dir" "antigravity" "${OUT}/antigravity/skills/${skill_name}"
+      if [[ "$TARGET" == "$ANTIGRAVITY" || "$TARGET" == "all" ]]; then
+        build_standalone_skill "$skill_dir" "$ANTIGRAVITY" "${OUT}/antigravity/skills/${skill_name}"
       fi
       # Copilot: nao tem conceito nativo de skill - skip
     done

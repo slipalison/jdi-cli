@@ -23,7 +23,7 @@ FORCE=0
 PROJECT_DIR="$(pwd)"
 USER_HOME="${HOME:-$USERPROFILE}"
 
-while [ $# -gt 0 ]; do
+while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)  REPO="$2"; shift 2 ;;
     --scope) SCOPE="$2"; shift 2 ;;
@@ -37,7 +37,7 @@ case "$SCOPE" in
   *) echo "Invalid --scope. Use: user | project"; exit 1 ;;
 esac
 
-if [ "$SCOPE" = "user" ]; then
+if [[ "$SCOPE" == "user" ]]; then
   BASE_DIR="$USER_HOME/.claude/plugins"
 else
   BASE_DIR="$PROJECT_DIR/.claude/plugins"
@@ -57,8 +57,8 @@ if ! command -v git >/dev/null 2>&1; then
   exit 1
 fi
 
-if [ -d "$TARGET" ]; then
-  if [ "$FORCE" != "1" ]; then
+if [[ -d "$TARGET" ]]; then
+  if [[ "$FORCE" != "1" ]]; then
     echo "  Target exists."
     read -p "  Overwrite? (y/N) " ans
     case "$ans" in
@@ -79,14 +79,14 @@ case "$REPO" in
 esac
 git clone --depth 1 -- "$REPO" "$TARGET" 2>&1 | sed 's/^/    /'
 
-if [ $? -ne 0 ]; then
+if [[ $? -ne 0 ]]; then
   echo "git clone failed."
   exit 1
 fi
 
 # Verify plugin shape
-if [ -f "$TARGET/plugin.json" ] || [ -d "$TARGET/.claude-plugin" ] \
-   || [ -d "$TARGET/skills" ] || [ -d "$TARGET/commands" ] || [ -d "$TARGET/agents" ]; then
+if [[ -f "$TARGET/plugin.json" ]] || [[ -d "$TARGET/.claude-plugin" ]] \
+   || [[ -d "$TARGET/skills" ]] || [[ -d "$TARGET/commands" ]] || [[ -d "$TARGET/agents" ]]; then
   : # valid
 else
   echo "  [warn] Cloned repo does not look like a Claude Code plugin."

@@ -11,13 +11,17 @@
 
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
 
 // 24h rate-limit for repeated parse-error warnings so a corrupted cache
 // does not nag the user every session.
 const RATE_LIMIT_SECONDS = 24 * 60 * 60;
+
+function debugLog(label, e) {
+  if (process.env.JDI_DEBUG) console.error('[jdi]', label, e?.message);
+}
 
 function buildBannerOutput(state) {
   const { cache, parseError, suppressFailureWarning } = state || {};
@@ -51,10 +55,11 @@ function readCache(cacheFile) {
 function shouldSuppressFailureWarning(sentinelFile, nowSeconds) {
   try {
     if (!fs.existsSync(sentinelFile)) return false;
-    const last = parseInt(fs.readFileSync(sentinelFile, 'utf8').trim(), 10);
+    const last = Number.parseInt(fs.readFileSync(sentinelFile, 'utf8').trim(), 10);
     if (!Number.isFinite(last)) return false;
     return nowSeconds - last < RATE_LIMIT_SECONDS;
-  } catch (_e) {
+  } catch (e) {
+    debugLog('sentinel read failed:', e);
     return false;
   }
 }
@@ -62,8 +67,9 @@ function shouldSuppressFailureWarning(sentinelFile, nowSeconds) {
 function recordFailureWarning(sentinelFile, nowSeconds) {
   try {
     fs.writeFileSync(sentinelFile, String(nowSeconds));
-  } catch (_e) {
+  } catch (e) {
     // Best-effort: a non-writable cache dir means we re-warn next session.
+    debugLog('sentinel write failed:', e);
   }
 }
 
@@ -86,7 +92,9 @@ function main() {
   if (parseError && !suppressFailureWarning) {
     try {
       fs.mkdirSync(cacheDir, { recursive: true });
-    } catch (_e) {}
+    } catch (e) {
+      debugLog('cache dir create failed:', e);
+    }
     recordFailureWarning(sentinelFile, now);
   }
 

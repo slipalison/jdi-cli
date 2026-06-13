@@ -19,9 +19,9 @@
 // Hooks are NEVER deleted from disk — they remain in ~/.claude/hooks/ so a
 // future re-enable is instant.
 
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
 
 const HOOK_BASENAMES = ['jdi-check-update.js', 'jdi-update-banner.js'];
 

@@ -34,7 +34,7 @@ ID="${1:-}"
 
 # --- Input validation ---------------------------------------------------
 
-if [ -z "$ID" ]; then
+if [[ -z "$ID" ]]; then
   echo "ERROR: phase ID required (integer position or slug)" >&2
   exit 1
 fi
@@ -57,11 +57,11 @@ fi
 
 # --- State files --------------------------------------------------------
 
-if [ ! -f .jdi/ROADMAP.md ]; then
+if [[ ! -f .jdi/ROADMAP.md ]]; then
   echo "ERROR: .jdi/ROADMAP.md not found (run /jdi-new first)" >&2
   exit 3
 fi
-if [ ! -f .jdi/STATE.md ]; then
+if [[ ! -f .jdi/STATE.md ]]; then
   echo "ERROR: .jdi/STATE.md not found (corrupt project)" >&2
   exit 3
 fi
@@ -70,7 +70,7 @@ fi
 
 SCHEMA_VERSION=1
 SV_LINE=$(grep -oE 'schema_version:[[:space:]]*[0-9]+' .jdi/STATE.md 2>/dev/null | head -1 || true)
-if [ -n "$SV_LINE" ]; then
+if [[ -n "$SV_LINE" ]]; then
   SCHEMA_VERSION=$(echo "$SV_LINE" | grep -oE '[0-9]+' | head -1)
 fi
 
@@ -81,7 +81,7 @@ fi
 #   - **Slug:** user-auth           (v2)
 # We extract (position, raw_slug) pairs.
 
-if [ "$IS_INTEGER" = true ]; then
+if [[ "$IS_INTEGER" == true ]]; then
   # Integer → find phase by position, return its slug
   POSITION="$ID"
   RAW_SLUG=$(awk -v target="$POSITION" '
@@ -99,7 +99,7 @@ if [ "$IS_INTEGER" = true ]; then
     }
   ' .jdi/ROADMAP.md)
 
-  if [ -z "$RAW_SLUG" ]; then
+  if [[ -z "$RAW_SLUG" ]]; then
     echo "ERROR: phase $POSITION not found in ROADMAP" >&2
     exit 2
   fi
@@ -130,7 +130,7 @@ else
     }
   ' .jdi/ROADMAP.md)
 
-  if [ -z "$POSITION" ]; then
+  if [[ -z "$POSITION" ]]; then
     echo "ERROR: slug '$QUERY' not found in ROADMAP" >&2
     exit 2
   fi
@@ -180,29 +180,29 @@ done
 FOLDER=""
 NN=$(printf '%02d' "$POSITION")
 
-if [ -d ".jdi/phases/$CANONICAL_SLUG" ]; then
+if [[ -d ".jdi/phases/$CANONICAL_SLUG" ]]; then
   FOLDER=".jdi/phases/$CANONICAL_SLUG"
-elif [ "$RAW_SLUG" != "$CANONICAL_SLUG" ] && [ -d ".jdi/phases/$RAW_SLUG" ]; then
+elif [[ "$RAW_SLUG" != "$CANONICAL_SLUG" ]] && [[ -d ".jdi/phases/$RAW_SLUG" ]]; then
   FOLDER=".jdi/phases/$RAW_SLUG"
-elif [ -d ".jdi/phases/${NN}-${CANONICAL_SLUG}" ]; then
+elif [[ -d ".jdi/phases/${NN}-${CANONICAL_SLUG}" ]]; then
   FOLDER=".jdi/phases/${NN}-${CANONICAL_SLUG}"
 else
   CANDIDATES=$(ls -d ".jdi/phases/"*"-${CANONICAL_SLUG}" 2>/dev/null || true)
   CAND_COUNT=0
-  [ -n "$CANDIDATES" ] && CAND_COUNT=$(echo "$CANDIDATES" | wc -l | tr -d ' ')
-  if [ "$CAND_COUNT" -eq 1 ]; then
+  [[ -n "$CANDIDATES" ]] && CAND_COUNT=$(echo "$CANDIDATES" | wc -l | tr -d ' ')
+  if [[ "$CAND_COUNT" -eq 1 ]]; then
     FOLDER="$CANDIDATES"
-  elif [ "$CAND_COUNT" -gt 1 ]; then
+  elif [[ "$CAND_COUNT" -gt 1 ]]; then
     echo "ERROR: multiple folder candidates for slug '$CANONICAL_SLUG': $CANDIDATES" >&2
     exit 4
   fi
 fi
 
 FOLDER_EXISTS=true
-if [ -z "$FOLDER" ]; then
+if [[ -z "$FOLDER" ]]; then
   FOLDER_EXISTS=false
   # Default future folder per schema
-  if [ "$SCHEMA_VERSION" -ge 2 ]; then
+  if [[ "$SCHEMA_VERSION" -ge 2 ]]; then
     FOLDER=".jdi/phases/${CANONICAL_SLUG}"
   else
     FOLDER=".jdi/phases/${NN}-${CANONICAL_SLUG}"
