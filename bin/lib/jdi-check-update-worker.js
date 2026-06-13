@@ -28,6 +28,10 @@ if (!cacheFile) {
 const NPM_TIMEOUT_MS = 10000;
 const PACKAGE_NAME = 'jdi-cli';
 
+function debugLog(label, e) {
+  if (process.env.JDI_DEBUG) console.error('[jdi]', label, e?.message);
+}
+
 function readInstalledVersion() {
   // 1. Env var override (set by `jdi install` when copying the hook to ~/.claude/hooks/)
   if (process.env.JDI_INSTALLED_VERSION) {
@@ -41,7 +45,7 @@ function readInstalledVersion() {
       return fs.readFileSync(versionFile, 'utf8').trim();
     }
   } catch (e) {
-    if (process.env.JDI_DEBUG) console.error('[jdi] JDI_VERSION read failed:', e && e.message);
+    debugLog('JDI_VERSION read failed:', e);
   }
 
   // 3. Walk up looking for jdi-cli's package.json (case: still inside node_modules)
@@ -60,7 +64,7 @@ function readInstalledVersion() {
       dir = parent;
     }
   } catch (e) {
-    if (process.env.JDI_DEBUG) console.error('[jdi] package.json walk failed:', e && e.message);
+    debugLog('package.json walk failed:', e);
   }
 
   return '0.0.0';
@@ -84,7 +88,7 @@ function writeCache(result) {
   } catch (e) {
     // Cache write failure: nothing to surface — the banner reads next session,
     // which will simply find no cache and skip.
-    if (process.env.JDI_DEBUG) console.error('[jdi] cache write failed:', e && e.message);
+    debugLog('cache write failed:', e);
   }
 }
 
@@ -126,7 +130,7 @@ function npmViewLatest(callback) {
           const version = JSON.parse(body).version;
           done(version ? String(version).trim() : null);
         } catch (e) {
-          if (process.env.JDI_DEBUG) console.error('[jdi] registry parse failed:', e && e.message);
+          debugLog('registry parse failed:', e);
           done(null);
         }
       });

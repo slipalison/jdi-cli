@@ -134,7 +134,7 @@ function buildFrame({ showHilt, sabersBlade, showTagline }) {
   // 3 stacked sabers
   if (showHilt) {
     for (let i = 0; i < 3; i++) {
-      const blade = sabersBlade?.[i] != null ? sabersBlade[i] : 0;
+      const blade = sabersBlade?.[i] ?? 0;
       lines.push(buildSaberLine(i, blade));
     }
   } else {

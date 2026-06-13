@@ -19,6 +19,10 @@ const os = require('node:os');
 // does not nag the user every session.
 const RATE_LIMIT_SECONDS = 24 * 60 * 60;
 
+function debugLog(label, e) {
+  if (process.env.JDI_DEBUG) console.error('[jdi]', label, e?.message);
+}
+
 function buildBannerOutput(state) {
   const { cache, parseError, suppressFailureWarning } = state || {};
   if (parseError) {
@@ -55,7 +59,7 @@ function shouldSuppressFailureWarning(sentinelFile, nowSeconds) {
     if (!Number.isFinite(last)) return false;
     return nowSeconds - last < RATE_LIMIT_SECONDS;
   } catch (e) {
-    if (process.env.JDI_DEBUG) console.error('[jdi] sentinel read failed:', e && e.message);
+    debugLog('sentinel read failed:', e);
     return false;
   }
 }
@@ -65,7 +69,7 @@ function recordFailureWarning(sentinelFile, nowSeconds) {
     fs.writeFileSync(sentinelFile, String(nowSeconds));
   } catch (e) {
     // Best-effort: a non-writable cache dir means we re-warn next session.
-    if (process.env.JDI_DEBUG) console.error('[jdi] sentinel write failed:', e && e.message);
+    debugLog('sentinel write failed:', e);
   }
 }
 
@@ -89,7 +93,7 @@ function main() {
     try {
       fs.mkdirSync(cacheDir, { recursive: true });
     } catch (e) {
-      if (process.env.JDI_DEBUG) console.error('[jdi] cache dir create failed:', e && e.message);
+      debugLog('cache dir create failed:', e);
     }
     recordFailureWarning(sentinelFile, now);
   }

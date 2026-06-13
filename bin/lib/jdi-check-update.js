@@ -15,6 +15,10 @@ const path = require('node:path');
 const os = require('node:os');
 const { spawn } = require('node:child_process');
 
+function debugLog(label, e) {
+  if (process.env.JDI_DEBUG) console.error('[jdi]', label, e?.message);
+}
+
 // Respect explicit disable: env var, used by CI or paranoid users.
 if (process.env.JDI_NO_UPDATE_CHECK === '1' || process.env.JDI_NO_UPDATE_CHECK === 'true') {
   process.exit(0);
@@ -30,7 +34,7 @@ try {
 } catch (e) {
   // Best-effort: if cache dir cannot be created, the worker will also fail
   // silently. SessionStart hooks must never produce errors to the runtime.
-  if (process.env.JDI_DEBUG) console.error('[jdi] cache dir create failed:', e && e.message);
+  debugLog('cache dir create failed:', e);
   process.exit(0);
 }
 
@@ -50,7 +54,7 @@ try {
   child.unref();
 } catch (e) {
   // Spawn failure (e.g., worker missing) — silent exit.
-  if (process.env.JDI_DEBUG) console.error('[jdi] worker spawn failed:', e && e.message);
+  debugLog('worker spawn failed:', e);
 }
 
 process.exit(0);
