@@ -135,27 +135,35 @@ function Remove-FileWithConfirm {
   }
 }
 
-function Uninstall-Claude {
-  param([string]$ScopeChoice)
-  $targets = Resolve-ScopeTargets -ScopeChoice $ScopeChoice `
-    -ProjectPath (Join-Path $ProjectDir '.claude') `
-    -UserPath (Join-Path $UserHome '.claude')
-
+# Executor generico: resolve targets do scope, itera, imprime o header padrao
+# e roda a acao especifica do runtime ($Action) por target $t. Centraliza o
+# scaffold antes repetido em cada Uninstall-*.
+function Invoke-RuntimeUninstall {
+  param(
+    [string]$Label,
+    [string]$ScopeChoice,
+    [string]$ProjectPath,
+    [string]$UserPath,
+    [scriptblock]$Action
+  )
+  $targets = Resolve-ScopeTargets -ScopeChoice $ScopeChoice -ProjectPath $ProjectPath -UserPath $UserPath
   foreach ($t in $targets) {
     if (-not (Test-Path $t.Dir)) { continue }
     Write-Output ""
-    Write-Output "Claude ($($t.Scope) scope) em: $($t.Dir)"
+    Write-Output "$Label ($($t.Scope) scope) em: $($t.Dir)"
+    & $Action $t
+  }
+}
 
-    # Remove agents jdi-*
+function Uninstall-Claude {
+  param([string]$ScopeChoice)
+  Invoke-RuntimeUninstall -Label 'Claude' -ScopeChoice $ScopeChoice `
+    -ProjectPath (Join-Path $ProjectDir '.claude') `
+    -UserPath (Join-Path $UserHome '.claude') -Action {
+    param($t)
     Remove-PrefixedFiles -BaseDir $t.Dir -SubDir 'agents' -Filter 'jdi-*.md'
-
-    # Remove commands jdi-*
     Remove-PrefixedFiles -BaseDir $t.Dir -SubDir 'commands' -Filter 'jdi-*.md'
-
-    # Remove skills shipped
     Remove-UniversalSkills -BaseDir $t.Dir
-
-    # CLAUDE.md (project scope only) - so se identico ao shipped
     if ($t.Scope -eq 'project') {
       Remove-FileWithConfirm -Path (Join-Path $ProjectDir 'CLAUDE.md') `
         -Label "CLAUDE.md" `
@@ -165,41 +173,30 @@ function Uninstall-Claude {
 }
 
 function Uninstall-Copilot {
-  $dest = Join-Path $ProjectDir '.github'
-  if (-not (Test-Path $dest)) { return }
-
-  Write-Output ""
-  Write-Output "Copilot (project scope) em: $dest"
-
-  Remove-PrefixedFiles -BaseDir $dest -SubDir 'agents' -Filter 'jdi-*.agent.md'
-  Remove-PrefixedFiles -BaseDir $dest -SubDir 'prompts' -Filter 'jdi-*.prompt.md'
-
-  Remove-FileWithConfirm -Path (Join-Path $dest 'copilot-instructions.md') `
-    -Label ".github/copilot-instructions.md" `
-    -Prompt "Remover .github/copilot-instructions.md? (pode ter sido editado)"
+  Invoke-RuntimeUninstall -Label 'Copilot' -ScopeChoice 'project' `
+    -ProjectPath (Join-Path $ProjectDir '.github') -UserPath '' -Action {
+    param($t)
+    Remove-PrefixedFiles -BaseDir $t.Dir -SubDir 'agents' -Filter 'jdi-*.agent.md'
+    Remove-PrefixedFiles -BaseDir $t.Dir -SubDir 'prompts' -Filter 'jdi-*.prompt.md'
+    Remove-FileWithConfirm -Path (Join-Path $t.Dir 'copilot-instructions.md') `
+      -Label ".github/copilot-instructions.md" `
+      -Prompt "Remover .github/copilot-instructions.md? (pode ter sido editado)"
+  }
 }
 
 function Uninstall-Antigravity {
   param([string]$ScopeChoice)
-  $targets = Resolve-ScopeTargets -ScopeChoice $ScopeChoice `
+  Invoke-RuntimeUninstall -Label 'Antigravity' -ScopeChoice $ScopeChoice `
     -ProjectPath (Join-Path $ProjectDir '.gemini/antigravity') `
-    -UserPath (Join-Path $UserHome '.gemini/antigravity')
-
-  foreach ($t in $targets) {
-    if (-not (Test-Path $t.Dir)) { continue }
-    Write-Output ""
-    Write-Output "Antigravity ($($t.Scope) scope) em: $($t.Dir)"
-
+    -UserPath (Join-Path $UserHome '.gemini/antigravity') -Action {
+    param($t)
     $skillsDir = Join-Path $t.Dir 'skills'
     if (Test-Path $skillsDir) {
-      # Remove skills jdi-* (1 dir cada)
       Get-ChildItem $skillsDir -Directory -Filter 'jdi-*' -ErrorAction SilentlyContinue | ForEach-Object {
         Remove-Item-Safe $_.FullName "skills/$($_.Name)/"
       }
     }
-    # Remove skills universais
     Remove-UniversalSkills -BaseDir $t.Dir
-
     if ($t.Scope -eq 'project') {
       Remove-FileWithConfirm -Path (Join-Path $ProjectDir 'agents.md') `
         -Label "agents.md" `
@@ -210,19 +207,13 @@ function Uninstall-Antigravity {
 
 function Uninstall-Opencode {
   param([string]$ScopeChoice)
-  $targets = Resolve-ScopeTargets -ScopeChoice $ScopeChoice `
+  Invoke-RuntimeUninstall -Label 'OpenCode' -ScopeChoice $ScopeChoice `
     -ProjectPath (Join-Path $ProjectDir '.opencode') `
-    -UserPath (Join-Path $UserHome '.config/opencode')
-
-  foreach ($t in $targets) {
-    if (-not (Test-Path $t.Dir)) { continue }
-    Write-Output ""
-    Write-Output "OpenCode ($($t.Scope) scope) em: $($t.Dir)"
-
+    -UserPath (Join-Path $UserHome '.config/opencode') -Action {
+    param($t)
     Remove-PrefixedFiles -BaseDir $t.Dir -SubDir 'agents' -Filter 'jdi-*.md'
     Remove-PrefixedFiles -BaseDir $t.Dir -SubDir 'commands' -Filter 'jdi-*.md'
     Remove-UniversalSkills -BaseDir $t.Dir
-
     if ($t.Scope -eq 'project') {
       Remove-FileWithConfirm -Path (Join-Path $ProjectDir 'AGENTS.md') `
         -Label "AGENTS.md" `

@@ -171,14 +171,14 @@ function Get-BaseFrontmatterBlock {
   return ($captured -join "`n")
 }
 
-function Build-ClaudeAgent {
-  param([string]$SrcPath)
+# Builder comum dos agents com frontmatter escalar (name/desc/model/tools).
+# Claude e Copilot so diferem em runtime, destino e label.
+function Build-ScalarAgent {
+  param([string]$SrcPath, [string]$Runtime, [string]$Dst, [string]$Label)
   $name = [System.IO.Path]::GetFileNameWithoutExtension($SrcPath)
-  $dst  = Join-Path "$Out\claude\agents" "$name.md"
-
-  $src = Read-MdSource -Path $SrcPath
+  $src  = Read-MdSource -Path $SrcPath
   $desc = Get-BaseFrontmatterValue -Frontmatter $src.Frontmatter -Key 'description'
-  $override = Get-RuntimeOverride -Frontmatter $src.Frontmatter -Runtime 'claude'
+  $override = Get-RuntimeOverride -Frontmatter $src.Frontmatter -Runtime $Runtime
 
   $fm = New-Object System.Text.StringBuilder
   [void]$fm.AppendLine('---')
@@ -188,31 +188,24 @@ function Build-ClaudeAgent {
   if ($override.Scalars['tools']) { [void]$fm.AppendLine("tools: $($override.Scalars['tools'])") }
   [void]$fm.AppendLine('---')
 
-  $content = $fm.ToString() + $src.Body
-  Write-Utf8NoBom -Path $dst -Content $content
-  Write-Output "  claude/agents/$name.md"
+  Write-Utf8NoBom -Path $Dst -Content ($fm.ToString() + $src.Body)
+  Write-Output "  $Label"
+}
+
+function Build-ClaudeAgent {
+  param([string]$SrcPath)
+  $name = [System.IO.Path]::GetFileNameWithoutExtension($SrcPath)
+  Build-ScalarAgent -SrcPath $SrcPath -Runtime 'claude' `
+    -Dst (Join-Path "$Out\claude\agents" "$name.md") `
+    -Label "claude/agents/$name.md"
 }
 
 function Build-CopilotAgent {
   param([string]$SrcPath)
   $name = [System.IO.Path]::GetFileNameWithoutExtension($SrcPath)
-  $dst  = Join-Path "$Out\copilot\agents" "$name.agent.md"
-
-  $src = Read-MdSource -Path $SrcPath
-  $desc = Get-BaseFrontmatterValue -Frontmatter $src.Frontmatter -Key 'description'
-  $override = Get-RuntimeOverride -Frontmatter $src.Frontmatter -Runtime 'copilot'
-
-  $fm = New-Object System.Text.StringBuilder
-  [void]$fm.AppendLine('---')
-  [void]$fm.AppendLine("name: $name")
-  if ($desc) { [void]$fm.AppendLine("description: $desc") }
-  if ($override.Scalars['model']) { [void]$fm.AppendLine("model: $($override.Scalars['model'])") }
-  if ($override.Scalars['tools']) { [void]$fm.AppendLine("tools: $($override.Scalars['tools'])") }
-  [void]$fm.AppendLine('---')
-
-  $content = $fm.ToString() + $src.Body
-  Write-Utf8NoBom -Path $dst -Content $content
-  Write-Output "  copilot/agents/$name.agent.md"
+  Build-ScalarAgent -SrcPath $SrcPath -Runtime 'copilot' `
+    -Dst (Join-Path "$Out\copilot\agents" "$name.agent.md") `
+    -Label "copilot/agents/$name.agent.md"
 }
 
 function Build-AntigravitySkill {
