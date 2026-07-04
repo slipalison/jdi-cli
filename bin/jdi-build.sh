@@ -21,43 +21,89 @@ ensure_dirs() {
   mkdir -p "${OUT}/opencode/agents" "${OUT}/opencode/commands" "${OUT}/opencode/skills"
 }
 
-# extrai bloco `runtime_overrides.<runtime>` do frontmatter e gera frontmatter
-# alvo no formato do runtime correspondente. parser simples (depth-aware).
+# ---------------------------------------------------------------------------
+# Parsing helpers — frontmatter-bounded, mirror jdi-build.ps1 1:1.
+#
+# The old builders used awk /start/,/end/ ranges whose end pattern also
+# matched the start line (single-line range → empty extraction) and a
+# frontmatter toggle that re-entered on `---` horizontal rules in the body
+# (truncated agents). Every helper below hard-stops at the closing `---`.
+# ---------------------------------------------------------------------------
+
+# Everything after the closing `---` of the frontmatter (body verbatim,
+# including any `---` horizontal rules inside it).
+extract_body() {
+  awk '
+    fm >= 2 { print; next }
+    /^---$/ { fm++ }
+  ' "$1"
+}
+
+# Scalar value of a top-level frontmatter key (e.g. description).
+base_fm_value() { # <file> <key>
+  awk -v key="$2" '
+    /^---$/ { fm++; if (fm == 2) exit; next }
+    fm == 1 && index($0, key ":") == 1 {
+      sub("^" key ":[[:space:]]*", ""); print; exit
+    }
+  ' "$1"
+}
+
+# Multiline block of a top-level frontmatter key (key line + indented lines).
+base_fm_block() { # <file> <key>
+  awk -v key="$2" '
+    /^---$/ { fm++; if (fm == 2) exit; next }
+    fm == 1 && $0 == key ":" { b = 1; print; next }
+    b && /^[^ \t]/ { b = 0 }
+    b && /^[[:space:]]+[^ \t]/ { print }
+  ' "$1"
+}
+
+# Scalar under runtime_overrides.<runtime> (4-space keys).
+override_scalar() { # <file> <runtime> <key>
+  awk -v rt="$2" -v key="$3" '
+    /^---$/ { fm++; if (fm == 2) exit; next }
+    fm == 1 && $0 == "  " rt ":" { r = 1; next }
+    r && /^  [a-z_-]+:/ { r = 0 }
+    r && index($0, "    " key ":") == 1 {
+      sub("^    " key ":[[:space:]]*", ""); print; exit
+    }
+  ' "$1"
+}
+
+# Sub-block under runtime_overrides.<runtime>.<subkey>: emits the 6-space
+# child lines re-indented to 2 spaces (same as the ps1 SubBlocks strip).
+override_block() { # <file> <runtime> <subkey>
+  awk -v rt="$2" -v sub_key="$3" '
+    /^---$/ { fm++; if (fm == 2) exit; next }
+    fm == 1 && $0 == "  " rt ":" { r = 1; next }
+    r && /^  [a-z_-]+:/ { r = 0 }
+    r && $0 == "    " sub_key ":" { b = 1; next }
+    b && /^    [a-z_]+:/ { b = 0 }
+    b && /^[[:space:]]*-[[:space:]]+/ { sub(/^[[:space:]]*/, "  "); print; next }
+    b && /^      / { sub(/^[[:space:]]{6}/, "  "); print }
+  ' "$1"
+}
+
 build_claude_agent() {
   local src="$1"
   local name; name=$(basename "$src" .md)
   local dst="${OUT}/claude/agents/${name}.md"
 
-  awk -v name="$name" '
-    BEGIN { in_fm=0; print_after_fm=1 }
-    /^---$/ {
-      if (in_fm == 0) { in_fm=1; print "---"; print "name: " name; next }
-      else { in_fm=0; print "---"; next }
-    }
-    in_fm == 1 {
-      if ($0 ~ /^description:/) print
-      else if ($0 ~ /^[[:space:]]*tools:[[:space:]]*\[/) {
-        # captura tools claude do override
-        next
-      }
-      next
-    }
-    { print }
-  ' "$src" > "$dst"
+  local desc model tools
+  desc=$(base_fm_value "$src" "description")
+  model=$(override_scalar "$src" "claude" "model")
+  tools=$(override_scalar "$src" "claude" "tools")
 
-  # extrai claude tools/model do override
-  # range explicito por indent: ativa em "  claude:" (2 spaces), desativa em proxima chave de 2 spaces
-  local claude_tools claude_model
-  claude_tools=$(awk '/^  claude:/{f=1;next} f && /^  [a-z]+:/{f=0} f' "$src" | grep -E "^[[:space:]]+tools:" | head -1 | sed 's/^[[:space:]]*tools:[[:space:]]*//' || true)
-  claude_model=$(awk '/^  claude:/{f=1;next} f && /^  [a-z]+:/{f=0} f' "$src" | grep -E "^[[:space:]]+model:" | head -1 | sed 's/^[[:space:]]*model:[[:space:]]*//' || true)
-
-  # injeta tools e model no frontmatter alvo (apos description)
-  if [[ -n "$claude_tools" ]]; then
-    sed -i "/^description:/a tools: ${claude_tools}" "$dst"
-  fi
-  if [[ -n "$claude_model" ]]; then
-    sed -i "/^description:/a model: ${claude_model}" "$dst"
-  fi
+  {
+    echo "---"
+    echo "name: ${name}"
+    [[ -n "$desc" ]] && echo "description: ${desc}"
+    [[ -n "$model" ]] && echo "model: ${model}"
+    [[ -n "$tools" ]] && echo "tools: ${tools}"
+    echo "---"
+    extract_body "$src"
+  } > "$dst"
 
   echo "  claude/agents/${name}.md"
 }
@@ -67,23 +113,20 @@ build_copilot_agent() {
   local name; name=$(basename "$src" .md)
   local dst="${OUT}/copilot/agents/${name}.agent.md"
 
-  # mesmo principio, mas usa runtime_overrides.copilot
-  awk '
-    BEGIN { in_fm=0 }
-    /^---$/ {
-      if (in_fm==0) { in_fm=1; print; next } else { in_fm=0; print; next }
-    }
-    in_fm==1 && ($0 ~ /^name:|^description:/) { print; next }
-    in_fm==1 { next }
-    { print }
-  ' "$src" > "$dst"
+  local desc model tools
+  desc=$(base_fm_value "$src" "description")
+  model=$(override_scalar "$src" "copilot" "model")
+  tools=$(override_scalar "$src" "copilot" "tools")
 
-  local copilot_tools copilot_model
-  copilot_tools=$(awk '/^  copilot:/{f=1;next} f && /^  [a-z]+:/{f=0} f' "$src" | grep -E "^[[:space:]]+tools:" | head -1 | sed 's/^[[:space:]]*tools:[[:space:]]*//' || true)
-  copilot_model=$(awk '/^  copilot:/{f=1;next} f && /^  [a-z]+:/{f=0} f' "$src" | grep -E "^[[:space:]]+model:" | head -1 | sed 's/^[[:space:]]*model:[[:space:]]*//' || true)
-
-  [[ -n "$copilot_tools" ]] && sed -i "/^description:/a tools: ${copilot_tools}" "$dst"
-  [[ -n "$copilot_model" ]] && sed -i "/^description:/a model: ${copilot_model}" "$dst"
+  {
+    echo "---"
+    echo "name: ${name}"
+    [[ -n "$desc" ]] && echo "description: ${desc}"
+    [[ -n "$model" ]] && echo "model: ${model}"
+    [[ -n "$tools" ]] && echo "tools: ${tools}"
+    echo "---"
+    extract_body "$src"
+  } > "$dst"
 
   echo "  copilot/agents/${name}.agent.md"
 }
@@ -96,35 +139,22 @@ build_antigravity_skill() {
 
   mkdir -p "$skill_dir/references" "$skill_dir/scripts"
 
-  # mantem frontmatter + corpo. agrega triggers do runtime_overrides.antigravity.triggers_extra
-  awk '
-    BEGIN { in_fm=0; in_overrides=0 }
-    /^---$/ {
-      if (in_fm==0) { in_fm=1; print; next } else { in_fm=0; print; next }
-    }
-    in_fm==1 && ($0 ~ /^name:|^description:|^triggers:/) { print; next }
-    in_fm==1 && ($0 ~ /^[[:space:]]*-/) {
-      # eh continuacao de triggers. mantem
-      print; next
-    }
-    in_fm==1 { next }
-    { print }
-  ' "$src" > "$dst"
+  local desc triggers_block extras
+  desc=$(base_fm_value "$src" "description")
+  triggers_block=$(base_fm_block "$src" "triggers")
+  extras=$(override_block "$src" "antigravity" "triggers_extra")
 
-  # append triggers_extra do antigravity override em "triggers:" se existir
-  local extras
-  extras=$(awk '/^[[:space:]]*antigravity:/,/^[[:space:]]*[a-z]+:/' "$src" \
-    | awk '/triggers_extra:/,/^[[:space:]]*[a-z_]+:/' \
-    | grep -E '^[[:space:]]*-[[:space:]]+"' \
-    | sed 's/^[[:space:]]*/  /' || true)
-
-  if [[ -n "$extras" ]]; then
-    # injeta sob "triggers:"
-    awk -v extras="$extras" '
-      /^triggers:/ { print; print extras; next }
-      { print }
-    ' "$dst" > "${dst}.tmp" && mv "${dst}.tmp" "$dst"
-  fi
+  {
+    echo "---"
+    echo "name: ${name}"
+    [[ -n "$desc" ]] && echo "description: ${desc}"
+    if [[ -n "$triggers_block" ]]; then
+      echo "$triggers_block"
+      [[ -n "$extras" ]] && echo "$extras"
+    fi
+    echo "---"
+    extract_body "$src"
+  } > "$dst"
 
   echo "  antigravity/skills/${name}/SKILL.md"
 }
@@ -134,36 +164,26 @@ build_opencode_agent() {
   local name; name=$(basename "$src" .md)
   local dst="${OUT}/opencode/agents/${name}.md"
 
-  # OpenCode usa frontmatter proprio (description, mode, model, temperature, permission)
-  awk '
-    BEGIN { in_fm=0 }
-    /^---$/ {
-      if (in_fm==0) { in_fm=1; print; next } else { in_fm=0; print; next }
-    }
-    in_fm==1 && ($0 ~ /^description:/) { print; next }
-    in_fm==1 { next }
-    { print }
-  ' "$src" > "$dst"
+  local desc mode model temperature perm
+  desc=$(base_fm_value "$src" "description")
+  mode=$(override_scalar "$src" "opencode" "mode")
+  model=$(override_scalar "$src" "opencode" "model")
+  temperature=$(override_scalar "$src" "opencode" "temperature")
+  perm=$(override_block "$src" "opencode" "permission")
 
-  # Extrai bloco opencode do override
-  local oc_block
-  oc_block=$(awk '/^[[:space:]]*opencode:/,/^[[:space:]]{2}[a-z]+:|^---/' "$src" \
-    | grep -E '^[[:space:]]+(mode|model|temperature|permission):' \
-    | sed 's/^[[:space:]]\{4\}//' || true)
-
-  # permission tem sub-keys, precisa preservar indentacao maior
-  local perm_block
-  perm_block=$(awk '/^[[:space:]]*opencode:/,/^[[:space:]]{2}[a-z]+:|^---/' "$src" \
-    | awk '/permission:/,/^[[:space:]]{4}[a-z]+:|^[[:space:]]{2}[a-z]+:|^---/' \
-    | sed 's/^[[:space:]]\{4\}//' || true)
-
-  # injeta tudo apos description:
-  if [[ -n "$oc_block" ]]; then
-    awk -v block="$oc_block" '
-      /^description:/ { print; print block; next }
-      { print }
-    ' "$dst" > "${dst}.tmp" && mv "${dst}.tmp" "$dst"
-  fi
+  {
+    echo "---"
+    [[ -n "$desc" ]] && echo "description: ${desc}"
+    [[ -n "$mode" ]] && echo "mode: ${mode}"
+    [[ -n "$model" ]] && echo "model: ${model}"
+    [[ -n "$temperature" ]] && echo "temperature: ${temperature}"
+    if [[ -n "$perm" ]]; then
+      echo "permission:"
+      echo "$perm"
+    fi
+    echo "---"
+    extract_body "$src"
+  } > "$dst"
 
   echo "  opencode/agents/${name}.md"
 }
@@ -224,13 +244,7 @@ build_standalone_skill() {
     if [[ "$runtime" == "$ANTIGRAVITY" ]]; then
       # Antigravity descobre skills por triggers - extrai runtime_overrides.antigravity.triggers
       local triggers
-      triggers=$(awk '
-        /^[[:space:]]*antigravity:/ { in_ag=1; next }
-        in_ag && /^[[:space:]]{2}[a-z_]+:/ { exit }
-        in_ag && /^[[:space:]]+triggers:/ { in_tr=1; next }
-        in_ag && in_tr && /^[[:space:]]+-[[:space:]]+/ { print "  " $0; next }
-        in_ag && in_tr && /^[[:space:]]+[a-z_]+:/ { exit }
-      ' "$src_skill" | sed 's/^[[:space:]]*-[[:space:]]\+/  - /')
+      triggers=$(override_block "$src_skill" "antigravity" "triggers")
 
       if [[ -n "$triggers" ]]; then
         echo "triggers:"

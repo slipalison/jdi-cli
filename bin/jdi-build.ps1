@@ -57,6 +57,10 @@ function Read-MdSource {
 # churn cross-shell gigante em runtimes/ (skills com BOM, commands sem).
 function Write-Utf8NoBom {
   param([string]$Path, [string]$Content)
+  # Normalize to LF: StringBuilder.AppendLine emits CRLF on Windows, while
+  # jdi-build.sh emits LF. Committed blobs are LF (.gitattributes) — writing
+  # LF here keeps both builders byte-identical in the worktree too.
+  $Content = $Content.Replace("`r`n", "`n")
   [System.IO.File]::WriteAllText($Path, $Content, [System.Text.UTF8Encoding]::new($false))
 }
 
