@@ -5,6 +5,16 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed — Update notifier (opt-in feature removed entirely)
+- `enable-update-check` / `disable-update-check` subcommands and their `bin/lib/jdi-check-update.js`, `jdi-check-update-worker.js`, `jdi-update-banner.js`, `jdi-toggle-update-check.js` implementation.
+- `jdi install claude` no longer copies these 3 hook scripts to `<claude-dir>/hooks/`. Reason: this JS code was landing inside the consumer's own repository (`.claude/hooks/` under project scope), where it could be picked up by the consumer's own coverage/SonarQube/lint scans as if it were their code. JDI installs should only ship prompts/agents/docs into a project, never executable code that skews the consumer's own quality metrics.
+- `JDI_NO_UPDATE_CHECK` env var (no longer applicable — nothing left to disable).
+- README `enable-update-check` / `disable-update-check` section.
+
+Existing installs that already have `.claude/hooks/jdi-*.js` on disk are unaffected by this change (install/update never delete files); re-running `jdi install` simply stops re-copying them. `npx jdi-cli@latest --version` / `npx jdi-cli doctor` remain the way to check your installed version manually.
+
 ## [0.1.13] - 2026-05-30
 
 ### Added — Enhanced orchestration (opt-in, host-neutral)

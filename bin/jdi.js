@@ -310,63 +310,6 @@ async function cmdInstallCaveman({ flags }) {
   }
 }
 
-async function cmdEnableUpdateCheck({ flags }) {
-  await ui.bannerAnimated();
-  ui.header('JDI: Enable update notifier');
-
-  const scope = flags.scope === 'user' ? 'user' : 'project';
-  ui.info(`Scope: ${c.dim}${scope}${c.reset}`);
-
-  const toggle = require('./lib/jdi-toggle-update-check');
-  try {
-    const result = toggle.enable({ scope });
-    if (result.changed) {
-      ui.successSummary('Update notifier enabled', [
-        `${sym.success} settings.json: ${c.dim}${result.settingsFile}${c.reset}`,
-        `${sym.success} backup: ${c.dim}${result.backup}${c.reset}`,
-        `${sym.info} Banner fires on next SessionStart of Claude Code.`,
-      ]);
-      ui.nextSteps([
-        `Reabra o Claude Code pra disparar SessionStart`,
-        `Disable: ${c.cyan}npx jdi-cli disable-update-check --scope ${scope}${c.reset}`,
-        `Disable global (1 shot): ${c.cyan}JDI_NO_UPDATE_CHECK=1${c.reset}`,
-      ]);
-    } else {
-      ui.info(result.message);
-      ui.info(`settings.json: ${c.dim}${result.settingsFile}${c.reset}`);
-    }
-  } catch (err) {
-    ui.errorSummary('Enable failed', [`${sym.error} ${err.message}`]);
-    process.exit(1);
-  }
-}
-
-async function cmdDisableUpdateCheck({ flags }) {
-  await ui.bannerAnimated();
-  ui.header('JDI: Disable update notifier');
-
-  const scope = flags.scope === 'user' ? 'user' : 'project';
-  ui.info(`Scope: ${c.dim}${scope}${c.reset}`);
-
-  const toggle = require('./lib/jdi-toggle-update-check');
-  try {
-    const result = toggle.disable({ scope });
-    if (result.changed) {
-      ui.successSummary('Update notifier disabled', [
-        `${sym.success} settings.json: ${c.dim}${result.settingsFile}${c.reset}`,
-        `${sym.success} backup: ${c.dim}${result.backup}${c.reset}`,
-        `${sym.info} Hooks remain on disk for future re-enable.`,
-      ]);
-    } else {
-      ui.info(result.message);
-      ui.info(`settings.json: ${c.dim}${result.settingsFile}${c.reset}`);
-    }
-  } catch (err) {
-    ui.errorSummary('Disable failed', [`${sym.error} ${err.message}`]);
-    process.exit(1);
-  }
-}
-
 async function cmdDoctor({ flags }) {
   await ui.bannerAnimated();
 
@@ -400,8 +343,6 @@ async function cmdHelp() {
   console.log(`  ${c.cyan}doctor${c.reset}                 Diagnostico do projeto + JDI`);
   console.log(`  ${c.cyan}install-playwright${c.reset}     Instala @playwright/test + chromium + MCP config`);
   console.log(`  ${c.cyan}install-caveman${c.reset}        Instala plugin caveman (modo ultra-compresso)`);
-  console.log(`  ${c.cyan}enable-update-check${c.reset}    Liga banner de update no SessionStart do Claude Code (opt-in)`);
-  console.log(`  ${c.cyan}disable-update-check${c.reset}   Desliga banner. Hooks ficam no disco pra re-ligar rapido`);
   console.log(`  ${c.cyan}help${c.reset}                   Mostra esta ajuda`);
   console.log(`  ${c.cyan}--version${c.reset}              Mostra versao`);
   console.log('');
@@ -495,12 +436,6 @@ async function main() {
       break;
     case 'doctor':
       await cmdDoctor(parsed);
-      break;
-    case 'enable-update-check':
-      await cmdEnableUpdateCheck(parsed);
-      break;
-    case 'disable-update-check':
-      await cmdDisableUpdateCheck(parsed);
       break;
     case 'help':
     case '--help':
