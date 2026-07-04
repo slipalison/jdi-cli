@@ -41,14 +41,33 @@ PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
 PHASE_POSITION="$JDI_PHASE_POSITION"
 
+# Idempotency: refuse double-ship (SHIPPED.md is the per-phase marker)
+if [ -f "$PHASE_DIR/SHIPPED.md" ]; then
+  echo "Phase $PHASE_SLUG already shipped ($(head -1 "$PHASE_DIR/SHIPPED.md" 2>/dev/null))."
+  exit 0
+fi
+
 # Verify REVIEW.md exists
 test -f "$PHASE_DIR/REVIEW.md" || {
   echo "REVIEW.md missing. /jdi-verify $PHASE_SLUG."
   exit 1
 }
 
-# Read verdict
-VERDICT=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|APPROVED_PENDING_MANUAL|BLOCKED)' "$PHASE_DIR/REVIEW.md" | awk '{print $2}')
+# Read verdict — worst-case across ALL verdict lines (multi-stack REVIEW.md
+# has one per reviewer segment). Accepts legacy pt-BR "Veredicto:" files.
+VERDICTS=$(grep -oE '(Verdict|Veredicto):\*\* (APPROVED|APPROVED_WITH_WARNINGS|APPROVED_PENDING_MANUAL|BLOCKED)' "$PHASE_DIR/REVIEW.md" | awk '{print $2}')
+
+if [ -z "$VERDICTS" ]; then
+  echo "No verdict found in $PHASE_DIR/REVIEW.md (corrupt or unrecognized format)."
+  echo "Ship refused. Re-run /jdi-verify $PHASE_SLUG."
+  exit 1
+fi
+
+if echo "$VERDICTS" | grep -qx 'BLOCKED'; then VERDICT=BLOCKED
+elif echo "$VERDICTS" | grep -qx 'APPROVED_PENDING_MANUAL'; then VERDICT=APPROVED_PENDING_MANUAL
+elif echo "$VERDICTS" | grep -qx 'APPROVED_WITH_WARNINGS'; then VERDICT=APPROVED_WITH_WARNINGS
+else VERDICT=APPROVED
+fi
 
 if [ "$VERDICT" = "BLOCKED" ]; then
   echo "Phase $PHASE_SLUG BLOCKED. Fix before ship."
@@ -56,9 +75,9 @@ if [ "$VERDICT" = "BLOCKED" ]; then
 fi
 
 if [ "$VERDICT" = "APPROVED_PENDING_MANUAL" ]; then
-  PENDING=$(grep -cE 'MANUAL_REQUIRED' "$PHASE_DIR/REVIEW.md")
+  PENDING=$(awk '/^## DoD Checklist/,/^## [^D]/' "$PHASE_DIR/REVIEW.md" | grep -cE 'MANUAL_REQUIRED' || true)
   cat <<MSG
-Phase $PHASE_SLUG: APPROVED_PENDING_MANUAL ($PENDING DoD manual items pending).
+Phase $PHASE_SLUG: APPROVED_PENDING_MANUAL (${PENDING:-?} DoD manual items pending).
 Ship refused — manual DoD items must be confirmed first.
 
 Next: /jdi-confirm-dod $PHASE_SLUG
@@ -69,18 +88,24 @@ fi
 
 ### Step 2.5: Re-verify DoD confirmation freshness
 
-If the phase already passed through `/jdi-confirm-dod`, the REVIEW.md contains a `## DoD Manual Confirmations` section appended to it. Confirm that ALL items previously marked MANUAL_REQUIRED have a matching confirmation entry. If any drifted (e.g., reviewer re-ran after a code change and reclassified items), abort:
+The DoD Checklist table in REVIEW.md is the single source of truth:
+`/jdi-confirm-dod` flips each Manual row's Status from `MANUAL_REQUIRED` to
+`CONFIRMED` (satisfied, with evidence) or `REJECTED` (waived — criterion no
+longer applicable, with justification). Ship only requires that no row is
+still `MANUAL_REQUIRED`:
 
 ```bash
-MANUAL_COUNT=$(grep -cE 'MANUAL_REQUIRED' "$PHASE_DIR/REVIEW.md" || echo 0)
-CONFIRMED_COUNT=$(awk '/^## DoD Manual Confirmations/,/^## /' "$PHASE_DIR/REVIEW.md" | grep -cE '^- \[x\]' || echo 0)
+STILL_PENDING=$(awk '/^## DoD Checklist/,/^## [^D]/' "$PHASE_DIR/REVIEW.md" | grep -cE 'MANUAL_REQUIRED' || true)
 
-if [ "$MANUAL_COUNT" -gt 0 ] && [ "$CONFIRMED_COUNT" -lt "$MANUAL_COUNT" ]; then
-  echo "Phase $PHASE_SLUG: $MANUAL_COUNT manual DoD items but only $CONFIRMED_COUNT confirmed."
+if [ "${STILL_PENDING:-0}" -gt 0 ]; then
+  echo "Phase $PHASE_SLUG: $STILL_PENDING manual DoD item(s) still unconfirmed."
   echo "Next: /jdi-confirm-dod $PHASE_SLUG"
   exit 1
 fi
 ```
+
+(`REJECTED` rows do not block the ship — they are audited waivers, visible in
+the table and in the `## DoD Rejected (post-hoc)` section.)
 
 ### Step 3: Confirm with user (only if WITH_WARNINGS)
 

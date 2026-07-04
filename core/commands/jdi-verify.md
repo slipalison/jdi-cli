@@ -71,6 +71,14 @@ echo "Reviewers registered: $REVIEWER_COUNT"
 
 ### Step 4: Spawn reviewer(s)
 
+REVIEW.md is a per-run artifact — regenerate it from scratch so stale
+verdicts from a previous run can never poison the worst-case aggregation
+(git history keeps every prior run; each verify commits its REVIEW.md):
+
+```bash
+rm -f "$PHASE_DIR/REVIEW.md"
+```
+
 **Single-stack:**
 ```
 Agent(
@@ -131,7 +139,7 @@ Agent(
 
 3. Fall through to Step 5 unchanged — its worst-case grep already aggregates this new `**Verdict:**` line (objective disproof → BLOCKED; suspicion → APPROVED_WITH_WARNINGS; clean → no change).
 
-Invariants: critic is read-only and writes nothing itself; orchestrator owns the single `REVIEW.md` write; the segment can only tighten the aggregate; one sequential agent. Fail-open: if the critic errors or returns nothing, treat as APPROVED and proceed — the deterministic gates already ran in Step 4. (Natural next step: teach `reviewer-specialist` a `mode=dod-critic` branch; until then the explicit prompt above guides the read-only pass.)
+Invariants: critic is read-only and writes nothing itself; orchestrator owns the single `REVIEW.md` write; the segment can only tighten the aggregate; one sequential agent. Fail-open: if the critic errors or returns nothing, treat as APPROVED and proceed — the deterministic gates already ran in Step 4. (The reviewer-specialist template ships a `mode=dod-critic` branch; the prompt above matches its contract.)
 
 ### Step 5: Read aggregate verdict
 
@@ -139,6 +147,7 @@ Invariants: critic is read-only and writes nothing itself; orchestrator owns the
 test -f "$PHASE_DIR/REVIEW.md" || { echo "REVIEW.md not created"; exit 1; }
 
 VERDICTS=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|APPROVED_PENDING_MANUAL|BLOCKED)' "$PHASE_DIR/REVIEW.md" | awk '{print $2}')
+[ -n "$VERDICTS" ] || { echo "Reviewer wrote no verdict line — REVIEW.md malformed. Aborting."; exit 1; }
 
 # Worst-case wins: BLOCK > PENDING_MANUAL > WARNINGS > APPROVED
 if echo "$VERDICTS" | grep -q BLOCKED; then
