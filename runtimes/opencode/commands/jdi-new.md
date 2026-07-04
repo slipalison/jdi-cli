@@ -1,7 +1,7 @@
 ---
 name: jdi-new
 description: Entry point for new project. Runs research + asker, generates PROJECT.md + ROADMAP.md.
-argument_hint: "<short project description>"
+argument_hint: "<short project description> [--reset]"
 runtime_intent:
   invokes_agent: jdi-researcher
 runtime_overrides:
@@ -81,6 +81,8 @@ Invoke `jdi-researcher` passing description. Wait.
 test -f .jdi/PROJECT.md || { echo "PROJECT.md not created"; exit 1; }
 test -f .jdi/ROADMAP.md || { echo "ROADMAP.md not created"; exit 1; }
 test -f .jdi/STATE.md || { echo "STATE.md not created"; exit 1; }
+test -f .jdi/DECISIONS.md || { echo "DECISIONS.md not created"; exit 1; }
+grep -q '## Definition of Done' .jdi/PROJECT.md || { echo "PROJECT.md missing § Definition of Done"; exit 1; }
 ```
 
 ### Step 4: Create config.json (token/context budget)
@@ -101,7 +103,6 @@ If `.jdi/config.json` does not yet exist, write the default below. Defaults (200
     "max_summary_chars": 8192
   },
   "compaction": {
-    "keep_phases": 2,
     "archive_after": 5
   },
   "orchestration": {

@@ -38,7 +38,7 @@ function Test-Cmd {
 # ---------------------------------------------------------------------------
 Write-Section '1. Dependencias'
 
-# PowerShell nao precisa de awk/sed/find — scripts .ps1 substituem
+# PowerShell nao precisa de awk/sed/find - scripts .ps1 substituem
 foreach ($cmd in @('git')) {
   if (Test-Cmd $cmd) {
     $path = (Get-Command $cmd).Source
@@ -347,7 +347,7 @@ if ((Test-Path $agUser) -and ((Get-Content $agUser -Raw) -match '"playwright"\s*
 }
 
 # ---------------------------------------------------------------------------
-Write-Section '12. Specialists (single vs multi-stack)'
+Write-Section '11. Specialists (single vs multi-stack)'
 
 $specPath = Join-Path $ProjectDir '.jdi\specialists.md'
 $revPath  = Join-Path $ProjectDir '.jdi\reviewers.md'
@@ -376,7 +376,7 @@ if (Test-Path $revPath) {
 }
 
 # ---------------------------------------------------------------------------
-Write-Section '11. Caveman plugin (optional)'
+Write-Section '12. Caveman plugin (optional)'
 
 $cavemanUser    = Join-Path $UserHome '.claude\plugins\caveman'
 $cavemanProject = Join-Path $ProjectDir '.claude\plugins\caveman'

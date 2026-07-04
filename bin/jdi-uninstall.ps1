@@ -164,6 +164,11 @@ function Uninstall-Claude {
     Remove-PrefixedFiles -BaseDir $t.Dir -SubDir 'agents' -Filter 'jdi-*.md'
     Remove-PrefixedFiles -BaseDir $t.Dir -SubDir 'commands' -Filter 'jdi-*.md'
     Remove-UniversalSkills -BaseDir $t.Dir
+    # Orphaned update-notifier hooks from installs <= 0.1.15 (feature removed
+    # in 0.1.16; only these exact JDI-owned filenames are touched)
+    foreach ($h in @('jdi-check-update.js','jdi-check-update-worker.js','jdi-update-banner.js','JDI_VERSION')) {
+      Remove-Item-Safe (Join-Path $t.Dir "hooks\$h") "hooks/$h"
+    }
     if ($t.Scope -eq 'project') {
       Remove-FileWithConfirm -Path (Join-Path $ProjectDir 'CLAUDE.md') `
         -Label "CLAUDE.md" `

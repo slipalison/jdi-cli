@@ -355,7 +355,6 @@ Existing tests: {framework}, ~{N} files, current coverage {pct or unknown}
 
 ## Status
 adopted: true
-current_phase: 1
 total_phases: {N from Q4}
 
 ## Context
@@ -365,18 +364,20 @@ Project adopted on {date}. Pre-existing code is not in this roadmap — only NEW
 
 ### Phase 1: {feature 1 from Q4}
 - **Slug:** {slug1}
-- **Status:** pending
 - **Goal:** {1-line description}
 
 ### Phase 2: {feature 2 from Q4}
 - **Slug:** {slug2}
-- **Status:** pending
 - **Goal:** {description}
 
 (... up to N)
 ```
 
 Slug values are canonical (no `NN-` prefix). Numeric position is display-only.
+ROADMAP.md carries no per-phase status and no current-phase pointer — phase
+status is derived from each phase folder's artifacts (SHIPPED.md → done,
+REVIEW → verified, SUMMARY → executed, PLAN → planned, CONTEXT → discussed),
+keeping the file conflict-free across parallel team branches.
 
 ### Step 7: Generate state files
 

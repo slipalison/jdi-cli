@@ -1,6 +1,6 @@
 ---
 name: jdi-ship
-description: Finalizes phase after verify. Updates ROADMAP.md, marks phase as done, advances pointer to next. Accepts slug or position.
+description: Finalizes phase after verify. Writes the SHIPPED.md marker in the phase folder, advances STATE hint to next phase. ROADMAP.md untouched (conflict-free for teams). Accepts slug or position.
 argument_hint: "<slug|position>"
 runtime_intent:
   invokes_agent: none
@@ -18,7 +18,7 @@ runtime_overrides:
 ---
 
 <objective>
-Finalizes phase after /jdi-verify approves. Updates ROADMAP.md (phase: done), advances STATE to next phase, final commit.
+Finalizes phase after /jdi-verify approves. Writes phases/<slug>/SHIPPED.md (the derived-status "done" marker), advances the STATE hint to the next phase, final commit. ROADMAP.md is not edited — parallel developers shipping different phases never conflict.
 </objective>
 
 <arguments>
@@ -30,16 +30,22 @@ Finalizes phase after /jdi-verify approves. Updates ROADMAP.md (phase: done), ad
 ### Step 1: Validation
 ```bash
 test -d .jdi/ || { echo "Not a JDI project."; exit 1; }
-JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
 ```
 
 ### Step 2: Resolve phase
 
 ```bash
-eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$1") || { echo "Phase '$1' not found."; exit 1; }
+RESOLVED="$(npx -y jdi-cli resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+eval "$RESOLVED"
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
 PHASE_POSITION="$JDI_PHASE_POSITION"
+
+# Idempotency: refuse double-ship (SHIPPED.md is the per-phase marker)
+if [ -f "$PHASE_DIR/SHIPPED.md" ]; then
+  echo "Phase $PHASE_SLUG already shipped ($(head -1 "$PHASE_DIR/SHIPPED.md" 2>/dev/null))."
+  exit 0
+fi
 
 # Verify REVIEW.md exists
 test -f "$PHASE_DIR/REVIEW.md" || {
@@ -47,8 +53,21 @@ test -f "$PHASE_DIR/REVIEW.md" || {
   exit 1
 }
 
-# Read verdict
-VERDICT=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|APPROVED_PENDING_MANUAL|BLOCKED)' "$PHASE_DIR/REVIEW.md" | awk '{print $2}')
+# Read verdict — worst-case across ALL verdict lines (multi-stack REVIEW.md
+# has one per reviewer segment). Accepts legacy pt-BR "Veredicto:" files.
+VERDICTS=$(grep -oE '(Verdict|Veredicto):\*\* (APPROVED|APPROVED_WITH_WARNINGS|APPROVED_PENDING_MANUAL|BLOCKED)' "$PHASE_DIR/REVIEW.md" | awk '{print $2}')
+
+if [ -z "$VERDICTS" ]; then
+  echo "No verdict found in $PHASE_DIR/REVIEW.md (corrupt or unrecognized format)."
+  echo "Ship refused. Re-run /jdi-verify $PHASE_SLUG."
+  exit 1
+fi
+
+if echo "$VERDICTS" | grep -qx 'BLOCKED'; then VERDICT=BLOCKED
+elif echo "$VERDICTS" | grep -qx 'APPROVED_PENDING_MANUAL'; then VERDICT=APPROVED_PENDING_MANUAL
+elif echo "$VERDICTS" | grep -qx 'APPROVED_WITH_WARNINGS'; then VERDICT=APPROVED_WITH_WARNINGS
+else VERDICT=APPROVED
+fi
 
 if [ "$VERDICT" = "BLOCKED" ]; then
   echo "Phase $PHASE_SLUG BLOCKED. Fix before ship."
@@ -56,9 +75,9 @@ if [ "$VERDICT" = "BLOCKED" ]; then
 fi
 
 if [ "$VERDICT" = "APPROVED_PENDING_MANUAL" ]; then
-  PENDING=$(grep -cE 'MANUAL_REQUIRED' "$PHASE_DIR/REVIEW.md")
+  PENDING=$(awk '/^## DoD Checklist/,/^## [^D]/' "$PHASE_DIR/REVIEW.md" | grep -cE 'MANUAL_REQUIRED' || true)
   cat <<MSG
-Phase $PHASE_SLUG: APPROVED_PENDING_MANUAL ($PENDING DoD manual items pending).
+Phase $PHASE_SLUG: APPROVED_PENDING_MANUAL (${PENDING:-?} DoD manual items pending).
 Ship refused — manual DoD items must be confirmed first.
 
 Next: /jdi-confirm-dod $PHASE_SLUG
@@ -69,18 +88,24 @@ fi
 
 ### Step 2.5: Re-verify DoD confirmation freshness
 
-If the phase already passed through `/jdi-confirm-dod`, the REVIEW.md contains a `## DoD Manual Confirmations` section appended to it. Confirm that ALL items previously marked MANUAL_REQUIRED have a matching confirmation entry. If any drifted (e.g., reviewer re-ran after a code change and reclassified items), abort:
+The DoD Checklist table in REVIEW.md is the single source of truth:
+`/jdi-confirm-dod` flips each Manual row's Status from `MANUAL_REQUIRED` to
+`CONFIRMED` (satisfied, with evidence) or `REJECTED` (waived — criterion no
+longer applicable, with justification). Ship only requires that no row is
+still `MANUAL_REQUIRED`:
 
 ```bash
-MANUAL_COUNT=$(grep -cE 'MANUAL_REQUIRED' "$PHASE_DIR/REVIEW.md" || echo 0)
-CONFIRMED_COUNT=$(awk '/^## DoD Manual Confirmations/,/^## /' "$PHASE_DIR/REVIEW.md" | grep -cE '^- \[x\]' || echo 0)
+STILL_PENDING=$(awk '/^## DoD Checklist/,/^## [^D]/' "$PHASE_DIR/REVIEW.md" | grep -cE 'MANUAL_REQUIRED' || true)
 
-if [ "$MANUAL_COUNT" -gt 0 ] && [ "$CONFIRMED_COUNT" -lt "$MANUAL_COUNT" ]; then
-  echo "Phase $PHASE_SLUG: $MANUAL_COUNT manual DoD items but only $CONFIRMED_COUNT confirmed."
+if [ "${STILL_PENDING:-0}" -gt 0 ]; then
+  echo "Phase $PHASE_SLUG: $STILL_PENDING manual DoD item(s) still unconfirmed."
   echo "Next: /jdi-confirm-dod $PHASE_SLUG"
   exit 1
 fi
 ```
+
+(`REJECTED` rows do not block the ship — they are audited waivers, visible in
+the table and in the `## DoD Rejected (post-hoc)` section.)
 
 ### Step 3: Confirm with user (only if WITH_WARNINGS)
 
@@ -93,16 +118,28 @@ Phase $PHASE_SLUG has uncorrected warnings. Ship anyway?
 
 If "No" → exit clean.
 
-### Step 4: Update ROADMAP.md
+### Step 4: Write the SHIPPED marker (team-safe)
 
-Find the phase by `Slug:` value (canonical or legacy form). Edit:
-- This phase: `status: done`
-- Next phase (if any): `status: ready`
+Phase completion is recorded IN THE PHASE FOLDER, not in ROADMAP.md — two
+developers shipping different phases on different branches produce zero
+merge conflicts. Phase status is DERIVED from artifacts everywhere
+(SHIPPED.md → done; REVIEW verdict → verified; SUMMARY → executed;
+PLAN → planned; CONTEXT → discussed; nothing → pending).
 
 ```bash
-# Use awk to update only the phase block matching $PHASE_SLUG
+cat > "$PHASE_DIR/SHIPPED.md" <<EOF
+shipped_at: $(date -u +%FT%TZ)
+verdict: $VERDICT
+by: $(git config user.name 2>/dev/null || echo unknown)
+EOF
+
 NEXT_POSITION=$((PHASE_POSITION + 1))
 ```
+
+**Legacy compatibility:** if this project's ROADMAP.md still carries
+`- **Status:**` lines (pre-0.2.0 layout), update THIS phase's line to `done`
+best-effort — never add such a line where none exists. New ROADMAPs have no
+per-phase status lines, so ship never touches ROADMAP.md on them.
 
 If no phase at NEXT_POSITION:
 ```
@@ -114,18 +151,31 @@ Project delivered.
 
 ```bash
 NEXT_PHASE_SLUG=""
-if eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$NEXT_POSITION" 2>/dev/null); then
+if RESOLVED="$(npx -y jdi-cli resolve-phase "$NEXT_POSITION" 2>/dev/null)"; then
+  eval "$RESOLVED"
   NEXT_PHASE_SLUG="$JDI_PHASE_SLUG"
 fi
 ```
 
-### Step 6: Update STATE.md
+### Step 6: Update STATE.md (advisory)
+
+STATE.md is an ADVISORY next-step hint for this clone — gates never depend
+on it (they check phase artifacts). Keep `current_phase` a plain integer;
+completion is flagged separately so numeric parsers never see `done`:
 
 ```markdown
-current_phase: {NEXT_POSITION or done}
-current_phase_slug: {NEXT_PHASE_SLUG or done}
-phase_status: ready (if next exists) or complete
-next_step: /jdi-discuss {NEXT_PHASE_SLUG} or done
+# next phase exists:
+current_phase: {NEXT_POSITION}
+current_phase_slug: {NEXT_PHASE_SLUG}
+phase_status: ready
+next_step: /jdi-discuss {NEXT_PHASE_SLUG}
+
+# last phase shipped:
+current_phase: {PHASE_POSITION}
+current_phase_slug: {PHASE_SLUG}
+phase_status: complete
+all_phases_complete: true
+next_step: project delivered
 ```
 
 ### Step 7: Archive old phases (compaction)
@@ -159,7 +209,8 @@ if [ "$THRESHOLD" -ge 1 ]; then
     }
   ' .jdi/ROADMAP.md | while IFS='|' read -r pos raw_slug; do
     [ "$pos" -le "$THRESHOLD" ] || continue
-    eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$pos" 2>/dev/null) || continue
+    RESOLVED="$(npx -y jdi-cli resolve-phase "$pos" 2>/dev/null)" || continue
+    eval "$RESOLVED"
     [ "$JDI_PHASE_FOLDER_EXISTS" = "true" ] || continue
 
     VERDICT_OLD=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|BLOCKED)' "$JDI_PHASE_DIR/REVIEW.md" 2>/dev/null | awk '{print $2}' || echo "UNKNOWN")
@@ -173,14 +224,13 @@ PowerShell equivalent uses `Move-Item` + `Add-Content` + the resolver `.ps1`. Se
 
 Archived phases remain accessible via `.jdi/archive/` but exit the default read-path.
 
-### Step 8: Refresh manifest (v2 only)
-
-If `.jdi/phases.json` exists, regenerate from updated ROADMAP.
-
-### Step 9: Final commit
+### Step 8: Final commit
 
 ```bash
-git add .jdi/ROADMAP.md .jdi/STATE.md .jdi/archive/ .jdi/phases.json 2>/dev/null
+git add "$PHASE_DIR/SHIPPED.md" .jdi/STATE.md
+git add .jdi/archive/ 2>/dev/null || true
+# Legacy layout only (ROADMAP with per-phase Status lines):
+git add .jdi/ROADMAP.md 2>/dev/null || true
 git commit -m "feat($PHASE_SLUG): ship phase ($VERDICT)"
 ```
 
@@ -189,7 +239,7 @@ Optional tag (if PROJECT.md has `tag_phases: true`):
 git tag "phase-$PHASE_SLUG"
 ```
 
-### Step 10: Confirm
+### Step 9: Confirm
 
 ```
 Phase $PHASE_SLUG shipped.
@@ -200,8 +250,8 @@ Phase $PHASE_SLUG shipped.
 </process>
 
 <gates>
-- pre: REVIEW.md exists + verdict ∉ {BLOCKED, APPROVED_PENDING_MANUAL} + all DoD manual items confirmed
-- post: ROADMAP.md + STATE.md updated + old phases archived (if applicable) + commit (+ optional tag)
+- pre: REVIEW.md exists + verdict ∉ {BLOCKED, APPROVED_PENDING_MANUAL} + no DoD row still MANUAL_REQUIRED + SHIPPED.md absent
+- post: SHIPPED.md written + STATE.md updated + old phases archived (if applicable) + commit (+ optional tag). ROADMAP.md untouched except legacy Status-line projects.
 </gates>
 
 <errors>

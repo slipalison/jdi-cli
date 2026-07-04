@@ -64,7 +64,7 @@ Loop until user says "enough" / "go" / "ship it" OR 5 questions reached.
 Per question:
 1. ASK_USER with 3-4 specific options + "Other (I'll type)" option
 2. Wait for response
-3. Append D-XX to `.jdi/DECISIONS.md`
+3. Append the decision to `.jdi/DECISIONS.md` — schema v2 uses collision-free IDs `D-{YYYY-MM-DD}-{phase_slug}-{seq}` (two devs discussing different phases on parallel branches never collide); v1 keeps `D-N` increment
 4. If user cited doc/spec/path -> add to `canonical_refs`
 5. If user mentions feature out of scope -> add to `todos.md`, redirect
 
@@ -82,7 +82,7 @@ Read `core/templates/dod-schema.md` rules before starting. Follow the loop proto
 
 1. **Priority 2 — Derived from D-XX (this session):** for each decision captured in Stage 1, propose 0-2 DoD items per the mapping in the schema (stack → test command; endpoint → integration test; external service → mock or contract; schema/migration → reverse-test). Cap subtotal at 4.
 2. **Priority 3 — Phase-type templates:** infer phase-type from the ROADMAP goal verb (feature / refactor / infra / docs / bugfix / unknown) and fill remaining slots until reaching 5 candidates.
-3. **Priority 1 — Baseline inheritance** is NOT proposed as candidate. Items in `PROJECT.md § Definition of Done` are inherited automatically by the reviewer in Gate 7; do not re-ask.
+3. **Priority 1 — Baseline inheritance** is NOT proposed as candidate. Items in `PROJECT.md § Definition of Done` are inherited automatically by the reviewer in Gate 8; do not re-ask.
 
 If fewer than 5 candidates can be derived, propose what you have. Do not pad with vague placeholders.
 

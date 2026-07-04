@@ -11,10 +11,14 @@
 .PARAMETER Scope
   user | project (default: project)
 
+.PARAMETER Githooks
+  Opt-in: copia hooks no-op pra .githooks/ (shell no repo do consumidor;
+  desligado por padrao pela invariante no-code-in-consumer-repo).
+
 .EXAMPLE
   .\bin\jdi-install.ps1 -Runtime claude -Scope project
   .\bin\jdi-install.ps1 -Runtime opencode -Scope user
-  .\bin\jdi-install.ps1 -Runtime all
+  .\bin\jdi-install.ps1 -Runtime all -Githooks
 #>
 [CmdletBinding()]
 param(
@@ -23,7 +27,9 @@ param(
   [string]$Runtime,
 
   [ValidateSet('user','project')]
-  [string]$Scope = 'project'
+  [string]$Scope = 'project',
+
+  [switch]$Githooks
 )
 
 $ErrorActionPreference = 'Stop'
@@ -145,7 +151,12 @@ switch ($Runtime) {
   }
 }
 
-Install-GitHooks
+# Opt-in: shell scripts no repo do consumidor so com pedido explicito.
+if ($Githooks) {
+  Install-GitHooks
+} else {
+  Write-Output "  (git hooks nao instalados - opcional via -Githooks)"
+}
 
 # Escreve .jdi/VERSION pra rastreio em updates futuros
 if ($Scope -eq 'project' -or $Scope -eq 'user') {

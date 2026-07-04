@@ -1,4 +1,4 @@
-# jdi-truncate.ps1 — markdown-aware truncation pra context budget
+# jdi-truncate.ps1 - markdown-aware truncation pra context budget
 #
 # Uso:
 #   pwsh -File jdi-truncate.ps1 -Path <path> [-Budget 8192]
@@ -57,7 +57,7 @@ for ($i = 0; $i -lt $lines.Length; $i++) {
     continue
   }
 
-  # Heading — sempre preserva
+  # Heading - sempre preserva
   if ($line -match '^#{1,6}\s') {
     if ($omitted -gt 0) {
       $out.Add("[... $omitted lines omitted]")

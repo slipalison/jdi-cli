@@ -1,61 +1,61 @@
 # JDI — `/jdi-create` Walkthrough
 
-Exemplos concretos do fluxo `/jdi-create` (modo create do architect — agents/skills genericos no core).
+Concrete examples of the `/jdi-create` flow (architect create mode — generic agents/skills in core).
 
-Pra fluxo per-project (`/jdi-bootstrap` modo specialist), veja [EXTENSION.md](EXTENSION.md).
+For the per-project flow (`/jdi-bootstrap`, specialist mode), see [EXTENSION.md](EXTENSION.md).
 
-## Caso 1 — Agent puro: specialist Rust
+## Case 1 — Pure agent: Rust specialist
 
-Voce contribui pro JDI fonte e quer adicionar suporte pra projetos Rust (existe demanda real entre users).
+You contribute to the JDI source and want to add support for Rust projects (real demand among users).
 
-### Invocacao
+### Invocation
 
 ```
 $ cd /path/to/jdi-source
-$ /jdi-create "specialist pra Rust com cargo + clippy + rustfmt"
+$ /jdi-create "specialist for Rust with cargo + clippy + rustfmt"
 ```
 
 ### Q&A
 
-**Architect:** Q1 — Em 1 frase, que problema esse novo agent resolve?
+**Architect:** Q1 — In 1 sentence, what problem does this new agent solve?
 
-**User:** Executor Rust que sabe cargo build/test/clippy/fmt sem precisar redescobrir a cada projeto.
+**User:** Rust executor that knows cargo build/test/clippy/fmt without rediscovering it per project.
 
-**Q2 — Quando rodar?**
-- [x] Outro agent o invoca (jdi-do via routing)
+**Q2 — When does it run?**
+- [x] Another agent invokes it (jdi-do via routing)
 
-**Q3 — O que precisa pra rodar?**
-- [x] Files do projeto (`src/**/*.rs`, `Cargo.toml`)
-- [x] Output de outro agent (PLAN.md)
+**Q3 — What does it need to run?**
+- [x] Project files (`src/**/*.rs`, `Cargo.toml`)
+- [x] Output of another agent (PLAN.md)
 
-**Q4 — O que produz?**
-- [x] Codigo modificado
-- [x] SUMMARY.md em `.jdi/phases/{NN}/`
+**Q4 — What does it produce?**
+- [x] Modified code
+- [x] SUMMARY.md in `.jdi/phases/<slug>/`
 
-**Q5 — Quantos callers?**
-- [x] 1 caller principal (jdi-do via routing por linguagem Rust)
+**Q5 — How many callers?**
+- [x] 1 main caller (jdi-do via Rust language routing)
 
-**Q6 — Tem decision loop?**
-- [x] Sim — task -> implement -> test -> retry on failure -> commit -> next task
+**Q6 — Decision loop?**
+- [x] Yes — task -> implement -> test -> retry on failure -> commit -> next task
 
-**Q7 — Custo?**
-- [x] Medium (Sonnet, 30-90s por task)
+**Q7 — Cost?**
+- [x] Medium (Sonnet, 30-90s per task)
 
 **Q8 — Tools?**
 - [x] Read, Write, Edit, Bash
 
-### Classificacao automatica
+### Automatic classification
 
 ```
-Q5 = 1 caller + Q6 = com loop + Q4 contem "arquivo" -> AGENT puro
+Q5 = 1 caller + Q6 = loop + Q4 contains "file" -> pure AGENT
 ```
 
 ### Anti-pattern check
 
-- Nome `jdi-rust-specialist` — OK (especifico)
-- Nao eh feature-based — OK
-- Tamanho estimado: 200-300 linhas (template doer-specialist + Rust convencoes) — OK pra agent
-- Total agents core apos criacao: 6 — abaixo do soft cap 15 — OK
+- Name `jdi-rust-specialist` — OK (specific)
+- Not feature-based — OK
+- Estimated size: 200-300 lines (doer-specialist template + Rust conventions) — OK for an agent
+- Total core agents after creation: 7 (6 shipped today + this one) — below the soft cap of 15 — OK
 
 ### Draft plan
 
@@ -63,24 +63,24 @@ Q5 = 1 caller + Q6 = com loop + Q4 contem "arquivo" -> AGENT puro
 proposed:
   type: agent
   name: jdi-rust-specialist
-  description: Specialist Rust com cargo + clippy + rustfmt + Testcontainers se DB
+  description: Rust specialist with cargo + clippy + rustfmt + Testcontainers if DB
   triggers:
-    - "executar phase rust"
+    - "execute rust phase"
     - "/jdi-do rust"
     - "rust files in plan"
   tools: [Read, Write, Edit, Bash]
   model_intent: medium
 
 inputs:
-  - phase_number
+  - phase_id
   - .jdi/PROJECT.md
-  - .jdi/phases/{NN}/PLAN.md
+  - .jdi/phases/<slug>/PLAN.md
   - src/**/*.rs, Cargo.toml
 
 outputs:
-  - codigo Rust modificado
-  - .jdi/phases/{NN}/SUMMARY.md
-  - .jdi/phases/{NN}/PLAN.md (status atualizado)
+  - modified Rust code
+  - .jdi/phases/<slug>/SUMMARY.md
+  - .jdi/phases/<slug>/PLAN.md (status updated)
 
 files_to_create:
   - core/agents/jdi-rust-specialist.md
@@ -89,35 +89,35 @@ integration_points:
   - .jdi/specialists.md: "Rust | jdi-rust-specialist | files *.rs"
 
 validation_checks:
-  - nome unico (jdi-rust-specialist nao existe)
-  - frontmatter conforme template/agent.md
-  - triggers nao colidem com agents existentes
+  - unique name (jdi-rust-specialist does not exist)
+  - frontmatter matches template/agent.md
+  - triggers do not collide with existing agents
 ```
 
 ### Approve / Edit / Cancel?
 
 **User:** Approve
 
-### Geracao
+### Generation
 
-Architect le `core/templates/agent.md`. Substitui placeholders. Write em:
+Architect reads `core/templates/agent.md`. Substitutes placeholders. Writes to:
 
 ```
 core/agents/jdi-rust-specialist.md
 ```
 
-Append em `.jdi/specialists.md`:
+Appends to `.jdi/specialists.md`:
 ```markdown
-| Rust | jdi-rust-specialist | files com extensao .rs |
+| Rust | jdi-rust-specialist | files with .rs extension |
 ```
 
-Append em `.jdi/registry.md`:
+Appends to `.jdi/registry.md`:
 ```markdown
 ## R-2 (2026-05-09)
-**Tipo:** agent
-**Nome:** jdi-rust-specialist
-**Criado por:** /jdi-create
-**Por que:** Demanda real de users com projetos Rust. Generic doer nao sabe cargo workflow.
+**Type:** agent
+**Name:** jdi-rust-specialist
+**Created by:** /jdi-create
+**Why:** Real demand from users with Rust projects. Generic doer does not know the cargo workflow.
 **Files:** core/agents/jdi-rust-specialist.md
 **Integration:** .jdi/specialists.md
 ```
@@ -126,31 +126,32 @@ Append em `.jdi/registry.md`:
 
 ```bash
 $ ./bin/jdi-build.sh
-JDI build - gerando runtimes a partir de core/
+JDI build - generating runtimes from core/
 
 claude:
+  claude/agents/jdi-adopter.md
   claude/agents/jdi-architect.md
   claude/agents/jdi-asker.md
   claude/agents/jdi-bootstrap.md
   claude/agents/jdi-planner.md
   claude/agents/jdi-researcher.md
   claude/agents/jdi-rust-specialist.md   <- NEW
-... (idem pra copilot, antigravity, opencode)
+... (same for copilot, antigravity, opencode)
 
 $ ./bin/jdi-install.sh claude --scope user
-Claude Code instalado em: ~/.claude (scope=user)
+Claude Code installed in: ~/.claude (scope=user)
 ```
 
 ### Smoke test
 
 ```
-Criado: jdi-rust-specialist (agent)
+Created: jdi-rust-specialist (agent)
 
-Como invocar:
-- Claude Code: Spawn via Agent tool com subagent_type=jdi-rust-specialist
-- Copilot:     @jdi-rust-specialist no chat
-- Antigravity: descobre por trigger "executar phase rust"
-- OpenCode:    @jdi-rust-specialist no TUI
+How to invoke:
+- Claude Code: spawn via Agent tool with subagent_type=jdi-rust-specialist
+- Copilot:     @jdi-rust-specialist in chat
+- Antigravity: discovered by trigger "execute rust phase"
+- OpenCode:    @jdi-rust-specialist in the TUI
 
 Audit: .jdi/registry.md (R-2)
 ```
@@ -164,38 +165,38 @@ $ git commit -m "feat(jdi-create): add agent jdi-rust-specialist"
 
 ---
 
-## Caso 2 — Skill: convencoes EF Core 9
+## Case 2 — Skill: EF Core 9 conventions
 
-Voce nota que multiplos doers (.NET specialist, generic, etc) repetem regras de EF Core 9. Vira skill compartilhada.
+You notice multiple doers (.NET specialist, generic, etc) repeat EF Core 9 rules. It becomes a shared skill.
 
-### Invocacao
+### Invocation
 
 ```
-$ /jdi-create "skill com convencoes EF Core 9 pra reuso entre doers .NET"
+$ /jdi-create "skill with EF Core 9 conventions for reuse across .NET doers"
 ```
 
 ### Q&A
 
-**Q1 — Problema?** Multiplos doers .NET repetem regras EF Core 9 (Include with Split, AsNoTracking, scaffolding). DRY.
+**Q1 — Problem?** Multiple .NET doers repeat EF Core 9 rules (Include with Split, AsNoTracking, scaffolding). DRY.
 
-**Q2 — Quando rodar?** Carregada inline pelo agent pai quando phase toca EF Core.
+**Q2 — When does it run?** Loaded inline by the parent agent when the phase touches EF Core.
 
-**Q3 — Input?** Output do agent pai (codigo .NET sendo escrito).
+**Q3 — Input?** Output of the parent agent (the .NET code being written).
 
-**Q4 — Output?** Modifica codigo do agent pai (sem file proprio).
+**Q4 — Output?** Modifies the parent agent's code (no file of its own).
 
-**Q5 — Quantos callers?** Varios — qualquer doer .NET (csharp, csharp-react, etc).
+**Q5 — How many callers?** Several — any .NET doer (csharp, csharp-react, etc).
 
-**Q6 — Decision loop?** Nao — procedimento fixo.
+**Q6 — Decision loop?** No — fixed procedure.
 
-**Q7 — Custo?** N/A (skill puro, herda).
+**Q7 — Cost?** N/A (pure skill, inherits).
 
-**Q8 — Tools?** Nao tem proprios — herda do agent pai.
+**Q8 — Tools?** None of its own — inherits from the parent agent.
 
-### Classificacao
+### Classification
 
 ```
-Q5 = varios + Q6 = sem loop -> SKILL puro
+Q5 = several + Q6 = no loop -> pure SKILL
 ```
 
 ### Draft plan
@@ -204,12 +205,12 @@ Q5 = varios + Q6 = sem loop -> SKILL puro
 proposed:
   type: skill
   name: ef-core-9-conventions
-  description: Convencoes EF Core 9 (Include splits, AsNoTracking, scaffolding seguro)
+  description: EF Core 9 conventions (Include splits, AsNoTracking, safe scaffolding)
   applies_to:
-    - codigo C# usa EF Core 9
-    - phase tocando DbContext / migrations / queries
+    - C# code using EF Core 9
+    - phase touching DbContext / migrations / queries
   loaded_by:
-    - jdi-doer-* (qualquer .NET)
+    - jdi-doer-* (any .NET)
 
 files_to_create:
   - core/skills/ef-core-9-conventions/SKILL.md
@@ -217,53 +218,53 @@ files_to_create:
   - core/skills/ef-core-9-conventions/references/no-tracking.md
 
 integration_points:
-  - .jdi/skills-registry.md: nova entrada
+  - .jdi/skills-registry.md: new entry
 ```
 
-### Geracao
+### Generation
 
-Le `core/templates/skill.md`. Substitui. mkdir + Write:
+Reads `core/templates/skill.md`. Substitutes. mkdir + Write:
 
 ```
 core/skills/ef-core-9-conventions/
   SKILL.md
   references/
-    include-split.md      (placeholder pra preencher)
-    no-tracking.md        (placeholder pra preencher)
+    include-split.md      (placeholder to fill in)
+    no-tracking.md        (placeholder to fill in)
 ```
 
-Append em `.jdi/skills-registry.md`:
+Appends to `.jdi/skills-registry.md`:
 ```markdown
 | ef-core-9-conventions | core/skills/ef-core-9-conventions/ | EF Core 9 + .NET projects | jdi-doer-* (.NET) |
 ```
 
-### Resultado
+### Result
 
-Doers .NET com `<skills_to_load>` listando essa skill carregam automaticamente. Sem duplicacao.
+.NET doers whose `<skills_to_load>` lists this skill load it automatically. No duplication.
 
 ---
 
-## Caso 3 — Composite: reviewer customizado pra payments
+## Case 3 — Composite: custom reviewer for payments
 
-Phase de pagamento precisa de gates extras (PCI, idempotency, retries). Cria composite: reviewer focado + skill de checks.
+A payments phase needs extra gates (PCI, idempotency, retries). Create a composite: focused reviewer + checks skill.
 
-### Invocacao
-
-```
-$ /jdi-create "reviewer focado em payments com PCI checks + idempotency rules"
-```
-
-### Q&A resumido
-
-- Q1: Garantir que phases de payment passem PCI/idempotency antes de ship
-- Q2: Trigger por phase com files em `Features/Payments/**`
-- Q5: 1 caller (jdi-verify) + skill reusavel por outros reviewers
-- Q6: Com loop (multiplos checks)
-
-### Classificacao
+### Invocation
 
 ```
-Q5 = 1 + skill reusavel + Q6 = com loop -> COMPOSITE
+$ /jdi-create "reviewer focused on payments with PCI checks + idempotency rules"
+```
+
+### Summarized Q&A
+
+- Q1: Ensure payment phases pass PCI/idempotency before ship
+- Q2: Trigger on phases with files in `Features/Payments/**`
+- Q5: 1 caller (jdi-verify) + skill reusable by other reviewers
+- Q6: With loop (multiple checks)
+
+### Classification
+
+```
+Q5 = 1 + reusable skill + Q6 = loop -> COMPOSITE
 ```
 
 ### Draft plan
@@ -282,104 +283,104 @@ proposed:
       loaded_by: [jdi-payment-reviewer, jdi-reviewer-* (any with payments)]
 
 integration_points:
-  - .jdi/reviewers.md: "jdi-payment-reviewer | files Features/Payments/** | bloqueia ship"
+  - .jdi/reviewers.md: "jdi-payment-reviewer | files Features/Payments/** | blocks ship"
   - .jdi/skills-registry.md: "payment-checks"
 ```
 
-### Geracao
+### Generation
 
-Cria os 2 files. Agent referencia skill em `<skills_to_load>`. Reviewer-{slug} per-project podem opcionalmente carregar tambem (via append no `<skills_to_load>` do reviewer customizado).
+Creates both files. The agent references the skill in `<skills_to_load>`. Per-project reviewer-{slug} can optionally load it too (via append in the custom reviewer's `<skills_to_load>`).
 
 ---
 
-## Anti-pattern: nome generico
+## Anti-pattern: generic name
 
 ```
 $ /jdi-create "review-code"
 ```
 
-Architect detecta nome generico. Resposta:
+Architect detects a generic name. Response:
 
 ```
-Anti-pattern: nome "review-code" muito generico.
+Anti-pattern: name "review-code" too generic.
 
-Sugestoes:
-- jdi-payment-reviewer (focado em payments)
-- jdi-csharp-reviewer (focado em .NET, mas reviewer per-project ja faz isso)
-- jdi-architecture-reviewer (focado em arch decisions)
+Suggestions:
+- jdi-payment-reviewer (focused on payments)
+- jdi-csharp-reviewer (focused on .NET, but the per-project reviewer already does this)
+- jdi-architecture-reviewer (focused on arch decisions)
 
-Refazer? (sim / cancel)
+Redo? (yes / cancel)
 ```
 
-User refaz com nome especifico, ou cancela.
+The user redoes with a specific name, or cancels.
 
 ---
 
-## Anti-pattern: specialist por feature
+## Anti-pattern: specialist per feature
 
 ```
-$ /jdi-create "specialist pra auth"
+$ /jdi-create "specialist for auth"
 ```
 
 Architect:
 
 ```
-Anti-pattern: specialist por feature ("auth"), nao por linguagem/stack.
+Anti-pattern: specialist per feature ("auth"), not per language/stack.
 
-Auth eh feature -> phase normal cobre.
-Voce quer:
-- (a) Phase de auth via /jdi-discuss + /jdi-plan + /jdi-do (specialist do projeto ja sabe)
-- (b) Skill de auth conventions (httpOnly cookies, PKCE, etc) carregada por reviewers
-- (c) Cancelar
+Auth is a feature -> a normal phase covers it.
+Do you want:
+- (a) An auth phase via /jdi-discuss + /jdi-plan + /jdi-do (the project's specialist already knows)
+- (b) A skill of auth conventions (httpOnly cookies, PKCE, etc) loaded by reviewers
+- (c) Cancel
 
-Escolha?
+Choice?
 ```
 
 ---
 
-## Anti-pattern: skill grande
+## Anti-pattern: large skill
 
-Q estimou skill com 800 linhas. Architect:
-
-```
-Anti-pattern: skill estimado em 800 linhas.
-
-Skills devem ser <500 linhas (procedimento focado, nao manual completo).
-
-Opcoes:
-- (a) Virar agent (com decision loop) — agent pode ser maior
-- (b) Quebrar em 2-3 skills menores (ex: payment-validation, payment-idempotency, payment-retry)
-- (c) Cancelar
-
-Escolha?
-```
-
----
-
-## Anti-pattern: nome colide
+Q&A estimated a 800-line skill. Architect:
 
 ```
-$ /jdi-create "specialist pra TypeScript"
-```
+Anti-pattern: skill estimated at 800 lines.
 
-Architect detecta `core/agents/jdi-typescript-specialist.md` ja existe.
+Skills should be <500 lines (a focused procedure, not a full manual).
 
-```
-Conflito: jdi-typescript-specialist ja existe (R-3 em registry.md).
+Options:
+- (a) Become an agent (with a decision loop) — agents can be larger
+- (b) Split into 2-3 smaller skills (e.g. payment-validation, payment-idempotency, payment-retry)
+- (c) Cancel
 
-Voce quer:
-- (a) Atualizar o existente (edit manual depois)
-- (b) Criar variante (jdi-typescript-strict-specialist, jdi-typescript-react-specialist)
-- (c) Cancelar
-
-Escolha?
+Choice?
 ```
 
 ---
 
-## Veja tambem
+## Anti-pattern: name collides
 
-- [CREATE.md](CREATE.md) — mecanica detalhada do fluxo
+```
+$ /jdi-create "specialist for TypeScript"
+```
+
+Architect detects `core/agents/jdi-typescript-specialist.md` already exists.
+
+```
+Conflict: jdi-typescript-specialist already exists (R-3 in registry.md).
+
+Do you want:
+- (a) Update the existing one (manual edit afterwards)
+- (b) Create a variant (jdi-typescript-strict-specialist, jdi-typescript-react-specialist)
+- (c) Cancel
+
+Choice?
+```
+
+---
+
+## See also
+
+- [CREATE.md](CREATE.md) — detailed flow mechanics
 - [EXTENSION.md](EXTENSION.md) — create vs bootstrap (per-project)
-- [AGENTS.md](AGENTS.md) — agents existentes
-- [ARCHITECTURE.md](ARCHITECTURE.md) — visao geral
+- [AGENTS.md](AGENTS.md) — existing agents
+- [ARCHITECTURE.md](ARCHITECTURE.md) — overview

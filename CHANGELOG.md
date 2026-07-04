@@ -5,6 +5,50 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-07-04
+
+Team-oriented hardening. `.jdi/` (including the generated specialists) is now
+a shared, git-committed source of truth for a whole team — the release removes
+the merge hotspots and fixes the fail-open control paths that made that unsafe.
+
+### Added — Team model
+- **Artifact-derived phase status.** Phase status is no longer stored — it is derived from the phase folder's artifacts: `SHIPPED.md` → done, `REVIEW.md` → verified, `SUMMARY.md` → executed, `PLAN.md` → planned, `CONTEXT.md` → discussed, nothing → pending. `/jdi-status` shows the derived status (plus the STATE hint), shipped-phase progress, active ralph-loop state, and the `todos.md` backlog count.
+- **`phases/<slug>/SHIPPED.md` marker** (`shipped_at` / `verdict` / `by`) written by `/jdi-ship`. It is the canonical "done" flag and the double-ship guard.
+- **Team usage** documentation (README + ARCHITECTURE): shared `.jdi/`, one `/jdi-bootstrap` per team, slugs as stable cross-branch phase identity, one phase per branch/developer.
+- **Plumbing subcommands** on the CLI: `npx -y jdi-cli resolve-phase [--json] | validate-slug | truncate | monitor`. Slash commands call these instead of deriving a `bin/lib` path, so the deterministic backbone works in every install topology while keeping the no-code-in-consumer-repo invariant.
+
+### Changed
+- **`/jdi-ship` no longer edits `ROADMAP.md`** (only writes `SHIPPED.md` + advances the STATE hint), so two developers shipping different phases on different branches never conflict. Legacy ROADMAPs carrying per-phase `Status:` lines still get a best-effort update.
+- **`ROADMAP.md` is append/insert-only.** New projects' ROADMAP has no per-phase `Status:` lines and no `current_phase` pointer; only `/jdi-add-phase` / `/jdi-remove-phase` touch it.
+- **`STATE.md` is advisory** — a per-clone next-step hint. Gates check artifacts, never the pointer. `current_phase` stays a plain integer; completion is flagged via `all_phases_complete: true`.
+- **Verdict aggregation is worst-case everywhere** (`ship`/`verify`/`loop`/`confirm-dod`): `BLOCKED > APPROVED_PENDING_MANUAL > APPROVED_WITH_WARNINGS > APPROVED`, across every verdict line (multi-stack REVIEW.md has one per reviewer). Empty/unrecognized verdict now aborts instead of shipping; legacy pt-BR `Veredicto:` is accepted.
+- **`/jdi-verify` recreates `REVIEW.md` per run** so a stale `BLOCKED` from a previous run can no longer poison the aggregation.
+- **DoD confirmation** uses the DoD Checklist table as the single source of truth: `/jdi-confirm-dod` flips each Manual row's Status to `CONFIRMED` (evidence) or `REJECTED` (audited waiver, does not block ship); ship requires zero `MANUAL_REQUIRED` rows remaining.
+- **Ralph loop**: resuming from `escalated`/`paused` now consumes a reset (the absolute 15-iteration cap can no longer be bypassed by abort+rerun); `--reset-loop` recovers a `killed` loop (archived to `LOOP.md.killed-{ts}`); `APPROVED_PENDING_MANUAL` exits cleanly to `/jdi-confirm-dod`; oscillation compares against the whole round (catches A/B/A/B); `$DOER`/`$REVIEWER` are actually resolved; every terminal transition commits.
+- **Decision IDs** for phase decisions are collision-free `D-{YYYY-MM-DD}-{slug}-{seq}` (genesis `D-1`/`D-2` unchanged).
+- **`jdi install` git hooks are opt-in** via `--githooks` / `-Githooks` (default installs no shell into the consumer repo — same invariant as the 0.1.16 update-notifier removal). `jdi uninstall` sweeps orphaned update-notifier hooks left by installs ≤ 0.1.15.
+- Gates promised by ARCHITECTURE but previously unchecked are now enforced: `bootstrap→discuss` requires the specialists to exist; `/jdi-new` and `/jdi-discuss` verify their `§ Definition of Done` output; `/jdi-create` guards on `package.json name == jdi-cli` (a consumer repo with its own `core/` no longer passes).
+
+### Removed
+- **`phases.json`** — it had four writers and zero readers (the resolver walks `ROADMAP.md` + the filesystem). No longer written by `add`/`remove`/`ship`/`migrate`; existing files are ignored.
+- `compaction.keep_phases` from the config template and generators (unused; `archive_after` is the effective knob).
+
+### Fixed
+- **Both builders are byte-identical and deterministic.** `jdi-build.sh`'s awk parser had range/frontmatter/trigger-extraction defects that silently diverged from the committed (`.ps1`-built) `runtimes/` — rewritten as frontmatter-bounded helpers mirroring the `.ps1` parser 1:1. `Write-Utf8NoBom` normalizes CRLF→LF. Added `.gitattributes` (LF for `.sh`/`.js`/`.md`, CRLF for `.ps1`) to end the autocrlf ghost-churn of ~110 files per cross-shell build.
+- **Non-ASCII in `.ps1` sources.** `bin/jdi.js` spawns Windows PowerShell 5.1, which reads BOM-less files as ANSI; a UTF-8 em dash inside a quoted string in `jdi-monitor.ps1` closed the string early and killed the script at runtime (pwsh 7 AST masked it). Normalized em/en dashes, arrows, curly quotes, and ellipses to ASCII across the 7 affected scripts.
+- `parseArgs` now accepts `--flag value` (space form) for `--runtime`/`--repo`/`--antigravity-scope` — the documented forms were previously silently dropped via `npx`. `--antigravity-scope` is now actually forwarded by `install-playwright`.
+- `jdi-doctor` section order (Specialists is 11, Caveman is 12); residual `Write-Host` in `jdi-update.ps1` / `jdi-install-caveman.ps1` converted to `Write-Output`.
+- `/jdi-add-phase` captures the validator's exit code before the emptiness test (named codes 1–4 now propagate); digit-leading derived slugs are prefixed instead of failing shape validation.
+
+### Docs
+- All shipped docs are English (`COMMANDS.md`, `ARCHITECTURE.md`, `MEMORY.md`, and others translated from pt-BR per the project convention). Counts corrected to 6 core agents (`jdi-adopter` was undocumented) / 15 commands / 13 skills / 5 templates; native multi-stack routing documented (previously described as a future feature); `dod-schema.md` listed as the 5th template.
+
+### Breaking changes
+- Slash commands reference the CLI plumbing subcommands instead of `bin/lib` paths — re-install runtimes (`npx jdi-cli update`) so installed commands pick up the new invocation.
+- New ROADMAPs carry no `Status:` lines and ship no longer edits ROADMAP; anything parsing `- **Status:**` must derive status from phase artifacts (legacy files are still honored on read).
+- `enable-update-check` / `disable-update-check` remain removed (0.1.16).
+- `jdi install` no longer creates `.githooks/` by default — pass `--githooks`.
+
 ## [0.1.16] - 2026-07-04
 
 ### Removed — Update notifier (opt-in feature removed entirely)
@@ -66,7 +110,7 @@ Existing installs that already have `.claude/hooks/jdi-*.js` on disk are unaffec
 - E2E test (`jdi-poc-todo/test-update-notifier.sh`, 32 checks) verifies a pre-existing `settings.json` (with `PreToolUse` hooks, `model` setting) is **byte-identical** before and after `jdi install`.
 
 ### Architecture credit
-- Update-notifier pattern adapted from `gsd-build/get-shit-done`'s hook architecture (`hooks/gsd-check-update*.js` + `hooks/gsd-update-banner.js`). Cache location and JSON envelope shape are JDI-namespaced.
+- Update-notifier pattern adapted from the hook architecture of an external agentic framework studied during development. Cache location and JSON envelope shape are JDI-namespaced.
 
 ## [0.1.9] - 2026-05-21
 

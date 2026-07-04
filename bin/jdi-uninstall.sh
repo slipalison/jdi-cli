@@ -94,6 +94,12 @@ uninstall_claude() {
       done
     fi
 
+    # Orphaned update-notifier hooks from installs <= 0.1.15 (feature removed
+    # in 0.1.16; only these exact JDI-owned filenames are touched)
+    for h in jdi-check-update.js jdi-check-update-worker.js jdi-update-banner.js JDI_VERSION; do
+      remove_safe "$dir/hooks/$h" "hooks/$h"
+    done
+
     if [[ "$sc" == "$SCOPE_PROJECT" ]] && [[ -f "$PROJECT_DIR/CLAUDE.md" ]] && confirm_action "Remover CLAUDE.md? (pode ter sido editado)"; then
       remove_safe "$PROJECT_DIR/CLAUDE.md" "CLAUDE.md"
     fi

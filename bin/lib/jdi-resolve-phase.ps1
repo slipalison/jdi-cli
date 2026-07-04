@@ -1,12 +1,12 @@
-# jdi-resolve-phase.ps1 — phase ID resolver (PowerShell)
+# jdi-resolve-phase.ps1 - phase ID resolver (PowerShell)
 #
-# Usage (from a command MD file) — PREFER -AsObject (avoids Invoke-Expression):
+# Usage (from a command MD file) - PREFER -AsObject (avoids Invoke-Expression):
 #   $p = & "$JDI_LIB\jdi-resolve-phase.ps1" -Id $phaseInput -AsObject
 #   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 #   $p.Slug; $p.Dir; $p.Position; $p.SchemaVersion; $p.FolderExists
 #
 # Without -AsObject it emits Bash-style KEY='value' lines for parity with the
-# .sh version. Do NOT pipe those to Invoke-Expression — parse them or use
+# .sh version. Do NOT pipe those to Invoke-Expression - parse them or use
 # -AsObject. The emitted slug is re-validated below, but Invoke-Expression on
 # untrusted KEY=value text is an unnecessary dynamic-execution sink.
 #

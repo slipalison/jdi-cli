@@ -1,4 +1,4 @@
-# jdi-validate-slug.ps1 — strict phase slug validator (PowerShell)
+# jdi-validate-slug.ps1 - strict phase slug validator (PowerShell)
 #
 # Usage:
 #   & "$JDI_LIB\jdi-validate-slug.ps1" -Slug $slug [-CheckUnique]
@@ -12,7 +12,7 @@
 #   1  invalid shape
 #   2  reserved keyword
 #   3  duplicate (folder or ROADMAP)
-#   4  ambiguous (corrupt state — multiple folder forms)
+#   4  ambiguous (corrupt state - multiple folder forms)
 
 [CmdletBinding()]
 param(

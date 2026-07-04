@@ -1,102 +1,109 @@
 # JDI — Create Mechanism
 
-Como criar **agents** e **skills** novos pro JDI core sem inflar o sistema.
+How to create new **agents** and **skills** for the JDI core without bloating the system.
 
-Comando: `/jdi-create`. Agent: `jdi-architect` modo `create`.
+Command: `/jdi-create`. Agent: `jdi-architect` in `create` mode.
 
-Fluxo paralelo do mesmo architect: `/jdi-bootstrap` invoca `jdi-architect` modo `specialist` pra criar doer/reviewer per-project. Veja [EXTENSION.md](EXTENSION.md).
+Parallel flow of the same architect: `/jdi-bootstrap` invokes `jdi-architect` in `specialist` mode to create per-project doer/reviewer. See [EXTENSION.md](EXTENSION.md).
 
-## Quando usar `/jdi-create`
+## When to use `/jdi-create`
 
-Use quando:
-- Voce eh contributor do JDI fonte (nao usuario consumindo)
-- Quer adicionar agent generico que TODOS projetos JDI vao usar
-- Quer adicionar skill reusavel carregada por multiplos agents
+Use when:
+- You are a contributor to the JDI source (not a consuming user)
+- You want to add a generic agent that ALL JDI projects will use
+- You want to add a reusable skill loaded by multiple agents
 
-NAO use quando:
-- Quer specialist pro SEU projeto especifico — use `/jdi-bootstrap`
-- Quer config local — edite `.jdi/` direto
-- Esta dentro de projeto consumindo JDI (sem `core/` no diretorio)
+Do NOT use when:
+- You want a specialist for YOUR specific project — use `/jdi-bootstrap`
+- You want local config — edit `.jdi/` directly
+- You are inside a project consuming JDI (no `core/` in the directory)
 
-## Pre-requisitos
+## Prerequisites
+
+`/jdi-create` is **guarded**: it refuses to run outside the jdi-cli source repo. A consumer project that happens to have its own `core/` folder does not fool it — the check is on the package name:
 
 ```bash
-test -d core/ && test -d .jdi/      # esta no repo JDI fonte
-git status --porcelain | wc -l      # working tree limpo (recomendado)
+grep -q '"name": "jdi-cli"' package.json 2>/dev/null || {
+  echo "/jdi-create runs only inside the jdi-cli source repo (it writes to core/)."
+  exit 1
+}
+test -f core/agents/jdi-architect.md || { echo "core/ incomplete — run from the jdi-cli repo root."; exit 1; }
+git status --porcelain | wc -l      # clean working tree (recommended)
 ```
 
-## Fluxo passo-a-passo
+## Step-by-step flow
 
-### 1. Invoca
+### 1. Invoke
 
 ```
-/jdi-create "specialist pra Rust com cargo + clippy"
-/jdi-create "skill com convencoes EF Core 9"
+/jdi-create "specialist for Rust with cargo + clippy"
+/jdi-create "skill with EF Core 9 conventions"
 /jdi-create
 ```
 
-Argumento livre (opcional) acelera Q1.
+The free-form argument (optional) speeds up Q1.
 
-### 2. Architect carrega contexto
+### 2. Architect loads context
 
 ```bash
-ls core/agents/         # agents existentes
-ls core/skills/         # skills existentes
-cat .jdi/specialists.md # routing
+ls core/agents/            # existing agents
+ls core/skills/            # existing skills
+cat .jdi/specialists.md    # routing
 cat .jdi/reviewers.md
-cat .jdi/registry.md    # historia de criacoes
+cat .jdi/skills-registry.md
+cat .jdi/registry.md       # creation history
 ```
 
-Acumula em memoria pra evitar duplicacao.
+Accumulates in memory to avoid duplication.
 
-### 3. Loop de 8 perguntas
+### 3. 8-question loop
 
-AskUserQuestion uma por vez:
+AskUserQuestion one at a time:
 
-| # | Pergunta | Tipo |
+| # | Question | Type |
 |---|---|---|
-| Q1 | Que problema resolve? | texto livre |
-| Q2 | Quando deve rodar? | multipla escolha |
-| Q3 | O que precisa pra rodar? (input) | multipla escolha |
-| Q4 | O que produz? (output) | multipla escolha |
-| Q5 | Quantos callers vao usar? | 1 caller / varios / nao sei |
-| Q6 | Tem decision loop com retry/branches? | sim / nao |
-| Q7 | Custo de execucao? | cheap / medium / deep / N/A |
-| Q8 | Tools necessarios? | multipla (Read/Write/Edit/Bash/Web/AskUser/Agent) |
+| Q1 | What problem does it solve? | free text |
+| Q2 | When should it run? | multiple choice |
+| Q3 | What does it need to run? (input) | multiple choice |
+| Q4 | What does it produce? (output) | multiple choice |
+| Q5 | How many callers will use it? | 1 caller / several / don't know |
+| Q6 | Does it have a decision loop with retry/branches? | yes / no |
+| Q7 | Execution cost? | cheap / medium / deep / N/A |
+| Q8 | Required tools? | multiple (Read/Write/Edit/Bash/Web/AskUser/Agent) |
 
-### 4. Classificacao automatica
+### 4. Automatic classification
 
 ```
-Q5 = varios callers + Q6 = sem loop          -> SKILL puro
-Q5 = 1 caller + Q6 = com loop + output file  -> AGENT puro
-Q5 = varios + Q6 = com loop                  -> COMPOSITE (agent + skill)
-Q5 = nao sei + tiebreaker via Q6
+Q5 = several callers + Q6 = no loop         -> pure SKILL
+Q5 = 1 caller + Q6 = loop + file output     -> pure AGENT
+Q5 = several + Q6 = loop                    -> COMPOSITE (agent + skill)
+Q5 = don't know + tiebreaker via Q6
 ```
 
 ### 5. Anti-pattern check
 
-- Nome generico ("review-code") -> pede foco
-- Specialist por feature ("auth") -> redireciona pra phase
-- Skill > 500 linhas estimado -> sugere agent
-- Agent sem decision loop -> sugere skill
-- Soft cap (>15 agents / >25 skills) -> avisa
-- Nome colide -> obriga renomear
+- Generic name ("review-code") -> asks for focus
+- Specialist per feature ("auth") -> redirects to a phase
+- Skill > 500 estimated lines -> suggests an agent
+- Agent without a decision loop -> suggests a skill
+- Soft cap (>15 agents / >25 skills) -> warns
+- Name collides -> forces a rename
 
 ### 6. Draft plan (preview)
 
-Mostra YAML pro user:
+Shows YAML to the user:
 
 ```yaml
 proposed:
   type: agent
   name: jdi-rust-specialist
-  description: Specialist Rust com cargo + clippy + rustfmt
-  triggers: [executar phase rust, rust files]
+  description: Rust specialist with cargo + clippy + rustfmt
+  triggers: [execute rust phase, rust files]
   tools: [Read, Write, Edit, Bash]
   model_intent: medium
 
-inputs: [phase_number, .jdi/phases/{NN}/PLAN.md, src/**/*.rs]
-outputs: [.jdi/phases/{NN}/SUMMARY.md, codigo Rust + tests]
+inputs: [phase_id, .jdi/phases/<slug>/PLAN.md, src/**/*.rs]
+outputs: [.jdi/phases/<slug>/SUMMARY.md, Rust code + tests]
 
 files_to_create:
   - core/agents/jdi-rust-specialist.md
@@ -105,87 +112,87 @@ integration_points:
   - update .jdi/specialists.md (Rust -> jdi-rust-specialist)
 
 validation_checks:
-  - nome unico
-  - frontmatter conforme template
-  - triggers nao colidem
+  - unique name
+  - frontmatter matches template
+  - triggers do not collide
 ```
 
-### 7. Validacao com user
+### 7. Validation with the user
 
 AskUserQuestion:
-- **Approve** — confirma, vai pra geracao
-- **Edit** — qual campo mudar?
-- **Cancel** — sai sem criar nada
+- **Approve** — confirms, proceeds to generation
+- **Edit** — which field to change?
+- **Cancel** — exits without creating anything
 
-### 8. Geracao dos arquivos
+### 8. File generation
 
 #### Agent
 
-Le `core/templates/agent.md`. Substitui placeholders:
-- `{NOME}`, `{DESCRICAO_1_LINHA}`, `{ROLE}`, `{LISTA_TOOLS}`, `{LISTA_TRIGGERS}`
-- `{MODELO_CLAUDE}`, `{TOOLS_CLAUDE}`, `{MODELO_COPILOT}`, etc.
+Reads `core/templates/agent.md`. Substitutes placeholders:
+- `{NAME}`, `{ONE_LINE_DESCRIPTION}`, `{ROLE}`, `{TOOLS_LIST}`, `{TRIGGERS_LIST}`
+- `{CLAUDE_MODEL}`, `{CLAUDE_TOOLS}`, `{COPILOT_MODEL}`, etc.
 
-Write em `core/agents/jdi-{nome}.md`.
+Write to `core/agents/jdi-{name}.md`.
 
 #### Skill
 
-Le `core/templates/skill.md`. Substitui placeholders.
-mkdir + Write em `core/skills/{nome}/SKILL.md`.
+Reads `core/templates/skill.md`. Substitutes placeholders.
+mkdir + Write to `core/skills/{name}/SKILL.md`.
 
-Se tem references, cria placeholders em `core/skills/{nome}/references/`.
+If it has references, creates placeholders in `core/skills/{name}/references/`.
 
 #### Composite
 
-Cria os dois. Agent referencia skill em `<skills_to_load>`.
+Creates both. The agent references the skill in `<skills_to_load>`.
 
-### 9. Atualiza integration points
+### 9. Update integration points
 
-| Tipo | Update |
+| Type | Update |
 |---|---|
-| Specialist (linguagem) | append `.jdi/specialists.md` + edit doer routing |
+| Specialist (language) | append `.jdi/specialists.md` + edit doer routing |
 | Reviewer | append `.jdi/reviewers.md` + edit `/jdi-verify` discovery |
-| Skill | append `.jdi/registry.md` + edit `<skills_to_load>` dos agents que carregam |
+| Skill | append `.jdi/skills-registry.md` + `.jdi/registry.md` + edit `<skills_to_load>` of the loading agents |
 
 ### 10. Audit trail
 
-Append em `.jdi/registry.md`:
+Append to `.jdi/registry.md`:
 
 ```markdown
 ## R-{N} ({date})
-**Tipo:** agent | skill | composite
-**Nome:** jdi-{nome}
-**Criado por:** /jdi-create
-**Por que:** {Q1 resposta}
-**Files:** {lista}
-**Integration:** {lista}
+**Type:** agent | skill | composite
+**Name:** jdi-{name}
+**Created by:** /jdi-create
+**Why:** {Q1 answer}
+**Files:** {list}
+**Integration:** {list}
 ```
 
 ### 11. Build + install
 
 ```bash
-./bin/jdi-build.sh         # ou .ps1 em Windows
+./bin/jdi-build.sh         # or .ps1 on Windows
 ./bin/jdi-install.sh {runtime} --scope {user|project}
 ```
 
-Detecta runtime ativo automaticamente:
-- `~/.claude/` existe? -> claude
-- `.github/agents/` existe? -> copilot
+Detects the active runtime automatically:
+- `~/.claude/` exists? -> claude
+- `.github/agents/` exists? -> copilot
 - `~/.gemini/antigravity/` -> antigravity
 - `~/.config/opencode/` -> opencode
-- nenhum -> pergunta
+- none -> asks
 
 ### 12. Smoke test
 
-Mostra ao user **como invocar** o que foi criado:
+Shows the user **how to invoke** what was created:
 
 ```
-Criado: jdi-rust-specialist (agent)
+Created: jdi-rust-specialist (agent)
 
-Como invocar:
-- Claude Code: Spawn via Agent tool com subagent_type=jdi-rust-specialist
-- Copilot:     @jdi-rust-specialist no chat
-- Antigravity: descobre por trigger ou peca explicitamente
-- OpenCode:    @jdi-rust-specialist no TUI
+How to invoke:
+- Claude Code: spawn via Agent tool with subagent_type=jdi-rust-specialist
+- Copilot:     @jdi-rust-specialist in chat
+- Antigravity: discovered by trigger, or ask explicitly
+- OpenCode:    @jdi-rust-specialist in the TUI
 
 Audit: .jdi/registry.md (R-N)
 Commit: {sha}
@@ -194,7 +201,7 @@ Commit: {sha}
 ### 13. Commit
 
 ```bash
-git add core/ .jdi/specialists.md .jdi/reviewers.md .jdi/registry.md runtimes/
+git add core/ .jdi/specialists.md .jdi/reviewers.md .jdi/skills-registry.md .jdi/registry.md runtimes/
 git commit -m "feat(jdi-create): add agent jdi-rust-specialist"
 ```
 
@@ -202,20 +209,21 @@ git commit -m "feat(jdi-create): add agent jdi-rust-specialist"
 
 ```
 core/templates/
-  agent.md              <- base pra agent generico
-  skill.md              <- base pra skill
-  doer-specialist.md    <- usado por modo specialist (NAO modo create)
+  agent.md               <- base for a generic agent
+  skill.md               <- base for a skill
+  doer-specialist.md     <- used by specialist mode (NOT create mode)
   reviewer-specialist.md <- idem
+  dod-schema.md          <- canonical Definition-of-Done spec (referenced by researcher/asker/reviewer)
 ```
 
-Modo create usa `agent.md` ou `skill.md`. Modo specialist usa `doer-specialist.md` + `reviewer-specialist.md`.
+Create mode uses `agent.md` or `skill.md`. Specialist mode uses `doer-specialist.md` + `reviewer-specialist.md`. `dod-schema.md` is a reference spec, not a generation base.
 
-## Estrutura de agent gerado
+## Generated agent structure
 
 ```yaml
 ---
-name: jdi-{nome}
-description: {1 linha}
+name: jdi-{name}
+description: {1 line}
 runtime_intent:
   role: {role}
   reasoning: {cheap|medium|deep}
@@ -238,7 +246,7 @@ runtime_overrides:
 ---
 
 <role>
-Voce eh `jdi-{nome}`. ...
+You are `jdi-{name}`. ...
 </role>
 
 <inputs>
@@ -246,8 +254,8 @@ Voce eh `jdi-{nome}`. ...
 </inputs>
 
 <process>
-### Passo 1: ...
-### Passo 2: ...
+### Step 1: ...
+### Step 2: ...
 </process>
 
 <rules>
@@ -263,12 +271,12 @@ Voce eh `jdi-{nome}`. ...
 </output>
 ```
 
-## Estrutura de skill gerado
+## Generated skill structure
 
 ```yaml
 ---
-name: {nome}
-description: {1 linha}
+name: {name}
+description: {1 line}
 type: skill
 applies_to: ...
 loaded_by: [...]
@@ -277,15 +285,15 @@ runtime_overrides:
     triggers: [...]
 ---
 
-# Skill: {nome}
+# Skill: {name}
 
-## Quando aplicar
+## When to apply
 ...
 
 ## Procedure
-### Passo 1: ...
+### Step 1: ...
 
-## Inputs esperados
+## Expected inputs
 ...
 
 ## Outputs
@@ -295,21 +303,21 @@ runtime_overrides:
 - references/{X}.md
 ```
 
-## Reverso: deletar
+## Reverse: deleting
 
-JDI nao tem comando `/jdi-delete`. Manualmente:
+JDI has no `/jdi-delete` command. Manually:
 
-1. `git rm core/agents/jdi-{nome}.md` (ou `core/skills/{nome}/`)
-2. Edita `.jdi/specialists.md` ou `.jdi/reviewers.md` (remove linha)
-3. Append em `.jdi/registry.md`: `R-{N}: removed jdi-{nome} ({razao})`
+1. `git rm core/agents/jdi-{name}.md` (or `core/skills/{name}/`)
+2. Edit `.jdi/specialists.md` or `.jdi/reviewers.md` (remove the row)
+3. Append to `.jdi/registry.md`: `R-{N}: removed jdi-{name} ({reason})`
 4. `./bin/jdi-build.sh && ./bin/jdi-install.sh {runtime}`
-5. `git commit -m "chore(jdi): remove agent jdi-{nome}"`
+5. `git commit -m "chore(jdi): remove agent jdi-{name}"`
 
-Soft delete preferido: marca `deprecated: true` no frontmatter, deixa file. Remove fisicamente so quando 100% certo.
+Soft delete preferred: mark `deprecated: true` in the frontmatter, keep the file. Remove physically only when 100% sure.
 
-## Veja tambem
+## See also
 
-- [CREATE-EXAMPLE.md](CREATE-EXAMPLE.md) — walkthrough concreto
-- [EXTENSION.md](EXTENSION.md) — quando usar create vs bootstrap
-- [AGENTS.md](AGENTS.md) — agents existentes
-- [ARCHITECTURE.md](ARCHITECTURE.md) — visao geral
+- [CREATE-EXAMPLE.md](CREATE-EXAMPLE.md) — concrete walkthrough
+- [EXTENSION.md](EXTENSION.md) — when to use create vs bootstrap
+- [AGENTS.md](AGENTS.md) — existing agents
+- [ARCHITECTURE.md](ARCHITECTURE.md) — overview
