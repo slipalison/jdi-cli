@@ -35,6 +35,7 @@ Ralph pattern (Huntley + ASDLC):
 - `phase_id` (required): canonical slug, legacy slug, or integer position
 - `--max-iter=N` (optional, default 5): iter per round before human gate
 - `--max-resets=N` (optional, default 3): reset rounds before kill switch
+- `--reset-loop` (optional): archive a `killed` LOOP.md and start fresh. Requires explicit confirmation — this is a deliberate human decision after revisiting PLAN.md/CONTEXT.md, not a cap bypass.
 </arguments>
 
 <process>
@@ -45,8 +46,6 @@ Ralph pattern (Huntley + ASDLC):
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new."; exit 1; }
 test -f .jdi/STATE.md || { echo "STATE.md missing."; exit 1; }
 
-JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
-
 # Specialists registered
 ls .jdi/agents/jdi-doer-*.md 2>/dev/null | head -1 || { echo "Doer missing. /jdi-bootstrap."; exit 1; }
 ls .jdi/agents/jdi-reviewer-*.md 2>/dev/null | head -1 || { echo "Reviewer missing. /jdi-bootstrap."; exit 1; }
@@ -55,7 +54,8 @@ ls .jdi/agents/jdi-reviewer-*.md 2>/dev/null | head -1 || { echo "Reviewer missi
 ### Step 2: Resolve phase
 
 ```bash
-eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$1") || { echo "Phase '$1' not found."; exit 1; }
+RESOLVED="$(npx -y jdi-cli resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+eval "$RESOLVED"
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
 PHASE_POSITION="$JDI_PHASE_POSITION"
@@ -92,14 +92,36 @@ fi
 
 If already exists:
 - Read `iter`, `total_resets`, `status` from frontmatter
-- Terminal states (abort):
+- Terminal states:
   - `status == converged` → abort: "Phase already converged. /jdi-ship $PHASE_SLUG"
   - `status == killed` → abort: "Hard cap reached. Plan needs human review."
+    Recovery path: after revisiting PLAN.md/CONTEXT.md, re-run with `--reset-loop`.
+    With the flag, confirm via AskUserQuestion, then `mv LOOP.md LOOP.md.killed-{ts}`
+    (audit preserved) and initialize a fresh LOOP.md. Without the flag, killed is final.
 - Resumable states (continue — go back to running):
-  - `status == escalated` → reset `iter: 0`, `status: running`, `total_resets` preserved, append marker `--- RESUMED from escalated at {ts} ---` in history. Continue loop.
-  - `status == paused` → reset `iter: 0`, `status: running`, `total_resets` preserved, append marker `--- RESUMED from paused at {ts} ---` in history. Continue loop.
+  - `status == escalated` or `status == paused` → resuming CONSUMES A RESET:
+    run the same reset accounting as Step 5 (`total_resets++`; if it reaches
+    `max_resets` → status: killed, abort). Otherwise: `iter: 0`,
+    `status: running`, append marker `--- RESUMED from {state} at {ts}
+    (reset {total_resets}/{max_resets}) ---` in history. Continue loop.
+    (Without this, abort→re-run would zero `iter` for free and bypass the
+    absolute hard cap.)
 - Active state:
-  - `status == running` → resume from current iter (session crash mid-loop case)
+  - `status == running` → resume from current iter (session crash mid-loop case; does NOT consume a reset)
+
+### Step 3.5: Resolve specialists
+
+Single-stack shortcut (first registered pair). Multi-stack projects: Step A
+dispatches per-task specialists exactly like `/jdi-do` Step 3, and Step B
+chains reviewers exactly like `/jdi-verify` Step 3 — the variables below are
+the single-stack fast path.
+
+```bash
+DOER=$(grep -oE 'jdi-doer-[a-z0-9-]+' .jdi/specialists.md | head -1)
+REVIEWER=$(grep -oE 'jdi-reviewer-[a-z0-9-]+' .jdi/reviewers.md | head -1)
+[ -n "$DOER" ] || { echo "No doer registered in .jdi/specialists.md. /jdi-bootstrap."; exit 1; }
+[ -n "$REVIEWER" ] || { echo "No reviewer registered in .jdi/reviewers.md. /jdi-bootstrap."; exit 1; }
+```
 
 ### Step 4: Main loop
 
@@ -125,7 +147,14 @@ loop:
   REVIEW_FILE="$PHASE_DIR/REVIEW.md"
   test -f "$REVIEW_FILE" || { echo "REVIEW.md not created at iter {iter}"; exit 1; }
 
-  VERDICT=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|BLOCKED)' "$REVIEW_FILE" | awk '{print $2}')
+  # Worst-case across all verdict lines (multi-stack); legacy "Veredicto:" accepted
+  VERDICTS=$(grep -oE '(Verdict|Veredicto):\*\* (APPROVED|APPROVED_WITH_WARNINGS|APPROVED_PENDING_MANUAL|BLOCKED)' "$REVIEW_FILE" | awk '{print $2}')
+  [ -n "$VERDICTS" ] || { echo "No verdict in REVIEW.md at iter {iter} (corrupt review)."; exit 1; }
+  if echo "$VERDICTS" | grep -qx 'BLOCKED'; then VERDICT=BLOCKED
+  elif echo "$VERDICTS" | grep -qx 'APPROVED_PENDING_MANUAL'; then VERDICT=APPROVED_PENDING_MANUAL
+  elif echo "$VERDICTS" | grep -qx 'APPROVED_WITH_WARNINGS'; then VERDICT=APPROVED_WITH_WARNINGS
+  else VERDICT=APPROVED
+  fi
 
   # --- Step D: hash findings (oscillation detection) ---
   FINDING_BODY=$(awk '
@@ -157,17 +186,32 @@ EOF
     exit 0
   fi
 
-  # --- Step G: oscillation detection (early-escalate) ---
-  ITER_COUNT=$(grep -cE '^- iter [0-9]+:' "$LOOP_FILE")
-  if [ "$ITER_COUNT" -ge 2 ]; then
-    PREV_HASH=$(grep -E '^- iter [0-9]+:' "$LOOP_FILE" | tail -2 | head -1 | grep -oE 'hash=[a-f0-9]+' | cut -d= -f2)
-  else
-    PREV_HASH=""
+  # Auto gates passed but manual DoD items await a human — the loop cannot
+  # confirm them. Exit cleanly routing to /jdi-confirm-dod (NOT convergence
+  # to ship; ship would refuse anyway).
+  if [ "$VERDICT" = "APPROVED_PENDING_MANUAL" ]; then
+    Update LOOP.md frontmatter -> status: converged
+    Update STATE.md -> phase_status: pending_manual_dod, phase_verdict: APPROVED_PENDING_MANUAL, next_step: /jdi-confirm-dod $PHASE_SLUG
+    git add "$PHASE_DIR/LOOP.md" .jdi/STATE.md
+    git commit -m "chore($PHASE_SLUG): loop converged at iter $iter (pending manual DoD)"
+    echo "Phase $PHASE_SLUG: auto gates green at iter $iter; manual DoD items pending."
+    echo "Next: /jdi-confirm-dod $PHASE_SLUG"
+    exit 0
   fi
 
-  if [ -n "$PREV_HASH" ] && [ "$FINDING_HASH" = "$PREV_HASH" ]; then
+  # --- Step G: oscillation detection (early-escalate) ---
+  # Compare against ALL hashes of the current round (since the last RESET/
+  # RESUMED marker), not just the previous iter — catches period-2 cycles
+  # (A/B/A/B) that a single-step compare misses.
+  ROUND_HASHES=$(awk '
+    /^--- (RESET|RESUMED)/ { delete seen; n=0; next }
+    /^- iter [0-9]+:/ { if (match($0, /hash=[a-f0-9]+/)) { n++; seen[n] = substr($0, RSTART+5, RLENGTH-5) } }
+    END { for (i = 1; i < n; i++) print seen[i] }   # exclude the current iter (last line)
+  ' "$LOOP_FILE")
+
+  if [ -n "$ROUND_HASHES" ] && echo "$ROUND_HASHES" | grep -qx "$FINDING_HASH"; then
     AskUserQuestion(
-      question="Oscillation detected on phase $PHASE_SLUG. Iter $iter and $((iter-1)) have SAME finding hash ($FINDING_HASH). Loop not progressing. What now?",
+      question="Oscillation detected on phase $PHASE_SLUG. Iter $iter repeats a finding hash already seen this round ($FINDING_HASH). Loop not progressing. What now?",
       options=[
         "Continue (reset counter, 5 more iter)" => continue_with_reset,
         "Abort loop (status=escalated, stays in REVIEW.md)" => abort,
@@ -239,8 +283,13 @@ abort_logic:
 pause_logic:
   Update LOOP.md -> status: paused
   Update STATE.md -> phase_status: paused, next_step: edit PLAN.md/CONTEXT.md and re-run /jdi-loop $PHASE_SLUG
+  git add "$PHASE_DIR/LOOP.md" .jdi/STATE.md
+  git commit -m "chore($PHASE_SLUG): loop paused at iter $iter (plan adjustment)"
   exit 0
 ```
+
+(All four terminal transitions — converged, killed, escalated, paused — commit
+LOOP.md + STATE.md; the working tree is never left dirty by the loop itself.)
 
 ### Step 8: Final confirmation (convergence)
 
@@ -268,12 +317,29 @@ Next: /jdi-ship $PHASE_SLUG
 
 <rules>
 - NEVER skip human gate when iter >= max_iter or oscillation detected
-- NEVER reset total_resets — only iter
+- NEVER reset total_resets — only iter. Resuming from escalated/paused CONSUMES a reset (crash-resume of status running does not).
 - LOOP.md history is APPEND-ONLY
 - Reviewer remains read-only always — doer is the only writer
-- Each iter produces atomic commits
-- Absolute hard cap = max_iter * max_resets (default 15) — non-negotiable kill switch
+- Each iter produces atomic commits; every terminal transition commits LOOP.md + STATE.md
+- Absolute hard cap = max_iter * max_resets (default 15) — non-negotiable kill switch. The only way past `killed` is the explicit `--reset-loop` flag (confirmed, audited via LOOP.md.killed-{ts}).
 </rules>
+
+<runtime_notes>
+
+**Claude Code:** full loop as specified — sequential Agent() spawns per iter, fresh context each.
+
+**Copilot:** subagent spawning has no reliable completion signal. Run the loop
+body inline instead: execute /jdi-do steps, then /jdi-verify steps, in this
+same session, one iter at a time. Caps/oscillation/human gates unchanged.
+
+**OpenCode/Antigravity:** use the runtime's native Task/spawn if available;
+otherwise inline like Copilot.
+
+**Orchestration mode:** the loop itself IS the standard path — it never adds
+extra fan-out beyond doer/reviewer, so `orchestration.mode` (standard or
+enhanced) requires no branching here. The reviewer's enhanced DoD critic runs
+inside /jdi-verify semantics when configured.
+</runtime_notes>
 
 <references>
 - Ralph Wiggum technique (ghuntley.com/ralph)

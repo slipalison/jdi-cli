@@ -40,8 +40,6 @@ None.
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new first."; exit 1; }
 test -f .jdi/STATE.md || { echo "STATE.md missing — broken project."; exit 1; }
-
-JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
 ```
 
 ### Step 2: Read state
@@ -67,7 +65,8 @@ TOTAL=$(grep -oE 'total_phases:\s*[0-9]+' .jdi/ROADMAP.md | grep -oE '[0-9]+' ||
 # Resolve phase (handles slug OR int)
 PHASE_DIR=""; PHASE_NAME=""; PHASE_POSITION=""
 if [ -n "$CURRENT_ID" ]; then
-  if eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$CURRENT_ID" 2>/dev/null); then
+  if RESOLVED="$(npx -y jdi-cli resolve-phase "$CURRENT_ID" 2>/dev/null)"; then
+    eval "$RESOLVED"
     PHASE_DIR="$JDI_PHASE_DIR"
     PHASE_POSITION="$JDI_PHASE_POSITION"
     CURRENT_SLUG="$JDI_PHASE_SLUG"
@@ -93,15 +92,43 @@ fi
 
 PowerShell mirrors via `Get-Content -Raw` + regex + the resolver `.ps1`.
 
+### Step 2.5: Derive phase status from artifacts (source of truth)
+
+STATE.md's `phase_status` is an advisory hint for this clone; the truth is
+whatever artifacts exist in the phase folder. Derivation (first match wins):
+
+```bash
+DERIVED=pending
+if [ -n "$PHASE_DIR" ] && [ -d "$PHASE_DIR" ]; then
+  if   [ -f "$PHASE_DIR/SHIPPED.md" ]; then DERIVED=done
+  elif [ -f "$PHASE_DIR/REVIEW.md"  ]; then DERIVED=verified
+  elif [ -f "$PHASE_DIR/SUMMARY.md" ]; then DERIVED=executed
+  elif [ -f "$PHASE_DIR/PLAN.md"    ]; then DERIVED=planned
+  elif [ -f "$PHASE_DIR/CONTEXT.md" ]; then DERIVED=discussed
+  fi
+fi
+
+# Project progress: shipped phases (works for every schema; legacy done
+# phases without SHIPPED.md show via their ROADMAP Status line if present)
+SHIPPED_COUNT=$(ls .jdi/phases/*/SHIPPED.md .jdi/archive/*/SHIPPED.md 2>/dev/null | wc -l | tr -d ' ')
+
+# Side signals worth surfacing
+TODO_COUNT=0
+[ -f .jdi/todos.md ] && TODO_COUNT=$(grep -cE '^- ' .jdi/todos.md || true)
+LOOP_STATE=""
+[ -n "$PHASE_DIR" ] && [ -f "$PHASE_DIR/LOOP.md" ] && \
+  LOOP_STATE=$(grep -m1 -oE '^status: [a-z]+' "$PHASE_DIR/LOOP.md" | awk '{print $2}')
+```
+
 ### Step 3: Detect last artifact in current phase
 
-Priority order (most recent stage first): `REVIEW.md` → `SUMMARY.md` → `PLAN.md` → `CONTEXT.md`.
+Priority order (most recent stage first): `SHIPPED.md` → `REVIEW.md` → `SUMMARY.md` → `PLAN.md` → `CONTEXT.md`.
 
 ```bash
 LAST_ARTIFACT=""
 LAST_ARTIFACT_PATH=""
 if [ -n "$PHASE_DIR" ] && [ -d "$PHASE_DIR" ]; then
-  for f in REVIEW.md SUMMARY.md PLAN.md CONTEXT.md; do
+  for f in SHIPPED.md REVIEW.md SUMMARY.md PLAN.md CONTEXT.md; do
     if [ -f "$PHASE_DIR/$f" ]; then
       LAST_ARTIFACT="$f"
       LAST_ARTIFACT_PATH="$PHASE_DIR/$f"
@@ -115,6 +142,7 @@ fi
 
 Extract a 1-line headline so the user sees what was last produced without opening the file.
 
+- `SHIPPED.md`: pull the `shipped_at:` + `verdict:` lines.
 - `REVIEW.md`: pull the `**Verdict:**` line.
 - `SUMMARY.md`: pull `**Status:**` + `**Tasks:**` line.
 - `PLAN.md`: pull `Total tasks:` and `Waves:` from the Execution section.
@@ -124,6 +152,9 @@ Extract a 1-line headline so the user sees what was last produced without openin
 HEADLINE=""
 if [ -n "$LAST_ARTIFACT_PATH" ]; then
   case "$LAST_ARTIFACT" in
+    SHIPPED.md)
+      HEADLINE=$(head -2 "$LAST_ARTIFACT_PATH" | tr '\n' ' ')
+      ;;
     REVIEW.md)
       HEADLINE=$(grep -m1 -E '^\*\*(Veredicto|Verdict):\*\*' "$LAST_ARTIFACT_PATH" | sed -E 's/\*\*//g')
       ;;
@@ -158,12 +189,16 @@ COMMITS_TODAY=$(git log --since=midnight --format='%h' 2>/dev/null | wc -l | tr 
   Project:        {project_slug}
   Schema:         v{SCHEMA}
   Phase:          {position}/{total} — {phase_name} (slug: {slug})
-  Phase status:   {phase_status}
+  Phase status:   {DERIVED}   (STATE hint: {phase_status or "—"})
   Verdict:        {verdict or "—"}
+  Shipped:        {SHIPPED_COUNT}/{total} phases
 
   Last artifact:  {last_artifact}
                   {path}
                   {headline}
+
+  {if LOOP_STATE:}Ralph loop:     {LOOP_STATE}
+  {if TODO_COUNT > 0:}Todos backlog:  {TODO_COUNT} item(s) in .jdi/todos.md (captured creep — review at /jdi-discuss)
 
   Last commit:    {hash}  {subject}
   Commits today:  {commits_today}

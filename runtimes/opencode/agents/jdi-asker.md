@@ -68,7 +68,7 @@ Loop until user says "enough" / "go" / "ship it" OR 5 questions reached.
 Per question:
 1. ASK_USER with 3-4 specific options + "Other (I'll type)" option
 2. Wait for response
-3. Append D-XX to `.jdi/DECISIONS.md`
+3. Append the decision to `.jdi/DECISIONS.md` — schema v2 uses collision-free IDs `D-{YYYY-MM-DD}-{phase_slug}-{seq}` (two devs discussing different phases on parallel branches never collide); v1 keeps `D-N` increment
 4. If user cited doc/spec/path -> add to `canonical_refs`
 5. If user mentions feature out of scope -> add to `todos.md`, redirect
 

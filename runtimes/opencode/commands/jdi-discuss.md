@@ -35,16 +35,19 @@ Capture locked decisions for the given phase. Output: CONTEXT.md consumed by the
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new first."; exit 1; }
 
-JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
+# Gate promised by the loop: specialists exist before phase work starts
+ls .jdi/agents/jdi-doer-*.md >/dev/null 2>&1 || { echo "Doer specialist missing. Run /jdi-bootstrap first."; exit 1; }
+ls .jdi/agents/jdi-reviewer-*.md >/dev/null 2>&1 || { echo "Reviewer specialist missing. Run /jdi-bootstrap first."; exit 1; }
 ```
 
 ### Step 2: Resolve phase
 
 ```bash
-eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$1") || {
+RESOLVED="$(npx -y jdi-cli resolve-phase "$1")" || {
   echo "Phase '$1' not found in ROADMAP."
   exit 1
 }
+eval "$RESOLVED"
 
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
@@ -53,8 +56,9 @@ PHASE_POSITION="$JDI_PHASE_POSITION"
 
 PowerShell:
 ```powershell
-$r = & "$JDI_LIB\jdi-resolve-phase.ps1" -Id $args[0] -AsObject
-$phaseSlug = $r.Slug; $phaseDir = $r.Dir; $phasePosition = $r.Position
+$r = npx -y jdi-cli resolve-phase $args[0] --json | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) { Write-Error "Phase '$($args[0])' not found."; exit $LASTEXITCODE }
+$phaseSlug = $r.slug; $phaseDir = $r.dir; $phasePosition = $r.position
 ```
 
 ### Step 3: Check existing CONTEXT.md
@@ -69,6 +73,13 @@ Invoke `jdi-asker` with:
 - `mode=auto` if `--auto`, otherwise `mode=interactive`
 
 Agent runs its own process. Returns when CONTEXT.md is written to `$PHASE_DIR/CONTEXT.md`.
+
+### Step 4.5: Verify output
+
+```bash
+test -f "$PHASE_DIR/CONTEXT.md" || { echo "CONTEXT.md not created"; exit 1; }
+grep -q '## Definition of Done' "$PHASE_DIR/CONTEXT.md" || { echo "CONTEXT.md missing § Definition of Done (asker Stage 2 incomplete)"; exit 1; }
+```
 
 ### Step 5: Commit
 ```bash
@@ -96,8 +107,8 @@ Next: /jdi-plan $PHASE_SLUG
 </process>
 
 <gates>
-- pre: `.jdi/` exists + phase resolves via `jdi-resolve-phase.sh`
-- post: CONTEXT.md written + commit made + STATE.md updated
+- pre: `.jdi/` exists + doer/reviewer specialists exist + phase resolves via `npx -y jdi-cli resolve-phase`
+- post: CONTEXT.md written (including `## Definition of Done`) + commit made + STATE.md updated
 </gates>
 
 <errors>

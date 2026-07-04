@@ -33,6 +33,11 @@ None. Reads everything from `.jdi/PROJECT.md`.
 ### Step 1: Validation
 ```bash
 test -f .jdi/PROJECT.md || { echo "PROJECT.md missing. Run /jdi-new first."; exit 1; }
+test -f .jdi/ROADMAP.md || { echo "ROADMAP.md missing. Run /jdi-new first."; exit 1; }
+
+# Clean working tree preferred (changes confined to .jdi/ tolerated)
+DIRTY=$(git status --porcelain 2>/dev/null | grep -vE '^.. \.jdi/' || true)
+[ -z "$DIRTY" ] || echo "warn: working tree has changes outside .jdi/ — commit or stash first for clean atomic commits."
 ```
 
 ### Step 2: Spawn jdi-bootstrap
@@ -78,7 +83,7 @@ Does not block. Just reminds. JDI does not manage `.claude/settings.json` or `.o
 </process>
 
 <gates>
-- pre: `.jdi/PROJECT.md` exists + working tree clean (or changes only in `.jdi/`)
+- pre: `.jdi/PROJECT.md` + `.jdi/ROADMAP.md` exist; dirty tree outside `.jdi/` warns (non-blocking)
 - post: `.jdi/agents/jdi-doer-*.md` and `.jdi/agents/jdi-reviewer-*.md` exist + routing updated + commit + MCP audit checklist shown
 </gates>
 

@@ -31,13 +31,13 @@ After `/jdi-verify` produces verdict `APPROVED_PENDING_MANUAL`, this command wal
 ### Step 1: Validation
 ```bash
 test -d .jdi/ || { echo "Not a JDI project."; exit 1; }
-JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
 ```
 
 ### Step 2: Resolve phase
 
 ```bash
-eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$1") || { echo "Phase '$1' not found."; exit 1; }
+RESOLVED="$(npx -y jdi-cli resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+eval "$RESOLVED"
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
 PHASE_POSITION="$JDI_PHASE_POSITION"
@@ -51,7 +51,26 @@ test -f "$PHASE_DIR/REVIEW.md" || {
 ### Step 3: Read current verdict + count manual items
 
 ```bash
-VERDICT=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|APPROVED_PENDING_MANUAL|BLOCKED)' "$PHASE_DIR/REVIEW.md" | awk '{print $2}')
+# Worst-case across ALL verdict lines (multi-stack REVIEW.md has one per
+# reviewer segment). Accepts legacy pt-BR "Veredicto:" files.
+VERDICTS=$(grep -oE '(Verdict|Veredicto):\*\* (APPROVED|APPROVED_WITH_WARNINGS|APPROVED_PENDING_MANUAL|BLOCKED)' "$PHASE_DIR/REVIEW.md" | awk '{print $2}')
+
+if [ -z "$VERDICTS" ]; then
+  echo "No verdict found in $PHASE_DIR/REVIEW.md (corrupt or unrecognized format)."
+  echo "Re-run /jdi-verify $PHASE_SLUG."
+  exit 1
+fi
+
+if echo "$VERDICTS" | grep -qx 'BLOCKED'; then VERDICT=BLOCKED
+elif echo "$VERDICTS" | grep -qx 'APPROVED_PENDING_MANUAL'; then VERDICT=APPROVED_PENDING_MANUAL
+elif echo "$VERDICTS" | grep -qx 'APPROVED_WITH_WARNINGS'; then VERDICT=APPROVED_WITH_WARNINGS
+else VERDICT=APPROVED
+fi
+
+# Pending = Manual rows still MANUAL_REQUIRED in the DoD Checklist table
+# (the table is the single source of truth; this command flips its rows).
+PENDING_COUNT=$(awk '/^## DoD Checklist/,/^## [^D]/' "$PHASE_DIR/REVIEW.md" | grep -cE 'MANUAL_REQUIRED' || true)
+PENDING_COUNT="${PENDING_COUNT:-0}"
 
 case "$VERDICT" in
   BLOCKED)
@@ -59,9 +78,7 @@ case "$VERDICT" in
     exit 1
     ;;
   APPROVED|APPROVED_WITH_WARNINGS)
-    # Check if any manual still requires confirmation (e.g., user re-ran verify with new DoD items)
-    PENDING=$(grep -cE 'MANUAL_REQUIRED' "$PHASE_DIR/REVIEW.md" || echo 0)
-    if [ "$PENDING" -eq 0 ]; then
+    if [ "$PENDING_COUNT" -eq 0 ]; then
       echo "Phase $PHASE_SLUG already has no pending manual DoD items. Verdict: $VERDICT."
       exit 0
     fi
@@ -69,13 +86,8 @@ case "$VERDICT" in
   APPROVED_PENDING_MANUAL)
     : # proceed
     ;;
-  *)
-    echo "Unknown verdict: $VERDICT. Aborting."
-    exit 1
-    ;;
 esac
 
-PENDING_COUNT=$(grep -cE 'MANUAL_REQUIRED' "$PHASE_DIR/REVIEW.md")
 echo "Phase $PHASE_SLUG: $PENDING_COUNT DoD manual items pending."
 ```
 
@@ -86,14 +98,18 @@ Parse the `## DoD Checklist` table in REVIEW.md. Extract each row whose `Status`
 Example bash (table rows look like `| 4 | criterion text | PROJECT | Manual | MANUAL_REQUIRED | — |`):
 
 ```bash
+# Project-local temp file (portable across bash and PowerShell; removed in Step 9)
 awk '
   /^## DoD Checklist/ { flag=1; next }
   /^## / && flag { exit }
   flag && /^\| [0-9]+ .* MANUAL_REQUIRED / {
     print $0
   }
-' "$PHASE_DIR/REVIEW.md" > /tmp/jdi-dod-pending.txt
+' "$PHASE_DIR/REVIEW.md" > "$PHASE_DIR/.dod-pending.txt"
 ```
+
+Rows already flipped to `CONFIRMED` or `REJECTED` by a previous run are not
+extracted — re-runs resume exactly at the still-pending items.
 
 ### Step 5: Per-item confirmation loop
 
@@ -105,14 +121,17 @@ AskUserQuestion(
   options=[
     "Confirm — I verified this and will provide evidence",
     "Skip — leave pending (will not ship)",
-    "Reject DoD item — criterion not applicable anymore (drops the item from DoD)"
+    "Reject DoD item — waive: criterion not applicable anymore (audited, does not block ship)"
   ]
 )
 ```
 
-- **Confirm** → sub-prompt (free text): "Evidence (URL / commit sha / path / short description)?". Persist confirmation.
-- **Skip** → mark as still pending (no change). Continue.
-- **Reject DoD item** → only allowed if user types a justification. Item is moved to `## DoD Rejected (post-hoc)` section with reason + timestamp. Affects audit trail; reviewer should know if re-run.
+- **Confirm** → sub-prompt (free text): "Evidence (URL / commit sha / path / short description)?". Then flip the row's Status cell in the DoD Checklist table: `MANUAL_REQUIRED` → `CONFIRMED`. Evidence recorded in Step 6.
+- **Skip** → row stays `MANUAL_REQUIRED` (no change). Continue.
+- **Reject** → only allowed if user types a justification. Flip the row's Status cell: `MANUAL_REQUIRED` → `REJECTED`. Justification recorded in `## DoD Rejected (post-hoc)` (Step 6). A REJECTED row is an audited waiver — it does not block `/jdi-ship`.
+
+The Status cell flip is what unblocks the ship: `/jdi-ship` counts rows still
+`MANUAL_REQUIRED` in this table and refuses while any remain.
 
 Loop until all manual items processed.
 
@@ -142,15 +161,15 @@ For rejections:
 
 ### Step 7: Recompute verdict
 
-```bash
-PENDING_AFTER=$(grep -cE 'MANUAL_REQUIRED' "$PHASE_DIR/REVIEW.md")
-CONFIRMED=$(awk '/^## DoD Manual Confirmations/,/^## /' "$PHASE_DIR/REVIEW.md" | grep -cE '^- \[x\]')
-REJECTED=$(awk '/^## DoD Rejected/,/^## /' "$PHASE_DIR/REVIEW.md" | grep -cE '^- ' || echo 0)
-SKIPPED=$(awk '/^## DoD Manual Confirmations/,/^## /' "$PHASE_DIR/REVIEW.md" | grep -cE '^- \[ \].*pending')
+All counts come from the DoD Checklist table — the single source of truth
+after the Step 5 flips:
 
-# All originally pending are either confirmed or rejected?
-EXPECTED=$PENDING_AFTER
-RESOLVED=$((CONFIRMED + REJECTED))
+```bash
+CHECKLIST=$(awk '/^## DoD Checklist/,/^## [^D]/' "$PHASE_DIR/REVIEW.md")
+SKIPPED=$(echo "$CHECKLIST" | grep -cE 'MANUAL_REQUIRED' || true)
+CONFIRMED=$(echo "$CHECKLIST" | grep -cE '\| *CONFIRMED *\|' || true)
+REJECTED=$(echo "$CHECKLIST" | grep -cE '\| *REJECTED *\|' || true)
+SKIPPED="${SKIPPED:-0}"; CONFIRMED="${CONFIRMED:-0}"; REJECTED="${REJECTED:-0}"
 
 if [ "$SKIPPED" -gt 0 ]; then
   echo "Phase $PHASE_SLUG: $SKIPPED manual items remain pending. Verdict still APPROVED_PENDING_MANUAL."
@@ -158,17 +177,18 @@ if [ "$SKIPPED" -gt 0 ]; then
 else
   # All resolved (confirmed or rejected). Upgrade verdict.
   # If there were prior warnings, keep WITH_WARNINGS; otherwise full APPROVED.
-  HAS_WARN=$(grep -cE '^## Warnings' "$PHASE_DIR/REVIEW.md")
-  WARN_ENTRIES=$(awk '/^## Warnings/,/^## /' "$PHASE_DIR/REVIEW.md" | grep -cE '^- ')
-  if [ "$HAS_WARN" -gt 0 ] && [ "$WARN_ENTRIES" -gt 0 ]; then
+  WARN_ENTRIES=$(awk '/^## Warnings/,/^## /' "$PHASE_DIR/REVIEW.md" | grep -cE '^- ' || true)
+  if [ "${WARN_ENTRIES:-0}" -gt 0 ]; then
     NEW_VERDICT=APPROVED_WITH_WARNINGS
   else
     NEW_VERDICT=APPROVED
   fi
 fi
 
-# Replace the Verdict line in REVIEW.md
-sed -i.bak -E "s/^\*\*Verdict:\*\* .*/\*\*Verdict:\*\* $NEW_VERDICT/" "$PHASE_DIR/REVIEW.md"
+# Upgrade ONLY the verdict lines still holding PENDING_MANUAL. Other segment
+# verdicts (multi-stack) keep their own values; the aggregate is recomputed
+# worst-case by ship/status from all lines.
+sed -i.bak -E "s/^\*\*(Verdict|Veredicto):\*\* APPROVED_PENDING_MANUAL$/\*\*Verdict:\*\* $NEW_VERDICT/" "$PHASE_DIR/REVIEW.md"
 rm -f "$PHASE_DIR/REVIEW.md.bak"
 ```
 
@@ -187,6 +207,7 @@ next_step: {if APPROVED or WITH_WARNINGS: /jdi-ship $PHASE_SLUG; if PENDING_MANU
 ### Step 9: Commit
 
 ```bash
+rm -f "$PHASE_DIR/.dod-pending.txt"
 git add "$PHASE_DIR/REVIEW.md" .jdi/STATE.md
 git commit -m "docs($PHASE_SLUG): confirm DoD manual items ($CONFIRMED confirmed, $REJECTED rejected, $SKIPPED skipped, verdict $NEW_VERDICT)"
 ```
@@ -224,8 +245,11 @@ Next: /jdi-confirm-dod $PHASE_SLUG (resume skipped items)
 <rules>
 - Confirmation always requires evidence (free text). Empty evidence = invalid, ask again.
 - Rejection always requires justification. Empty reason = invalid, ask again.
-- Skipped items stay MANUAL_REQUIRED — do not modify them in the DoD Checklist table.
-- Confirmations are append-only — never delete from REVIEW.md.
-- Idempotent: re-running picks up where last session stopped (skipped items become pending again).
+- This command owns EXACTLY ONE kind of table edit: flipping a Manual row's
+  Status cell (MANUAL_REQUIRED → CONFIRMED | REJECTED). Rows are never added,
+  removed, or otherwise altered; skipped rows stay MANUAL_REQUIRED untouched.
+- Evidence/justification sections are append-only — never delete from REVIEW.md.
+- Idempotent: re-running extracts only rows still MANUAL_REQUIRED (confirmed
+  and rejected rows are not re-offered).
 - This command writes to REVIEW.md but NEVER edits DoD source blocks (PROJECT.md, CONTEXT.md). Those remain locked.
 </rules>

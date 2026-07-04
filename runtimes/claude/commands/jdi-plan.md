@@ -34,14 +34,13 @@ Generates PLAN.md for the given phase. Decomposes into tasks (max 8), groups int
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. Run /jdi-new."; exit 1; }
 test -f .jdi/PROJECT.md || { echo "PROJECT.md missing."; exit 1; }
-
-JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
 ```
 
 ### Step 2: Resolve phase
 
 ```bash
-eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$1") || { echo "Phase '$1' not found."; exit 1; }
+RESOLVED="$(npx -y jdi-cli resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+eval "$RESOLVED"
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
 PHASE_POSITION="$JDI_PHASE_POSITION"
@@ -49,8 +48,9 @@ PHASE_POSITION="$JDI_PHASE_POSITION"
 
 PowerShell:
 ```powershell
-$r = & "$JDI_LIB\jdi-resolve-phase.ps1" -Id $args[0] -AsObject
-$phaseSlug = $r.Slug; $phaseDir = $r.Dir; $phasePosition = $r.Position
+$r = npx -y jdi-cli resolve-phase $args[0] --json | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) { Write-Error "Phase '$($args[0])' not found."; exit $LASTEXITCODE }
+$phaseSlug = $r.slug; $phaseDir = $r.dir; $phasePosition = $r.position
 ```
 
 ### Step 3: Verify CONTEXT.md
@@ -59,12 +59,10 @@ $phaseSlug = $r.Slug; $phaseDir = $r.Dir; $phasePosition = $r.Position
 test -f "$PHASE_DIR/CONTEXT.md" || { echo "CONTEXT.md missing. Run /jdi-discuss $PHASE_SLUG"; exit 1; }
 
 # Context budget warm-up (does not block)
-if [ -f "$JDI_LIB/jdi-monitor.sh" ]; then
-  bash "$JDI_LIB/jdi-monitor.sh" .jdi/PROJECT.md .jdi/DECISIONS.md "$PHASE_DIR/CONTEXT.md" || true
-fi
+npx -y jdi-cli monitor .jdi/PROJECT.md .jdi/DECISIONS.md "$PHASE_DIR/CONTEXT.md" || true
 ```
 
-PowerShell: `pwsh -File "$JDI_LIB/jdi-monitor.ps1" -Paths @(...)`.
+PowerShell: `npx -y jdi-cli monitor .jdi/PROJECT.md .jdi/DECISIONS.md "$phaseDir/CONTEXT.md"`.
 
 ### Step 4: Spawn planner
 Invoke `jdi-planner` with:

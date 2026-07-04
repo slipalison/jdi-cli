@@ -266,25 +266,28 @@ Each MVP feature (Q4) becomes 1 phase. Short name + slug.
 # {project_name} — Roadmap
 
 ## Status
-current_phase: 1
 total_phases: {N}
 
 ## Phases
 
 ### Phase 1: {feature 1 name}
 - **Slug:** {slug1}
-- **Status:** pending
 - **Goal:** {1-line description}
 
 ### Phase 2: {feature 2 name}
 - **Slug:** {slug2}
-- **Status:** pending
 - **Goal:** {1-line description}
 
 (... up to N)
 ```
 
 Slug values are canonical (no `NN-` prefix). Multi-developer parallel branches rely on slug uniqueness for safe merges; the numeric `### Phase N` heading is display-only and may be renumbered on insert/remove.
+
+ROADMAP.md carries NO per-phase status and NO current-phase pointer — those
+are derived from each phase folder's artifacts (SHIPPED.md → done; REVIEW →
+verified; SUMMARY → executed; PLAN → planned; CONTEXT → discussed; nothing →
+pending). This keeps ROADMAP.md append/insert-only, so parallel developers
+shipping different phases never conflict on it.
 
 ### Step 6: Generate initial state files
 

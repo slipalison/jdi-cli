@@ -122,7 +122,6 @@ If `.jdi/config.json` does not yet exist, write default identical to `/jdi-new`:
     "max_summary_chars": 8192
   },
   "compaction": {
-    "keep_phases": 2,
     "archive_after": 5
   },
   "orchestration": {

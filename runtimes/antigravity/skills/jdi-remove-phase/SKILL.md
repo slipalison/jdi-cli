@@ -44,8 +44,6 @@ test -f .jdi/ROADMAP.md || { echo "ROADMAP.md missing."; exit 1; }
 test -f .jdi/STATE.md || { echo "STATE.md missing."; exit 1; }
 
 [ -n "${1:-}" ] || { echo "Phase id required. Usage: /jdi-remove-phase <slug|position> [--force]"; exit 1; }
-
-JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
 ```
 
 PowerShell mirrors via `Test-Path`. Same `$args` parsing.
@@ -53,10 +51,11 @@ PowerShell mirrors via `Test-Path`. Same `$args` parsing.
 ### Step 2: Resolve phase
 
 ```bash
-eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$1") || {
+RESOLVED="$(npx -y jdi-cli resolve-phase "$1")" || {
   echo "Phase '$1' not found in ROADMAP."
   exit 1
 }
+eval "$RESOLVED"
 
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
@@ -66,9 +65,9 @@ PHASE_FOLDER_EXISTS="$JDI_PHASE_FOLDER_EXISTS"
 
 PowerShell:
 ```powershell
-$r = & "$JDI_LIB\jdi-resolve-phase.ps1" -Id $args[0] -AsObject
-if (-not $r) { Write-Error "Phase '$($args[0])' not found in ROADMAP."; exit 1 }
-$phaseSlug = $r.Slug; $phaseDir = $r.Dir; $phasePosition = $r.Position; $phaseFolderExists = $r.FolderExists
+$r = npx -y jdi-cli resolve-phase $args[0] --json | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) { Write-Error "Phase '$($args[0])' not found in ROADMAP."; exit $LASTEXITCODE }
+$phaseSlug = $r.slug; $phaseDir = $r.dir; $phasePosition = $r.position; $phaseFolderExists = $r.folder_exists
 ```
 
 ### Step 3: Read state + hard refuses
@@ -89,7 +88,14 @@ if [ "$PHASE_POSITION" -eq "$CURRENT_PHASE_INT" ] || [ "$PHASE_SLUG" = "$CURRENT
   exit 1
 fi
 
-# Done status — immutable
+# Shipped phases are immutable — status is DERIVED from artifacts:
+# SHIPPED.md in the phase folder is the canonical "done" marker (0.2.0+).
+if [ -f "$PHASE_DIR/SHIPPED.md" ]; then
+  echo "Phase '$PHASE_SLUG' is shipped. Cannot remove. Shipped phases are immutable history."
+  exit 1
+fi
+
+# Legacy layout (pre-0.2.0 ROADMAPs with per-phase Status lines): honor them.
 STATUS=$(awk -v target="$PHASE_SLUG" '
   /^### Phase / { in_block = 1; matched = 0 }
   in_block && /^- \*\*Slug:\*\*/ {
@@ -183,11 +189,7 @@ sed -i.bak -E "s/^total_phases:.*$/total_phases: $NEW_TOTAL/" .jdi/ROADMAP.md
 rm -f .jdi/ROADMAP.md.bak
 ```
 
-### Step 8: Refresh manifest (v2 only)
-
-If `.jdi/phases.json` exists, regenerate from updated ROADMAP.
-
-### Step 9: Audit trail in DECISIONS.md
+### Step 8: Audit trail in DECISIONS.md
 
 Append (v2 uses deterministic IDs; v1 uses D-N increment):
 
@@ -195,14 +197,15 @@ Append (v2 uses deterministic IDs; v1 uses D-N increment):
 D-{YYYY-MM-DD}-{slug}-rm: Phase '{slug}' removed via /jdi-remove-phase. Artifacts: {archived_path or "none"}.
 ```
 
-### Step 10: Commit
+### Step 9: Commit
 
 ```bash
-git add .jdi/ROADMAP.md .jdi/DECISIONS.md .jdi/archive/ .jdi/phases.json 2>/dev/null
+git add .jdi/ROADMAP.md .jdi/DECISIONS.md
+git add .jdi/archive/ 2>/dev/null || true
 git commit -m "chore(jdi): remove phase $PHASE_SLUG"
 ```
 
-### Step 11: Confirm
+### Step 10: Confirm
 
 ```
 Phase '{slug}' removed.
@@ -216,11 +219,10 @@ Note: slugs of remaining phases are not changed. Display positions renumbered.
 
 <gates>
 - pre: `.jdi/ROADMAP.md` + `.jdi/STATE.md` exist
-- pre: phase resolves via `jdi-resolve-phase.sh`
+- pre: phase resolves via `npx -y jdi-cli resolve-phase`
 - pre: phase is not the current phase, not past, status != `done`
 - pre: `--force` provided if phase has artifacts
 - post: ROADMAP.md section removed + `total_phases` recomputed + artifacts archived (if any) + DECISIONS.md appended + atomic commit
-- post: `phases.json` regenerated if v2
 - invariant: slugs of remaining phases never change
 </gates>
 

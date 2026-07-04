@@ -35,9 +35,21 @@ Examples:
 
 ### Step 1: Validation
 
+Contributor-only guard — this command writes agents/skills into `core/` of
+the jdi-cli SOURCE repo. A consumer project that happens to have its own
+`core/` folder must never pass this gate:
+
 ```bash
-test -d .jdi/ || { echo "Not a JDI project. Run /jdi-new."; exit 1; }
-test -d core/  || { echo "Source of truth not found. Are you in the JDI repo?"; exit 1; }
+grep -q '"name": "jdi-cli"' package.json 2>/dev/null || {
+  echo "/jdi-create runs only inside the jdi-cli source repo (it writes to core/)."
+  echo "Consumer projects extend JDI via per-project specialists — see EXTENSION.md."
+  exit 1
+}
+test -f core/agents/jdi-architect.md || { echo "core/ incomplete — run from the jdi-cli repo root."; exit 1; }
+
+# Clean core/ required (avoid mixing generated files with local edits)
+DIRTY_CORE=$(git status --porcelain core/ 2>/dev/null || true)
+[ -z "$DIRTY_CORE" ] || { echo "core/ has uncommitted changes. Commit or stash first."; exit 1; }
 ```
 
 ### Step 2: Spawn architect
@@ -67,13 +79,12 @@ Invoke: {runtime instructions}
 </process>
 
 <gates>
-- pre: `.jdi/` exists + `core/` exists + clean working tree (no uncommitted changes in `core/` to avoid conflicts)
+- pre: running inside the jdi-cli source repo (`package.json name == jdi-cli` + `core/agents/jdi-architect.md` present) + `core/` clean
 - post: agent/skill created + integration points updated + build+install done + atomic commit
 </gates>
 
 <errors>
-- Not a JDI project -> suggest `/jdi-new`
-- Source `core/` missing -> not the JDI repo, redirect
+- Not the jdi-cli source repo -> abort with pointer to EXTENSION.md (consumer path)
 - Working tree dirty in `core/` -> ask to commit or stash first
 - User cancelled -> exit with no side effects
 - Build failed -> do not install, show build error, keep core/ updated for manual retry

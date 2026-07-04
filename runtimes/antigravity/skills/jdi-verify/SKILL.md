@@ -32,8 +32,6 @@ Verifies the phase was delivered correctly. Runs gates defined in the project's 
 ```bash
 test -d .jdi/ || { echo "Not a JDI project."; exit 1; }
 
-JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
-
 # Verify reviewer exists
 ls .jdi/agents/jdi-reviewer-*.md 2>/dev/null | head -1 || {
   echo "Reviewer missing. /jdi-bootstrap."
@@ -44,7 +42,8 @@ ls .jdi/agents/jdi-reviewer-*.md 2>/dev/null | head -1 || {
 ### Step 2: Resolve phase
 
 ```bash
-eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$1") || { echo "Phase '$1' not found."; exit 1; }
+RESOLVED="$(npx -y jdi-cli resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+eval "$RESOLVED"
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
 PHASE_POSITION="$JDI_PHASE_POSITION"
@@ -56,9 +55,7 @@ test -f "$PHASE_DIR/SUMMARY.md" || {
 }
 
 # Context budget warm-up
-if [ -f "$JDI_LIB/jdi-monitor.sh" ]; then
-  bash "$JDI_LIB/jdi-monitor.sh" .jdi/PROJECT.md .jdi/DECISIONS.md "$PHASE_DIR/PLAN.md" "$PHASE_DIR/SUMMARY.md" || true
-fi
+npx -y jdi-cli monitor .jdi/PROJECT.md .jdi/DECISIONS.md "$PHASE_DIR/PLAN.md" "$PHASE_DIR/SUMMARY.md" || true
 ```
 
 ### Step 3: Resolve reviewer specialist(s)
@@ -73,6 +70,14 @@ echo "Reviewers registered: $REVIEWER_COUNT"
 **Multi-stack** (`REVIEWER_COUNT > 1`): chain reviewers in registry order. Each writes its own REVIEW segment; aggregate verdict = worst-case (1 BLOCK = overall BLOCK).
 
 ### Step 4: Spawn reviewer(s)
+
+REVIEW.md is a per-run artifact — regenerate it from scratch so stale
+verdicts from a previous run can never poison the worst-case aggregation
+(git history keeps every prior run; each verify commits its REVIEW.md):
+
+```bash
+rm -f "$PHASE_DIR/REVIEW.md"
+```
 
 **Single-stack:**
 ```
@@ -134,7 +139,7 @@ Agent(
 
 3. Fall through to Step 5 unchanged — its worst-case grep already aggregates this new `**Verdict:**` line (objective disproof → BLOCKED; suspicion → APPROVED_WITH_WARNINGS; clean → no change).
 
-Invariants: critic is read-only and writes nothing itself; orchestrator owns the single `REVIEW.md` write; the segment can only tighten the aggregate; one sequential agent. Fail-open: if the critic errors or returns nothing, treat as APPROVED and proceed — the deterministic gates already ran in Step 4. (Natural next step: teach `reviewer-specialist` a `mode=dod-critic` branch; until then the explicit prompt above guides the read-only pass.)
+Invariants: critic is read-only and writes nothing itself; orchestrator owns the single `REVIEW.md` write; the segment can only tighten the aggregate; one sequential agent. Fail-open: if the critic errors or returns nothing, treat as APPROVED and proceed — the deterministic gates already ran in Step 4. (The reviewer-specialist template ships a `mode=dod-critic` branch; the prompt above matches its contract.)
 
 ### Step 5: Read aggregate verdict
 
@@ -142,6 +147,7 @@ Invariants: critic is read-only and writes nothing itself; orchestrator owns the
 test -f "$PHASE_DIR/REVIEW.md" || { echo "REVIEW.md not created"; exit 1; }
 
 VERDICTS=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|APPROVED_PENDING_MANUAL|BLOCKED)' "$PHASE_DIR/REVIEW.md" | awk '{print $2}')
+[ -n "$VERDICTS" ] || { echo "Reviewer wrote no verdict line — REVIEW.md malformed. Aborting."; exit 1; }
 
 # Worst-case wins: BLOCK > PENDING_MANUAL > WARNINGS > APPROVED
 if echo "$VERDICTS" | grep -q BLOCKED; then
