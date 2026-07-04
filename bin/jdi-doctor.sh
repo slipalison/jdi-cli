@@ -358,7 +358,7 @@ elif [[ -f "$PROJECT_DIR/.gemini/settings.json" ]] && grep -q "$PLAYWRIGHT_KEY" 
 fi
 
 # ---------------------------------------------------------------------------
-section "12. Specialists (single vs multi-stack)"
+section "11. Specialists (single vs multi-stack)"
 
 SPEC_PATH="$PROJECT_DIR/.jdi/specialists.md"
 REV_PATH="$PROJECT_DIR/.jdi/reviewers.md"
@@ -386,7 +386,7 @@ if [[ -f "$REV_PATH" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-section "11. Caveman plugin (optional)"
+section "12. Caveman plugin (optional)"
 
 CAVEMAN_USER="$HOME/.claude/plugins/caveman"
 CAVEMAN_PROJECT="$PROJECT_DIR/.claude/plugins/caveman"

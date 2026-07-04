@@ -43,7 +43,7 @@ $NewVersion = $pkgJson.version
 
 # Pre-flight
 if (-not (Test-Path (Join-Path $ProjectDir '.jdi'))) {
-  Write-Host "Esse diretorio nao tem .jdi/. Use 'npx jdi-cli install <runtime>' pra primeira instalacao." -ForegroundColor Yellow
+  Write-Output "Esse diretorio nao tem .jdi/. Use 'npx jdi-cli install <runtime>' pra primeira instalacao."
   exit 1
 }
 
@@ -51,16 +51,16 @@ if (-not (Test-Path (Join-Path $ProjectDir '.jdi'))) {
 $VersionFile = Join-Path $ProjectDir '.jdi/VERSION'
 $OldVersion = if (Test-Path $VersionFile) { (Get-Content $VersionFile -Raw).Trim() } else { 'unknown (pre-1.2.1)' }
 
-Write-Host ""
-Write-Host "JDI Update" -ForegroundColor Cyan
-Write-Host "  De:   $OldVersion"
-Write-Host "  Para: $NewVersion"
-Write-Host "  Dir:  $ProjectDir"
-if ($DryRun) { Write-Host "  Mode: DRY-RUN (sem mudancas)" -ForegroundColor Yellow }
-Write-Host ""
+Write-Output ""
+Write-Output "JDI Update"
+Write-Output "  De:   $OldVersion"
+Write-Output "  Para: $NewVersion"
+Write-Output "  Dir:  $ProjectDir"
+if ($DryRun) { Write-Output "  Mode: DRY-RUN (sem mudancas)" }
+Write-Output ""
 
 if ($OldVersion -eq $NewVersion -and -not $DryRun) {
-  Write-Host "Ja na versao mais recente ($NewVersion). Use --force pra reinstalar mesmo assim." -ForegroundColor Green
+  Write-Output "Ja na versao mais recente ($NewVersion). Use --force pra reinstalar mesmo assim."
   exit 0
 }
 
@@ -87,13 +87,13 @@ if ((Test-Path (Join-Path $ProjectDir '.opencode')) -or (Test-Path (Join-Path $U
 }
 
 if ($detected.Count -eq 0) {
-  Write-Host "Nenhum runtime JDI detectado. Tem .jdi/ mas nao .claude/, .github/, .gemini/, .opencode/." -ForegroundColor Yellow
-  Write-Host "Use 'npx jdi-cli install <runtime>' pra instalar." -ForegroundColor Yellow
+  Write-Output "Nenhum runtime JDI detectado. Tem .jdi/ mas nao .claude/, .github/, .gemini/, .opencode/."
+  Write-Output "Use 'npx jdi-cli install <runtime>' pra instalar."
   exit 1
 }
 
-Write-Host "Runtimes detectados: $($detected -join ', ')" -ForegroundColor Cyan
-Write-Host ""
+Write-Output "Runtimes detectados: $($detected -join ', ')"
+Write-Output ""
 
 # =========================================================
 # Atualiza runtime files (sobrescreve)
@@ -120,25 +120,25 @@ foreach ($runtime in $detected) {
   $hasProjectScope = Test-Path $projectMarker
 
   if ($hasProjectScope) {
-    Write-Host "Atualizando $runtime (project scope)..." -ForegroundColor Cyan
+    Write-Output "Atualizando $runtime (project scope)..."
     if (-not $DryRun) {
       & pwsh -NoProfile -ExecutionPolicy Bypass -File $installScript -Runtime $runtime -Scope project | Out-Null
     } else {
-      Write-Host "  [dry-run] copia runtimes/$runtime/* pra escopo project"
+      Write-Output "  [dry-run] copia runtimes/$runtime/* pra escopo project"
     }
   }
 
   if ($hasUserScope) {
-    Write-Host "Atualizando $runtime (user scope)..." -ForegroundColor Cyan
+    Write-Output "Atualizando $runtime (user scope)..."
     if (-not $DryRun) {
       & pwsh -NoProfile -ExecutionPolicy Bypass -File $installScript -Runtime $runtime -Scope user | Out-Null
     } else {
-      Write-Host "  [dry-run] copia runtimes/$runtime/* pra escopo user"
+      Write-Output "  [dry-run] copia runtimes/$runtime/* pra escopo user"
     }
   }
 }
 
-Write-Host ""
+Write-Output ""
 
 # =========================================================
 # Detecta specialists e pergunta sobre regen
@@ -154,9 +154,9 @@ if (Test-Path $specialistDir) {
 }
 
 if ($specialists.Count -gt 0) {
-  Write-Host "Specialists detectados em .jdi/agents/:" -ForegroundColor Cyan
-  foreach ($s in $specialists) { Write-Host "  - $($s.Name)" }
-  Write-Host ""
+  Write-Output "Specialists detectados em .jdi/agents/:"
+  foreach ($s in $specialists) { Write-Output "  - $($s.Name)" }
+  Write-Output ""
 
   # Detecta se template/skills mudaram - heuristica: skills_to_load presente?
   $needsRegen = $false
@@ -169,10 +169,10 @@ if ($specialists.Count -gt 0) {
   }
 
   if ($needsRegen) {
-    Write-Host "Specialists existentes NAO tem <skills_to_load> - foram gerados antes da 1.2.1." -ForegroundColor Yellow
-    Write-Host "Pra ativar skills universais (DRY/KISS/YAGNI/SOLID/Clean Code) via eager loading," -ForegroundColor Yellow
-    Write-Host "specialists precisam ser regenerados." -ForegroundColor Yellow
-    Write-Host ""
+    Write-Output "Specialists existentes NAO tem <skills_to_load> - foram gerados antes da 1.2.1."
+    Write-Output "Pra ativar skills universais (DRY/KISS/YAGNI/SOLID/Clean Code) via eager loading,"
+    Write-Output "specialists precisam ser regenerados."
+    Write-Output ""
 
     $shouldRegen = $false
     if ($ForceSpecialists) {
@@ -185,16 +185,16 @@ if ($specialists.Count -gt 0) {
     }
 
     if ($shouldRegen) {
-      Write-Host ""
-      Write-Host "ACAO MANUAL NECESSARIA:" -ForegroundColor Yellow
-      Write-Host "  Abra teu runtime e rode:  /jdi-bootstrap" -ForegroundColor Cyan
-      Write-Host "  Architect vai detectar specialists existentes e oferecer 'Recriar'." -ForegroundColor Cyan
-      Write-Host "  Os specialists novos terao <skills_to_load> com as 5 universais wired." -ForegroundColor Cyan
+      Write-Output ""
+      Write-Output "ACAO MANUAL NECESSARIA:"
+      Write-Output "  Abra teu runtime e rode:  /jdi-bootstrap"
+      Write-Output "  Architect vai detectar specialists existentes e oferecer 'Recriar'."
+      Write-Output "  Os specialists novos terao <skills_to_load> com as 5 universais wired."
     } else {
-      Write-Host "  Specialists mantidos como estao - skills universais ficam em modo discoverable only." -ForegroundColor DarkGray
+      Write-Output "  Specialists mantidos como estao - skills universais ficam em modo discoverable only."
     }
   } else {
-    Write-Host "Specialists ja tem <skills_to_load> - up to date." -ForegroundColor Green
+    Write-Output "Specialists ja tem <skills_to_load> - up to date."
   }
 }
 
@@ -206,10 +206,10 @@ if (-not $DryRun) {
   Set-Content -Path $VersionFile -Value $NewVersion -Encoding UTF8 -NoNewline
 }
 
-Write-Host ""
-Write-Host "JDI atualizado: $OldVersion -> $NewVersion" -ForegroundColor Green
+Write-Output ""
+Write-Output "JDI atualizado: $OldVersion -> $NewVersion"
 if ($DryRun) {
-  Write-Host "(dry-run - nada foi mudado)" -ForegroundColor Yellow
+  Write-Output "(dry-run - nada foi mudado)"
 }
-Write-Host ""
-Write-Host "Changelog: https://github.com/slipalison/jdi-cli/releases" -ForegroundColor DarkGray
+Write-Output ""
+Write-Output "Changelog: https://github.com/slipalison/jdi-cli/releases"

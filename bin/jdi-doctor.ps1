@@ -347,7 +347,7 @@ if ((Test-Path $agUser) -and ((Get-Content $agUser -Raw) -match '"playwright"\s*
 }
 
 # ---------------------------------------------------------------------------
-Write-Section '12. Specialists (single vs multi-stack)'
+Write-Section '11. Specialists (single vs multi-stack)'
 
 $specPath = Join-Path $ProjectDir '.jdi\specialists.md'
 $revPath  = Join-Path $ProjectDir '.jdi\reviewers.md'
@@ -376,7 +376,7 @@ if (Test-Path $revPath) {
 }
 
 # ---------------------------------------------------------------------------
-Write-Section '11. Caveman plugin (optional)'
+Write-Section '12. Caveman plugin (optional)'
 
 $cavemanUser    = Join-Path $UserHome '.claude\plugins\caveman'
 $cavemanProject = Join-Path $ProjectDir '.claude\plugins\caveman'

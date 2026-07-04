@@ -39,13 +39,13 @@ $UserHome = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
 $baseDir = if ($Scope -eq 'user') { Join-Path $UserHome '.claude\plugins' } else { Join-Path $ProjectDir '.claude\plugins' }
 $target = Join-Path $baseDir 'caveman'
 
-Write-Host ''
-Write-Host '=== JDI: Install Caveman plugin ==='
-Write-Host ''
-Write-Host "  Repo:   $Repo"
-Write-Host "  Scope:  $Scope"
-Write-Host "  Target: $target"
-Write-Host ''
+Write-Output ''
+Write-Output '=== JDI: Install Caveman plugin ==='
+Write-Output ''
+Write-Output "  Repo:   $Repo"
+Write-Output "  Scope:  $Scope"
+Write-Output "  Target: $target"
+Write-Output ''
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
   Write-Error "git not in PATH. Install git and retry."
@@ -54,25 +54,25 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 
 if (Test-Path $target) {
   if (-not $Force) {
-    Write-Host "  Target exists."
+    Write-Output "  Target exists."
     $answer = Read-Host "  Overwrite? (y/N)"
     if ($answer -notmatch '^[yY]') {
-      Write-Host "  Skipped."
+      Write-Output "  Skipped."
       exit 0
     }
   }
-  Write-Host "  Removing old install..."
+  Write-Output "  Removing old install..."
   Remove-Item -Recurse -Force $target
 }
 
 New-Item -ItemType Directory -Force -Path $baseDir | Out-Null
 
-Write-Host "  Cloning..."
+Write-Output "  Cloning..."
 if ($Repo -notmatch '^(https://|git@)[\w.@:/-]+$') {
   Write-Error "Repo invalido (esperado https:// ou git@): $Repo"
   exit 1
 }
-& git clone --depth 1 -- $Repo $target 2>&1 | ForEach-Object { Write-Host "    $_" }
+& git clone --depth 1 -- $Repo $target 2>&1 | ForEach-Object { Write-Output "    $_" }
 
 if ($LASTEXITCODE -ne 0) {
   Write-Error "git clone failed (exit $LASTEXITCODE)."
@@ -91,11 +91,11 @@ if (-not $looksValid) {
   Write-Warning "  Keeping clone but verify manually: $target"
 }
 
-Write-Host ''
-Write-Host "Caveman installed at: $target"
-Write-Host ''
-Write-Host "Next steps:"
-Write-Host "  1. Restart Claude Code (or run /plugin reload)"
-Write-Host "  2. Verify with: /caveman-help"
-Write-Host "  3. Toggle mode: /caveman lite|full|ultra"
-Write-Host ''
+Write-Output ''
+Write-Output "Caveman installed at: $target"
+Write-Output ''
+Write-Output "Next steps:"
+Write-Output "  1. Restart Claude Code (or run /plugin reload)"
+Write-Output "  2. Verify with: /caveman-help"
+Write-Output "  3. Toggle mode: /caveman lite|full|ultra"
+Write-Output ''
