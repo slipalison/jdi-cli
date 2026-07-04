@@ -1,0 +1,22 @@
+# Deterministic line endings across shells and platforms.
+# jdi-build.sh (git-bash/sed) and jdi-build.ps1 (Write-Utf8NoBom) both emit LF;
+# without this file, autocrlf checkouts rewrite runtimes/ as CRLF and every
+# cross-shell build produces a ~110-file ghost diff.
+* text=auto
+
+*.md    text eol=lf
+*.sh    text eol=lf
+*.js    text eol=lf
+*.json  text eol=lf
+*.jsonc text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+
+# PowerShell: CRLF is the native convention (PS 5.1 parser is CRLF-tolerant
+# either way, but editors on Windows expect CRLF here).
+*.ps1   text eol=crlf
+
+# Git hooks must stay LF (executed by sh even on Windows via git-bash).
+bin/git-hooks/* text eol=lf
+
+LICENSE text eol=lf
