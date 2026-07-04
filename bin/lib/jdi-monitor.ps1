@@ -1,4 +1,4 @@
-# jdi-monitor.ps1 — context budget monitor (heuristica)
+# jdi-monitor.ps1 - context budget monitor (heuristica)
 #
 # Uso:
 #   pwsh -File jdi-monitor.ps1 -Paths @("a.md","b.md")
@@ -11,7 +11,7 @@
 #   PEAK     0-30%   ok, full operations
 #   GOOD     30-60%  ok, prefere frontmatter
 #   WARN     60-70%  context aquecendo, considere checkpoint
-#   CRITICAL 70%+    fracture zone — sugere /jdi-thread
+#   CRITICAL 70%+    fracture zone - sugere /jdi-thread
 
 param(
   [string[]]$Paths = @()
@@ -33,7 +33,7 @@ if (Test-Path -LiteralPath ".jdi/config.json") {
       if ($cfg.thresholds.critical_pct) { $CriticalPct = [int]$cfg.thresholds.critical_pct }
     }
   } catch {
-    # config invalido — usa defaults
+    # config invalido - usa defaults
     Write-Verbose "jdi-monitor: failed to parse .jdi/config.json, using defaults: $($_.Exception.Message)"
   }
 }
@@ -52,10 +52,10 @@ $state = "PEAK"
 $hint = ""
 if ($pct -ge $CriticalPct) {
   $state = "CRITICAL"
-  $hint = "fracture zone — considere /jdi-thread (proxima phase em sessao nova)"
+  $hint = "fracture zone - considere iniciar a proxima phase em sessao nova"
 } elseif ($pct -ge $WarnPct) {
   $state = "WARN"
-  $hint = "context aquecendo — checkpoint recomendado"
+  $hint = "context aquecendo - checkpoint recomendado"
 } elseif ($pct -ge 30) {
   $state = "GOOD"
 }

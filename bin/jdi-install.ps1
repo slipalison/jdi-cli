@@ -155,7 +155,7 @@ switch ($Runtime) {
 if ($Githooks) {
   Install-GitHooks
 } else {
-  Write-Output "  (git hooks nao instalados — opcional via -Githooks)"
+  Write-Output "  (git hooks nao instalados - opcional via -Githooks)"
 }
 
 # Escreve .jdi/VERSION pra rastreio em updates futuros

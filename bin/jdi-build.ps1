@@ -53,12 +53,12 @@ function Read-MdSource {
 }
 
 # Escreve UTF-8 SEM BOM (consistente com bin/jdi-build.sh e pwsh 7+).
-# `Set-Content -Encoding UTF8` emite BOM no Windows PowerShell 5.1 — isso gera
+# `Set-Content -Encoding UTF8` emite BOM no Windows PowerShell 5.1 - isso gera
 # churn cross-shell gigante em runtimes/ (skills com BOM, commands sem).
 function Write-Utf8NoBom {
   param([string]$Path, [string]$Content)
   # Normalize to LF: StringBuilder.AppendLine emits CRLF on Windows, while
-  # jdi-build.sh emits LF. Committed blobs are LF (.gitattributes) — writing
+  # jdi-build.sh emits LF. Committed blobs are LF (.gitattributes) - writing
   # LF here keeps both builders byte-identical in the worktree too.
   $Content = $Content.Replace("`r`n", "`n")
   [System.IO.File]::WriteAllText($Path, $Content, [System.Text.UTF8Encoding]::new($false))
@@ -133,7 +133,7 @@ function Get-RuntimeOverride {
     }
 
     if ($inRuntime) {
-      if ($line -match '^\s{2}\S') { break }  # outro runtime — fim do bloco
+      if ($line -match '^\s{2}\S') { break }  # outro runtime - fim do bloco
       Update-OverrideState -State $state -Line $line
     }
   }

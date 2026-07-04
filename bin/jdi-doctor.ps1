@@ -38,7 +38,7 @@ function Test-Cmd {
 # ---------------------------------------------------------------------------
 Write-Section '1. Dependencias'
 
-# PowerShell nao precisa de awk/sed/find — scripts .ps1 substituem
+# PowerShell nao precisa de awk/sed/find - scripts .ps1 substituem
 foreach ($cmd in @('git')) {
   if (Test-Cmd $cmd) {
     $path = (Get-Command $cmd).Source
