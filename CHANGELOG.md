@@ -5,7 +5,7 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.16] - 2026-07-04
 
 ### Removed — Update notifier (opt-in feature removed entirely)
 - `enable-update-check` / `disable-update-check` subcommands and their `bin/lib/jdi-check-update.js`, `jdi-check-update-worker.js`, `jdi-update-banner.js`, `jdi-toggle-update-check.js` implementation.
