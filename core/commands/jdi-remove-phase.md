@@ -88,7 +88,14 @@ if [ "$PHASE_POSITION" -eq "$CURRENT_PHASE_INT" ] || [ "$PHASE_SLUG" = "$CURRENT
   exit 1
 fi
 
-# Done status — immutable
+# Shipped phases are immutable — status is DERIVED from artifacts:
+# SHIPPED.md in the phase folder is the canonical "done" marker (0.2.0+).
+if [ -f "$PHASE_DIR/SHIPPED.md" ]; then
+  echo "Phase '$PHASE_SLUG' is shipped. Cannot remove. Shipped phases are immutable history."
+  exit 1
+fi
+
+# Legacy layout (pre-0.2.0 ROADMAPs with per-phase Status lines): honor them.
 STATUS=$(awk -v target="$PHASE_SLUG" '
   /^### Phase / { in_block = 1; matched = 0 }
   in_block && /^- \*\*Slug:\*\*/ {
@@ -182,11 +189,7 @@ sed -i.bak -E "s/^total_phases:.*$/total_phases: $NEW_TOTAL/" .jdi/ROADMAP.md
 rm -f .jdi/ROADMAP.md.bak
 ```
 
-### Step 8: Refresh manifest (v2 only)
-
-If `.jdi/phases.json` exists, regenerate from updated ROADMAP.
-
-### Step 9: Audit trail in DECISIONS.md
+### Step 8: Audit trail in DECISIONS.md
 
 Append (v2 uses deterministic IDs; v1 uses D-N increment):
 
@@ -194,14 +197,15 @@ Append (v2 uses deterministic IDs; v1 uses D-N increment):
 D-{YYYY-MM-DD}-{slug}-rm: Phase '{slug}' removed via /jdi-remove-phase. Artifacts: {archived_path or "none"}.
 ```
 
-### Step 10: Commit
+### Step 9: Commit
 
 ```bash
-git add .jdi/ROADMAP.md .jdi/DECISIONS.md .jdi/archive/ .jdi/phases.json 2>/dev/null
+git add .jdi/ROADMAP.md .jdi/DECISIONS.md
+git add .jdi/archive/ 2>/dev/null || true
 git commit -m "chore(jdi): remove phase $PHASE_SLUG"
 ```
 
-### Step 11: Confirm
+### Step 10: Confirm
 
 ```
 Phase '{slug}' removed.
@@ -219,7 +223,6 @@ Note: slugs of remaining phases are not changed. Display positions renumbered.
 - pre: phase is not the current phase, not past, status != `done`
 - pre: `--force` provided if phase has artifacts
 - post: ROADMAP.md section removed + `total_phases` recomputed + artifacts archived (if any) + DECISIONS.md appended + atomic commit
-- post: `phases.json` regenerated if v2
 - invariant: slugs of remaining phases never change
 </gates>
 

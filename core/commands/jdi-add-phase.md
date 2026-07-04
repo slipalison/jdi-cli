@@ -97,13 +97,20 @@ if [ -z "$SLUG" ]; then
     | iconv -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null \
     | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' \
     | cut -c1-40)
+  # Slugs must start with a letter — a digit-leading name ("2FA support")
+  # would derive an invalid slug. Prefix instead of failing cryptically.
+  case "$SLUG" in
+    [0-9]*) SLUG="phase-$SLUG" ;;
+  esac
 fi
 
-# Strict validation + uniqueness check
-SLUG=$(npx -y jdi-cli validate-slug "$SLUG" --check-unique)
-if [ -z "$SLUG" ]; then
+# Strict validation + uniqueness check. Capture the validator's exit code
+# IMMEDIATELY — testing "$SLUG" first would overwrite $? with the test's own
+# status and the named exit codes (1-4) would never propagate.
+SLUG=$(npx -y jdi-cli validate-slug "$SLUG" --check-unique); RC=$?
+if [ "$RC" -ne 0 ] || [ -z "$SLUG" ]; then
   # validator already printed the error to stderr
-  exit $?
+  exit "$RC"
 fi
 ```
 
@@ -156,9 +163,12 @@ fi
 ```markdown
 ### Phase {INSERT_POS}: {name}
 - **Slug:** {slug}              <!-- v2 canonical, no NN prefix -->
-- **Status:** pending
 - **Goal:** {goal}
 ```
+
+(No `Status:` line — phase status is derived from the phase folder's
+artifacts. Legacy ROADMAPs keep the Status lines on their existing blocks;
+new blocks never add one.)
 
 For v1 schema, write `Slug: {NN}-{slug}` instead (preserves legacy folder convention).
 
@@ -183,26 +193,21 @@ D-{YYYY-MM-DD}-{slug}-1: Phase '{name}' (slug: {slug}) added. Reason: {reason}.
 
 If multiple decisions share the same date+slug+sequence (e.g. amended on same day), bump the trailing `-1` to `-2`, etc. Scope is per-day-per-slug, so two devs adding different phases on the same day produce non-colliding IDs.
 
-### Step 8: Refresh manifest (v2 only)
-
-If `.jdi/phases.json` exists (v2 project), regenerate it from the updated ROADMAP. Simple rewrite — manifest is derived state, never primary.
-
-### Step 9: Commit
+### Step 8: Commit
 
 ```bash
-git add .jdi/ROADMAP.md .jdi/DECISIONS.md .jdi/phases.json 2>/dev/null
+git add .jdi/ROADMAP.md .jdi/DECISIONS.md
 git commit -m "chore(jdi): add phase $SLUG"
 ```
 
 Commit scope uses the slug, not the position. Slug is stable across branch merges; position is not.
 
-### Step 10: Confirm
+### Step 9: Confirm
 
 ```
 Phase {INSERT_POS}: {name}
   Slug:     {slug}
   Goal:     {goal}
-  Status:   pending
   Schema:   v{SCHEMA}
 
 Next: /jdi-discuss {slug}
@@ -217,7 +222,6 @@ Next: /jdi-discuss {slug}
 - pre: insert position > current_phase
 - pre: `--at` not used on v2 schema
 - post: ROADMAP.md gains new phase block + `total_phases` recomputed + atomic commit
-- post: `phases.json` regenerated if v2
 - invariant: existing phase slugs are never renamed
 </gates>
 
@@ -245,7 +249,7 @@ Next: /jdi-discuss {slug}
 
 **Claude Code:**
 - AskUserQuestion handles missing args interactively.
-- Validator + resolver are shelled out to `bin/lib/`.
+- Validator + resolver run via `npx -y jdi-cli` subcommands.
 
 **Copilot:**
 - AskUserQuestion not always available — require explicit flags or fail with clear error.

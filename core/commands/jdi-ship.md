@@ -118,16 +118,28 @@ Phase $PHASE_SLUG has uncorrected warnings. Ship anyway?
 
 If "No" → exit clean.
 
-### Step 4: Update ROADMAP.md
+### Step 4: Write the SHIPPED marker (team-safe)
 
-Find the phase by `Slug:` value (canonical or legacy form). Edit:
-- This phase: `status: done`
-- Next phase (if any): `status: ready`
+Phase completion is recorded IN THE PHASE FOLDER, not in ROADMAP.md — two
+developers shipping different phases on different branches produce zero
+merge conflicts. Phase status is DERIVED from artifacts everywhere
+(SHIPPED.md → done; REVIEW verdict → verified; SUMMARY → executed;
+PLAN → planned; CONTEXT → discussed; nothing → pending).
 
 ```bash
-# Use awk to update only the phase block matching $PHASE_SLUG
+cat > "$PHASE_DIR/SHIPPED.md" <<EOF
+shipped_at: $(date -u +%FT%TZ)
+verdict: $VERDICT
+by: $(git config user.name 2>/dev/null || echo unknown)
+EOF
+
 NEXT_POSITION=$((PHASE_POSITION + 1))
 ```
+
+**Legacy compatibility:** if this project's ROADMAP.md still carries
+`- **Status:**` lines (pre-0.2.0 layout), update THIS phase's line to `done`
+best-effort — never add such a line where none exists. New ROADMAPs have no
+per-phase status lines, so ship never touches ROADMAP.md on them.
 
 If no phase at NEXT_POSITION:
 ```
@@ -145,13 +157,25 @@ if RESOLVED="$(npx -y jdi-cli resolve-phase "$NEXT_POSITION" 2>/dev/null)"; then
 fi
 ```
 
-### Step 6: Update STATE.md
+### Step 6: Update STATE.md (advisory)
+
+STATE.md is an ADVISORY next-step hint for this clone — gates never depend
+on it (they check phase artifacts). Keep `current_phase` a plain integer;
+completion is flagged separately so numeric parsers never see `done`:
 
 ```markdown
-current_phase: {NEXT_POSITION or done}
-current_phase_slug: {NEXT_PHASE_SLUG or done}
-phase_status: ready (if next exists) or complete
-next_step: /jdi-discuss {NEXT_PHASE_SLUG} or done
+# next phase exists:
+current_phase: {NEXT_POSITION}
+current_phase_slug: {NEXT_PHASE_SLUG}
+phase_status: ready
+next_step: /jdi-discuss {NEXT_PHASE_SLUG}
+
+# last phase shipped:
+current_phase: {PHASE_POSITION}
+current_phase_slug: {PHASE_SLUG}
+phase_status: complete
+all_phases_complete: true
+next_step: project delivered
 ```
 
 ### Step 7: Archive old phases (compaction)
@@ -200,14 +224,13 @@ PowerShell equivalent uses `Move-Item` + `Add-Content` + the resolver `.ps1`. Se
 
 Archived phases remain accessible via `.jdi/archive/` but exit the default read-path.
 
-### Step 8: Refresh manifest (v2 only)
-
-If `.jdi/phases.json` exists, regenerate from updated ROADMAP.
-
-### Step 9: Final commit
+### Step 8: Final commit
 
 ```bash
-git add .jdi/ROADMAP.md .jdi/STATE.md .jdi/archive/ .jdi/phases.json 2>/dev/null
+git add "$PHASE_DIR/SHIPPED.md" .jdi/STATE.md
+git add .jdi/archive/ 2>/dev/null || true
+# Legacy layout only (ROADMAP with per-phase Status lines):
+git add .jdi/ROADMAP.md 2>/dev/null || true
 git commit -m "feat($PHASE_SLUG): ship phase ($VERDICT)"
 ```
 
@@ -216,7 +239,7 @@ Optional tag (if PROJECT.md has `tag_phases: true`):
 git tag "phase-$PHASE_SLUG"
 ```
 
-### Step 10: Confirm
+### Step 9: Confirm
 
 ```
 Phase $PHASE_SLUG shipped.
@@ -227,8 +250,8 @@ Phase $PHASE_SLUG shipped.
 </process>
 
 <gates>
-- pre: REVIEW.md exists + verdict ∉ {BLOCKED, APPROVED_PENDING_MANUAL} + all DoD manual items confirmed
-- post: ROADMAP.md + STATE.md updated + old phases archived (if applicable) + commit (+ optional tag)
+- pre: REVIEW.md exists + verdict ∉ {BLOCKED, APPROVED_PENDING_MANUAL} + no DoD row still MANUAL_REQUIRED + SHIPPED.md absent
+- post: SHIPPED.md written + STATE.md updated + old phases archived (if applicable) + commit (+ optional tag). ROADMAP.md untouched except legacy Status-line projects.
 </gates>
 
 <errors>
