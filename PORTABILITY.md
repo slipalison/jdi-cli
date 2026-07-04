@@ -1,22 +1,22 @@
 # JDI — Portability
 
-JDI roda em 4 runtimes: **Claude Code**, **GitHub Copilot**, **Google Antigravity**, **OpenCode**.
+JDI runs on 4 runtimes: **Claude Code**, **GitHub Copilot**, **Google Antigravity**, **OpenCode**.
 
-Estrategia: 1 fonte de verdade (`core/`) + adapters por runtime (`runtimes/<name>/`). 1 script que sincroniza.
+Strategy: 1 source of truth (`core/`) + adapters per runtime (`runtimes/<name>/`). 1 script that syncs them.
 
-## Mapeamento dos 4 runtimes
+## Mapping across the 4 runtimes
 
-| Conceito JDI | Claude Code | GitHub Copilot | Antigravity | OpenCode |
+| JDI concept | Claude Code | GitHub Copilot | Antigravity | OpenCode |
 |---|---|---|---|---|
-| Comando | `.claude/commands/<n>.md` | `.github/prompts/<n>.prompt.md` | `skills/<n>/SKILL.md` | `.opencode/commands/<n>.md` |
-| Agente | `.claude/agents/<n>.md` | `.github/agents/<n>.agent.md` | `skills/<n>/SKILL.md` | `.opencode/agents/<n>.md` |
-| Skill | `.claude/skills/<n>/SKILL.md` | n/a | `skills/<n>/` | `.opencode/skills/<n>/SKILL.md` (le tambem `.claude/skills/`) |
-| Instrucao global | `CLAUDE.md` | `.github/copilot-instructions.md` | `agents.md` | `AGENTS.md` |
-| Hook | `settings.json` `hooks` | nao tem | nao tem | `opencode.jsonc` `permission` |
-| Invocacao | `/jdi-discuss` | `/jdi-discuss` ou `@jdi-asker` | discovery por trigger | `/jdi-discuss` ou `@jdi-asker` |
-| Tools restritas | frontmatter `tools:` | frontmatter `tools:` | sem restricao formal | frontmatter `permission:` |
-| Modelo escolhido | `model: opus|sonnet|haiku` | `model: gpt-5|...` | nao expoe | `model: anthropic/claude-...|openai/...` |
-| Subagent flag | implicit (Agent tool spawn) | `@<name>` referenciado | discovery | `mode: subagent` + `subtask: true` |
+| Command | `.claude/commands/<n>.md` | `.github/prompts/<n>.prompt.md` | `skills/<n>/SKILL.md` | `.opencode/commands/<n>.md` |
+| Agent | `.claude/agents/<n>.md` | `.github/agents/<n>.agent.md` | `skills/<n>/SKILL.md` | `.opencode/agents/<n>.md` |
+| Skill | `.claude/skills/<n>/SKILL.md` | n/a | `skills/<n>/` | `.opencode/skills/<n>/SKILL.md` (also reads `.claude/skills/`) |
+| Global instructions | `CLAUDE.md` | `.github/copilot-instructions.md` | `agents.md` | `AGENTS.md` |
+| Hook | `settings.json` `hooks` | none | none | `opencode.jsonc` `permission` |
+| Invocation | `/jdi-discuss` | `/jdi-discuss` or `@jdi-asker` | discovery by trigger | `/jdi-discuss` or `@jdi-asker` |
+| Restricted tools | frontmatter `tools:` | frontmatter `tools:` | no formal restriction | frontmatter `permission:` |
+| Model selection | `model: opus\|sonnet\|haiku` | `model: gpt-5\|...` | not exposed | `model: anthropic/claude-...\|openai/...` |
+| Subagent flag | implicit (Agent tool spawn) | referenced via `@<name>` | discovery | `mode: subagent` + `subtask: true` |
 
 Refs:
 - [Claude Code agents docs](https://docs.claude.com/en/docs/claude-code/sub-agents)
@@ -26,103 +26,117 @@ Refs:
 - [OpenCode commands](https://opencode.ai/docs/commands/)
 - [OpenCode skills](https://opencode.ai/docs/skills/)
 
-## Diferencas chave
+## Key differences
 
 ### Hooks
-**Limitacao:** so Claude Code suporta hooks de runtime nativos (pre-commit, post-commit, etc).
+**Limitation:** only Claude Code supports native runtime hooks (pre-commit, post-commit, etc).
 
-**Workaround multi-runtime:**
-- Hook `pre-commit` e `post-commit` em `.githooks/` sao **no-op por padrao**
-- Reviewer (`/jdi-verify`) cobre validacao de qualidade — sem necessidade de doc-bot pre-commit
-- User pode customizar `.githooks/` pra:
-  - Lint rapido pre-commit
-  - Notificacao Slack pos-commit
+**Multi-runtime workaround:**
+- `pre-commit` and `post-commit` hooks shipped in `bin/git-hooks/` are **no-op by default** and are only copied to the project's `.githooks/` when the user opts in via `jdi install <runtime> --githooks`
+- The reviewer (`/jdi-verify`) covers quality validation — no need for a pre-commit doc-bot
+- Users can customize `.githooks/` for:
+  - Quick pre-commit lint
+  - Post-commit Slack notification
   - Etc.
-- Pra ativar: `git config core.hooksPath .githooks`
+- To activate: `git config core.hooksPath .githooks`
 
-JDI documenta os 4 caminhos. User ativa o que tem.
+JDI documents all 4 paths. Users enable what they have.
 
-OpenCode tem `permission:` por agent no frontmatter — nao eh hook, mas controla edit/bash/write granular.
+OpenCode has per-agent `permission:` in the frontmatter — not a hook, but grants granular edit/bash/write control.
 
-### Tools restritas
-**Claude Code:** frontmatter `tools: [Read, Write, Edit, Bash, Grep, Glob]` aplica least-privilege.
+### Restricted tools
+**Claude Code:** frontmatter `tools: [Read, Write, Edit, Bash, Grep, Glob]` applies least-privilege.
 
-**Copilot:** mesma sintaxe, mas suporte limitado a algumas tools.
+**Copilot:** same syntax, but limited support for some tools.
 
-**Antigravity:** SKILL.md nao restringe tools. Restricao via convencao na prosa do skill.
+**Antigravity:** SKILL.md does not restrict tools. Restriction by convention in the skill's prose.
 
-**OpenCode:** frontmatter `permission:` granular por verbo:
+**OpenCode:** granular per-verb `permission:` frontmatter:
 ```yaml
 permission:
-  edit: deny       # nao edita arquivos do projeto
+  edit: deny       # does not edit project files
   bash:
-    "*": ask       # pergunta antes de qq comando shell
+    "*": ask       # asks before any shell command
     "git status": allow
     "git diff": allow
-  write: allow     # pode criar arquivos novos
-  skill: allow     # pode carregar skills
+  write: allow     # can create new files
+  skill: allow     # can load skills
 ```
 
-### Modelo
-**Claude:** `model: opus` / `sonnet` / `haiku` no frontmatter.
+### Model
+**Claude:** `model: opus` / `sonnet` / `haiku` in the frontmatter.
 
-**Copilot:** `model: gpt-5` / `claude-opus-4-7` / etc — depende da config da org.
+**Copilot:** `model: gpt-5` / `claude-opus-4-7` / etc — depends on org config.
 
-**Antigravity:** transparente. Usa o modelo ativo no IDE.
+**Antigravity:** transparent. Uses the model active in the IDE.
 
-**OpenCode:** `model: <provider>/<id>` exato. Exemplos:
+**OpenCode:** exact `model: <provider>/<id>`. Examples:
 - `anthropic/claude-sonnet-4-20250514`
 - `anthropic/claude-opus-4-7`
 - `openai/gpt-5`
 - `google/gemini-2.5-flash`
 
-JDI core declara intent (`reasoning: medium`) — adapter traduz pra modelo concreto por runtime.
+JDI core declares intent (`reasoning: medium`) — the adapter translates it into a concrete model per runtime.
 
 ### Discovery
-**Claude:** comando precisa estar em `commands/`. Agente precisa estar em `agents/`. Listado por nome.
+**Claude:** command must live in `commands/`. Agent must live in `agents/`. Listed by name.
 
-**Copilot:** prompts em `.github/prompts/` listados via `/`. Agents auto-descobertos quando referenciado por `@`.
+**Copilot:** prompts in `.github/prompts/` listed via `/`. Agents auto-discovered when referenced via `@`.
 
-**Antigravity:** descoberta por **descricao + triggers**. SKILL.md frontmatter precisa ter `triggers:` claros. Agent escolhe skill automaticamente quando match.
+**Antigravity:** discovery by **description + triggers**. SKILL.md frontmatter needs clear `triggers:`. The agent picks the skill automatically on match.
 
-**OpenCode:** comandos em `.opencode/commands/` listados via `/`. Agents em `.opencode/agents/` invocados via `@<name>` ou pelo `agent:` field do command. Skills descobertas via walk-up do cwd ate git worktree, lendo `.opencode/skills/`, `.claude/skills/`, `.agents/skills/`.
+**OpenCode:** commands in `.opencode/commands/` listed via `/`. Agents in `.opencode/agents/` invoked via `@<name>` or by a command's `agent:` field. Skills discovered by walking up from cwd to the git worktree, reading `.opencode/skills/`, `.claude/skills/`, `.agents/skills/`.
 
-JDI core formata pra atender o pior caso (Antigravity precisa triggers fortes) — outros runtimes ignoram o campo extra.
+JDI core formats for the worst case (Antigravity needs strong triggers) — the other runtimes ignore the extra field.
+
+## Shell helpers as CLI subcommands
+
+Command prompts never hardcode script paths. Deterministic helpers are exposed as `jdi-cli` subcommands, so every runtime invokes them the same way:
+
+```bash
+npx -y jdi-cli resolve-phase <slug|position> [--json]   # phase id -> slug/dir/position env exports
+npx -y jdi-cli validate-slug <slug> [--check-unique]    # shape + reserved words + uniqueness
+npx -y jdi-cli truncate <file> <max_chars>              # structure-preserving truncation
+npx -y jdi-cli monitor <file...>                        # context budget estimate
+```
+
+`bin/jdi.js` dispatches each subcommand to the platform-correct implementation in `bin/lib/` (`.ps1` on Windows, `.sh` elsewhere). This is what makes the command `.md` files runtime- and OS-portable: the same `npx -y jdi-cli ...` line works from Claude Code, Copilot, Antigravity, or OpenCode on any OS with Node.
 
 ## Phase ID schema (slug-as-ID)
 
-Schema v2 (default em projetos novos) usa **slug** como identificador canônico de phase em vez de número. Esse modelo é portável entre os 4 runtimes — não depende de feature específica de nenhum:
+Schema v2 (default in new projects) uses the **slug** as the canonical phase identifier instead of a number. The model is portable across all 4 runtimes — it depends on no runtime-specific feature:
 
-- **STATE.md** carrega `schema_version: 2` + `current_phase_slug: <slug>`. Campo `current_phase` (int) mantido como display mirror.
-- **Folder** = `.jdi/phases/<slug>/` (v2) ou `.jdi/phases/NN-<slug>/` (v1 legacy preservado).
-- **Resolver** (`bin/lib/jdi-resolve-phase.{sh,ps1}`) normaliza qualquer input (int OR slug) para path resolvido. Cada command MD chama o resolver no Step 2 — invariante cross-runtime.
-- **Validator** (`bin/lib/jdi-validate-slug.{sh,ps1}`) impõe shape + reserved words + uniqueness antes de `/jdi-add-phase` criar phase.
-- **Triggers (Antigravity):** `/jdi-do auth-flow` e `/jdi-do 2` ambos disparam mesmo skill — prose triggers aceitam ambas formas.
-- **Comandos slash (Claude/Copilot/OpenCode):** `argument_hint: "<slug|position>"`.
+- **STATE.md** carries `schema_version: 2` + `current_phase_slug: <slug>`. The `current_phase` (int) field is kept as a display mirror.
+- **Folder** = `.jdi/phases/<slug>/` (v2) or `.jdi/phases/NN-<slug>/` (v1 legacy, preserved).
+- **Resolver** (`npx -y jdi-cli resolve-phase`, backed by `bin/lib/jdi-resolve-phase.{sh,ps1}`) normalizes any input (int OR slug) into a resolved path. Every command MD calls the resolver in Step 2 — a cross-runtime invariant.
+- **Validator** (`npx -y jdi-cli validate-slug`) enforces shape + reserved words + uniqueness before `/jdi-add-phase` creates a phase.
+- **Triggers (Antigravity):** `/jdi-do auth-flow` and `/jdi-do 2` both fire the same skill — prose triggers accept both forms.
+- **Slash commands (Claude/Copilot/OpenCode):** `argument_hint: "<slug|position>"`.
 
-Multi-developer safety: dois devs em branches paralelos criando phases distintas (slugs diferentes) → folders disjuntos, merge limpo. Mesmo slug → conflito git explícito (sinal real, não silent overwrite).
+Multi-developer safety: two devs on parallel branches creating distinct phases (different slugs) → disjoint folders, clean merge. Same slug → explicit git conflict (a real signal, not a silent overwrite). Phase completion is a per-folder `SHIPPED.md` marker and status is derived from artifacts, so ROADMAP.md never becomes a merge hotspot.
 
-Migração v1 → v2: comando `/jdi-migrate-phases` (non-destructive). Por runtime:
+v1 → v2 migration: `/jdi-migrate-phases` command (non-destructive). Per runtime:
 
-| Runtime | Como invocar | Notas |
+| Runtime | How to invoke | Notes |
 |---|---|---|
-| Claude Code | `/jdi-migrate-phases` | AskUserQuestion para confirmação |
-| Copilot | `/jdi-migrate-phases` | Sem AskUserQuestion — pode exigir `--yes` se prompt não suportado |
+| Claude Code | `/jdi-migrate-phases` | AskUserQuestion for confirmation |
+| Copilot | `/jdi-migrate-phases` | No AskUserQuestion — may require `--yes` if prompting is unsupported |
 | Antigravity | Triggers: `/jdi-migrate-phases`, `migrate phases`, `upgrade schema`, `schema v2` | Prose-based |
-| OpenCode | `/jdi-migrate-phases` | `subtask: true` no frontmatter |
+| OpenCode | `/jdi-migrate-phases` | `subtask: true` in the frontmatter |
 
-## Estrutura de pastas
+## Folder structure
 
 ```
 jdi/
 +-- core/                          source of truth
-|   +-- agents/
-|   |   +-- jdi-researcher.md     Opus  - upfront discovery
-|   |   +-- jdi-bootstrap.md      Sonnet - dispara architect modo specialist
-|   |   +-- jdi-asker.md          Sonnet - loop de perguntas
-|   |   +-- jdi-planner.md        Opus  - decompose phase
-|   |   +-- jdi-architect.md      Opus  - meta (modo create + specialist)
-|   +-- commands/
+|   +-- agents/                    6 agents
+|   |   +-- jdi-researcher.md     Opus   - upfront discovery (greenfield)
+|   |   +-- jdi-adopter.md        Opus   - brownfield adoption (detect + confirm)
+|   |   +-- jdi-bootstrap.md      Sonnet - fires architect specialist mode
+|   |   +-- jdi-asker.md          Sonnet - question loop (decisions + DoD)
+|   |   +-- jdi-planner.md        Opus   - decompose phase
+|   |   +-- jdi-architect.md      Opus   - meta (create + specialist modes)
+|   +-- commands/                  15 commands
 |   |   +-- jdi-new.md
 |   |   +-- jdi-adopt.md
 |   |   +-- jdi-bootstrap.md
@@ -130,23 +144,31 @@ jdi/
 |   |   +-- jdi-plan.md
 |   |   +-- jdi-do.md
 |   |   +-- jdi-verify.md
-|   |   +-- jdi-loop.md           ralph loop, dev<->review automatico
+|   |   +-- jdi-confirm-dod.md    confirm/reject manual DoD items
+|   |   +-- jdi-loop.md           ralph loop, automatic dev<->review
 |   |   +-- jdi-ship.md
-|   |   +-- jdi-status.md         snapshot read-only (sem agent)
-|   |   +-- jdi-add-phase.md      registra phase (slug-as-ID, multi-dev safe)
-|   |   +-- jdi-remove-phase.md   remove future/pending phase
+|   |   +-- jdi-status.md         read-only snapshot (no agent)
+|   |   +-- jdi-add-phase.md      registers phase (slug-as-ID, multi-dev safe)
+|   |   +-- jdi-remove-phase.md   removes a future/pending phase
 |   |   +-- jdi-migrate-phases.md v1 -> v2 non-destructive upgrade
-|   |   +-- jdi-create.md         (so contributors)
-|   +-- templates/
-|       +-- agent.md              base pra agent generico
-|       +-- skill.md              base pra skill
-|       +-- doer-specialist.md    usado pelo architect modo specialist
+|   |   +-- jdi-create.md         (contributors only)
+|   +-- skills/                    13 skills (code-design enforcement + principles)
+|   |   +-- clean-architecture/  +-- clean-code/  +-- ddd/  +-- dry/
+|   |   +-- frontend-rules/      +-- frontend-validator/    +-- hexagonal/
+|   |   +-- kiss/  +-- onion/  +-- solid/  +-- the-method/
+|   |   +-- vertical-slice/  +-- yagni/
+|   +-- templates/                 5 templates
+|       +-- agent.md              base for a generic agent
+|       +-- skill.md              base for a skill
+|       +-- doer-specialist.md    used by architect specialist mode
 |       +-- reviewer-specialist.md idem
+|       +-- dod-schema.md         canonical Definition-of-Done spec
 |
-+-- runtimes/                      gerados, nao editar a mao
++-- runtimes/                      generated, never edit by hand
 |   +-- claude/
 |   |   +-- agents/
 |   |   +-- commands/
+|   |   +-- skills/                .claude/skills/<n>/SKILL.md
 |   |   +-- CLAUDE.md
 |   |   +-- settings.example.json
 |   +-- copilot/
@@ -154,7 +176,7 @@ jdi/
 |   |   +-- prompts/               .github/prompts/<n>.prompt.md
 |   |   +-- copilot-instructions.md
 |   +-- antigravity/
-|   |   +-- skills/                cada agente vira <name>/SKILL.md
+|   |   +-- skills/                each agent/command becomes <name>/SKILL.md
 |   |   +-- agents.md
 |   +-- opencode/
 |   |   +-- agents/                .opencode/agents/<n>.md
@@ -164,26 +186,35 @@ jdi/
 |   |   +-- opencode.example.jsonc
 |
 +-- bin/
-|   +-- jdi-build                  builda runtimes/ a partir de core/
-|   +-- jdi-install                instala em ~/.claude, .github/, ~/.gemini/
+|   +-- jdi.js                     all-in-one CLI (build/install/doctor/update/uninstall + helper subcommands)
+|   +-- jdi-build.sh / .ps1        builds runtimes/ from core/
+|   +-- jdi-install.sh / .ps1      installs into ~/.claude, .github/, ~/.gemini/, .opencode/ (+ --githooks opt-in)
+|   +-- jdi-doctor.sh / .ps1       9-section diagnostic
+|   +-- jdi-update.sh / .ps1       refreshes runtime files in an installed project
+|   +-- jdi-uninstall.sh / .ps1    removes JDI from a project (keeps .jdi/ unless --purge)
+|   +-- jdi-install-caveman.sh / .ps1     optional: caveman plugin for Claude Code
+|   +-- jdi-install-playwright.sh / .ps1  optional: Playwright + MCP config for UI validation
+|   +-- lib/                       helper implementations (resolve-phase, validate-slug, truncate, monitor × .sh/.ps1 + ui.js)
+|   +-- git-hooks/                 no-op pre-commit/post-commit shipped for --githooks opt-in
 |
 +-- README.md
 +-- ARCHITECTURE.md
 +-- AGENTS.md
 +-- COMMANDS.md
-+-- MEMORY.md             (state schema dos files .jdi/)
++-- MEMORY.md             (state schema of the .jdi/ files)
 +-- EXTENSION.md
 +-- CREATE.md
 +-- CREATE-EXAMPLE.md
 +-- PORTABILITY.md
++-- CHANGELOG.md
 ```
 
-## Formato do source-of-truth (`core/agents/<n>.md`)
+## Source-of-truth format (`core/agents/<n>.md`)
 
 ```yaml
 ---
 name: jdi-asker
-description: Loop adaptativo de perguntas. Vira CONTEXT.md.
+description: Adaptive question loop. Becomes CONTEXT.md.
 runtime_intent:
   role: discover_decisions
   reasoning: medium      # cheap | medium | deep
@@ -194,10 +225,10 @@ tools_canonical:
   - grep
   - glob
   - ask_user_question
-triggers:                # usado pelo Antigravity discovery
-  - "discutir phase"
-  - "context para phase"
-  - "decisoes para phase"
+triggers:                # used by Antigravity discovery
+  - "discuss phase"
+  - "context for phase"
+  - "decisions for phase"
 runtime_overrides:
   claude:
     model: sonnet
@@ -207,178 +238,156 @@ runtime_overrides:
     tools: [read, write, grep, glob]
   antigravity:
     triggers_extra:
-      - "iniciar discuss"
+      - "start discuss"
       - "/jdi-discuss"
 ---
 
 <role>
-... corpo do agente em markdown comum ...
+... agent body in plain markdown ...
 </role>
 
 <process>
-... fluxo ...
+... flow ...
 </process>
 
 <output>
-... saida esperada ...
+... expected output ...
 </output>
 ```
 
-## Build script (`bin/jdi-build`)
+## Build script (`bin/jdi-build.{sh,ps1}`)
 
 Pseudocode:
 
 ```bash
 #!/usr/bin/env bash
-# Le core/, gera runtimes/
+# Reads core/, generates runtimes/
 
 for agent in core/agents/*.md; do
   name=$(basename "$agent" .md)
-  
+
   # Claude
-  jq-md remap-frontmatter "$agent" \
+  remap_frontmatter "$agent" \
     --map "tools_canonical -> tools" \
     --map "runtime_overrides.claude.model -> model" \
     --strip "runtime_intent,triggers,runtime_overrides" \
     > "runtimes/claude/agents/$name.md"
-  
+
   # Copilot
-  jq-md remap-frontmatter "$agent" \
+  remap_frontmatter "$agent" \
     --map "tools_canonical -> tools" \
     --map "runtime_overrides.copilot.model -> model" \
     --strip "runtime_intent,triggers,runtime_overrides" \
-    --rename-ext ".agent.md" \
     > "runtimes/copilot/agents/$name.agent.md"
-  
+
   # Antigravity
   mkdir -p "runtimes/antigravity/skills/$name"
-  jq-md to-skill-format "$agent" \
+  to_skill_format "$agent" \
     --strip "runtime_overrides,tools_canonical" \
     --merge-triggers "runtime_overrides.antigravity.triggers_extra" \
     > "runtimes/antigravity/skills/$name/SKILL.md"
 done
 
-# Comandos seguem o mesmo padrao
-for cmd in core/commands/*.md; do
-  name=$(basename "$cmd" .md)
-  
-  cp "$cmd" "runtimes/claude/commands/$name.md"
-  
-  # Copilot: vira prompt file
-  cp "$cmd" "runtimes/copilot/prompts/$name.prompt.md"
-  
-  # Antigravity: vira skill (comando = skill com trigger forte)
-  mkdir -p "runtimes/antigravity/skills/$name"
-  cp "$cmd" "runtimes/antigravity/skills/$name/SKILL.md"
-done
+# Commands and skills follow the same pattern (OpenCode included)
 ```
 
-Implementacao real: bash + yq + sed (atual). Reescreve em ts se virar projeto serio.
+Real implementation: **pure bash — frontmatter-bounded inline parser, no yq/jq required** (`bin/jdi-build.sh`; only bash, sed, awk, mkdir). `bin/jdi-build.ps1` mirrors it 1:1 for Windows, emitting BOM-less UTF-8 so both shells produce byte-identical `runtimes/`.
 
-## Install script (`bin/jdi-install`)
+## Install script (`bin/jdi-install.{sh,ps1}`)
+
+> **Illustrative, simplified.** The real script covers all 4 runtimes (including OpenCode), copies skills (`runtimes/claude/skills/` → `.claude/skills/`, reused by OpenCode), generates `opencode.jsonc` from the example, and supports the `--githooks` opt-in that copies the no-op hooks from `bin/git-hooks/` to the project's `.githooks/`.
 
 ```bash
 #!/usr/bin/env bash
-# Uso: ./jdi-install <runtime> [--scope user|project]
+# Usage: ./jdi-install.sh <runtime> [--scope user|project] [--githooks]
 #
-# runtimes: claude | copilot | antigravity | all
+# runtimes: claude | copilot | antigravity | opencode | all
 # scope:    user (global) | project (default)
 
-RUNTIME="${1:-all}"
-SCOPE="${2:---scope project}"
-
 install_claude() {
-  if [[ "$SCOPE" == *"user"* ]]; then
-    DEST="$HOME/.claude"
-  else
-    DEST="$PWD/.claude"
-  fi
-  mkdir -p "$DEST/agents" "$DEST/commands"
-  cp -r runtimes/claude/agents/* "$DEST/agents/"
+  DEST="$PWD/.claude"                       # or $HOME/.claude with --scope user
+  mkdir -p "$DEST/agents" "$DEST/commands" "$DEST/skills"
+  cp -r runtimes/claude/agents/*   "$DEST/agents/"
   cp -r runtimes/claude/commands/* "$DEST/commands/"
+  cp -r runtimes/claude/skills/*   "$DEST/skills/"
   cp runtimes/claude/CLAUDE.md "$PWD/CLAUDE.md"
-  echo "Claude Code: instalado em $DEST"
 }
 
 install_copilot() {
   DEST="$PWD/.github"
   mkdir -p "$DEST/agents" "$DEST/prompts"
-  cp -r runtimes/copilot/agents/* "$DEST/agents/"
+  cp -r runtimes/copilot/agents/*  "$DEST/agents/"
   cp -r runtimes/copilot/prompts/* "$DEST/prompts/"
   cp runtimes/copilot/copilot-instructions.md "$DEST/copilot-instructions.md"
-  echo "Copilot: instalado em $DEST"
 }
 
 install_antigravity() {
-  if [[ "$SCOPE" == *"user"* ]]; then
-    DEST="$HOME/.gemini/antigravity"
-  else
-    DEST="$PWD/.gemini/antigravity"
-  fi
+  DEST="$PWD/.gemini/antigravity"           # or $HOME/... with --scope user
   mkdir -p "$DEST/skills"
   cp -r runtimes/antigravity/skills/* "$DEST/skills/"
   cp runtimes/antigravity/agents.md "$PWD/agents.md"
-  echo "Antigravity: instalado em $DEST"
 }
 
-case "$RUNTIME" in
-  claude)      install_claude ;;
-  copilot)     install_copilot ;;
-  antigravity) install_antigravity ;;
-  all)         install_claude && install_copilot && install_antigravity ;;
-  *)           echo "runtime invalido: $RUNTIME"; exit 1 ;;
-esac
+install_opencode() {
+  DEST="$PWD/.opencode"                     # or $HOME/.config/opencode with --scope user
+  mkdir -p "$DEST/agents" "$DEST/commands" "$DEST/skills"
+  cp -r runtimes/opencode/agents/*   "$DEST/agents/"
+  cp -r runtimes/opencode/commands/* "$DEST/commands/"
+  cp -r runtimes/opencode/skills/*   "$DEST/skills/"
+  cp runtimes/opencode/AGENTS.md "$PWD/AGENTS.md"
+  # + opencode.jsonc generated from opencode.example.jsonc if absent
+}
 ```
 
-## Diferencas que precisam de attention
+## Differences that need attention
 
 ### 1. AskUserQuestion
-- **Claude:** tool nativo
-- **Copilot:** `vscode_askquestions` (equivalente)
-- **Antigravity:** sem equivalente formal — skill instrui agente a fazer pergunta em chat normal
+- **Claude:** native tool
+- **Copilot:** `vscode_askquestions` (equivalent)
+- **Antigravity:** no formal equivalent — the skill instructs the agent to ask in normal chat
 
-JDI core escreve abstracao "ASK_USER" no prompt. Adapter substitui.
+JDI core writes an "ASK_USER" abstraction in the prompt. The adapter substitutes it.
 
 ### 2. Bash execution
-- **Claude:** tool `Bash` com sandbox/permissions
-- **Copilot:** tool execute_shell limitado
-- **Antigravity:** scripts em `scripts/` invocaveis via path
+- **Claude:** `Bash` tool with sandbox/permissions
+- **Copilot:** limited execute_shell tool
+- **Antigravity:** scripts in `scripts/` invokable via path
 
-JDI core usa pseudocode bash. Adapter envolve no formato certo.
+JDI core uses bash pseudocode. The adapter wraps it in the right format.
 
 ### 3. Web access
 - **Claude:** WebSearch + WebFetch
-- **Copilot:** acesso via plugin/MCP
-- **Antigravity:** acesso direto, ferramentas variam
+- **Copilot:** access via plugin/MCP
+- **Antigravity:** direct access, tools vary
 
-JDI core usa "WEB_FETCH(<url>)" e "WEB_SEARCH(<query>)". Adapter mapeia.
+JDI core uses "WEB_FETCH(<url>)" and "WEB_SEARCH(<query>)". The adapter maps them.
 
 ### 4. MCP / ctx7
-**Claude e Copilot suportam MCP nativamente.** Antigravity tem suporte parcial.
+**Claude and Copilot support MCP natively.** Antigravity has partial support.
 
-JDI usa `ctx7` como fallback CLI universal — funciona em todos. Os agentes preferem ctx7 quando MCP nao disponivel.
+JDI uses `ctx7` as a universal CLI fallback — works everywhere. Agents prefer ctx7 when MCP is unavailable.
 
-## Comportamento minimo garantido
+## Guaranteed minimum behavior
 
-Cada agente JDI **deve** funcionar com:
-- Read, Write, Edit, Bash (qualquer subset)
-- Sem MCP
-- Sem hooks
-- Sem AskUserQuestion (degrada pra prompt textual)
+Every JDI agent **must** work with:
+- Read, Write, Edit, Bash (any subset)
+- No MCP
+- No hooks
+- No AskUserQuestion (degrades to a textual prompt)
 
-Isso garante que mesmo no runtime mais restrito (Antigravity sem MCP, ou Copilot CLI), o agente roda.
+This guarantees that even on the most restricted runtime (Antigravity without MCP, or Copilot CLI), the agent runs.
 
-Fallbacks documentados em cada agente em `core/agents/<n>.md`:
+Fallbacks documented per agent in `core/agents/<n>.md`:
 
 ```markdown
 <fallbacks>
-- Sem AskUserQuestion -> imprime opcoes numeradas, espera resposta de texto
-- Sem ctx7 -> WebSearch oficial docs como fallback
-- Sem WebSearch -> usa training knowledge tagged [ASSUMED]
+- No AskUserQuestion -> print numbered options, wait for text answer
+- No ctx7 -> WebSearch official docs as fallback
+- No WebSearch -> use training knowledge tagged [ASSUMED]
 </fallbacks>
 ```
 
-## Sequencia de install
+## Install sequence
 
 **Linux / macOS / WSL:**
 
@@ -390,14 +399,14 @@ cd jdi
 # Build adapters
 ./bin/jdi-build.sh
 
-# Instala no(s) runtime(s) que voce usa
+# Install into the runtime(s) you use
 ./bin/jdi-install.sh claude --scope user
 ./bin/jdi-install.sh copilot --scope project
 ./bin/jdi-install.sh antigravity --scope user
 ./bin/jdi-install.sh opencode --scope user
 ```
 
-**Windows (PowerShell nativo):**
+**Windows (native PowerShell):**
 
 ```powershell
 git clone https://github.com/<user>/jdi.git
@@ -406,54 +415,56 @@ cd jdi
 # Build adapters
 .\bin\jdi-build.ps1
 
-# Instala no(s) runtime(s) que voce usa
+# Install into the runtime(s) you use
 .\bin\jdi-install.ps1 -Runtime claude -Scope user
 .\bin\jdi-install.ps1 -Runtime copilot -Scope project
 .\bin\jdi-install.ps1 -Runtime antigravity -Scope user
 .\bin\jdi-install.ps1 -Runtime opencode -Scope user
 ```
 
-Pra projetos novos: `jdi-install.sh all --scope project` (ou `.ps1 -Runtime all -Scope project`) deixa todos os 4 runtimes prontos no projeto.
+Or via the npm package, no clone needed: `npx -y jdi-cli install <runtime> [--scope user|project] [--githooks]`.
 
-### Equivalencia entre `.sh` e `.ps1`
+For new projects: `jdi install all --scope project` leaves all 4 runtimes ready in the project. Add `--githooks` to also copy the no-op git hooks to `.githooks/` (opt-in).
+
+### `.sh` / `.ps1` equivalence
 
 | Bash (Linux/Mac/WSL) | PowerShell (Windows) |
 |---|---|
 | `./bin/jdi-build.sh [runtime]` | `.\bin\jdi-build.ps1 [-Target runtime]` |
-| `./bin/jdi-install.sh <runtime> --scope <s>` | `.\bin\jdi-install.ps1 -Runtime <runtime> -Scope <s>` |
+| `./bin/jdi-install.sh <runtime> --scope <s> [--githooks]` | `.\bin\jdi-install.ps1 -Runtime <runtime> -Scope <s> [-Githooks]` |
 | `./bin/jdi-doctor.sh [--verbose]` | `.\bin\jdi-doctor.ps1 [-Verbose]` |
 
-Os scripts geram exatamente os mesmos arquivos em `runtimes/`. Voce pode rodar `.sh` em uma maquina e `.ps1` em outra — output identico.
+The scripts generate exactly the same files in `runtimes/`. You can run `.sh` on one machine and `.ps1` on another — identical output.
 
 ### Cache breakpoints (prompt caching)
 
-JDI ships uma convencao de prompt cache via frontmatter `cache_breakpoints:` nos templates `doer-specialist.md` e `reviewer-specialist.md`. Lista de paths estaveis (PROJECT.md, DECISIONS.md, body do specialist) que valem como prefix de cache.
+JDI ships a prompt-cache convention via `cache_breakpoints:` frontmatter in the `doer-specialist.md` and `reviewer-specialist.md` templates. A list of stable paths (PROJECT.md, DECISIONS.md, specialist body) that qualify as a cache prefix.
 
-**Suporte por runtime:**
+**Support per runtime:**
 
-| Runtime | Suporte | Como usar |
+| Runtime | Support | How |
 |---|---|---|
-| Claude Code | sim — `cache_control` na API | Harness aplica em system prompt + tool defs automaticamente quando o subagent eh spawned |
-| OpenCode | sim — passa-se ao provider Anthropic | Habilitado por default em providers que suportam |
-| Copilot | n/a | Sem cache control no GHCP. Frontmatter eh ignorado |
-| Antigravity | n/a | Sem cache control. Frontmatter eh ignorado |
+| Claude Code | yes — `cache_control` in the API | Harness applies it to system prompt + tool defs automatically when the subagent is spawned |
+| OpenCode | yes — passed through to the Anthropic provider | Enabled by default on providers that support it |
+| Copilot | n/a | No cache control in GHCP. Frontmatter is ignored |
+| Antigravity | n/a | No cache control. Frontmatter is ignored |
 
-A convencao eh **declarativa**: frontmatter declara o que **nao muda** entre tasks da mesma phase. Runtimes que entendem usam — outros ignoram sem warning. Zero codigo. Zero dep.
+The convention is **declarative**: the frontmatter declares what **does not change** between tasks of the same phase. Runtimes that understand it use it — others ignore it without warning. Zero code. Zero deps.
 
-**Por que vale a pena:** prefix-match cache hit corta 70-80% do custo de input tokens em fluxos multi-task da mesma phase (Claude API: cache write 1.25x, cache read 0.1x).
+**Why it pays off:** a prefix-match cache hit cuts 70-80% of input-token cost in multi-task flows within the same phase (Claude API: cache write 1.25x, cache read 0.1x).
 
-## Limitacoes conhecidas
+## Known limitations
 
-| Limitacao | Workaround |
+| Limitation | Workaround |
 |---|---|
-| Copilot/Antigravity sem hooks de runtime | git hooks em `.githooks/` |
-| Antigravity sem restricao de tools | convencao via prosa no SKILL.md |
-| Copilot prompts file invocados manualmente, nao auto | usuario tem que digitar `/jdi-discuss` — sem auto-advance |
-| OpenCode model id verboso | runtime_overrides.opencode.model declara explicito |
-| OpenCode permission por verbo (edit/bash/write) | mapeia 1:1 — sem perda de granularidade |
-| Antigravity discovery por trigger -> falsos positivos | triggers especificos com prefixo `jdi-` |
-| Modelos diferentes por runtime | `runtime_overrides` no frontmatter declara intent |
-| Tools com nomes diferentes (Read vs read_file) | adapter normaliza por runtime |
+| Copilot/Antigravity without runtime hooks | git hooks in `.githooks/` (opt-in via `--githooks`) |
+| Antigravity without tool restriction | convention via prose in SKILL.md |
+| Copilot prompt files invoked manually, not auto | user has to type `/jdi-discuss` — no auto-advance |
+| OpenCode verbose model id | `runtime_overrides.opencode.model` declares it explicitly |
+| OpenCode per-verb permission (edit/bash/write) | maps 1:1 — no granularity loss |
+| Antigravity trigger discovery -> false positives | specific triggers with the `jdi-` prefix |
+| Different models per runtime | `runtime_overrides` frontmatter declares intent |
+| Tools with different names (Read vs read_file) | adapter normalizes per runtime |
 
 ## Sources
 

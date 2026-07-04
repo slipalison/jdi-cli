@@ -1,6 +1,6 @@
 ---
 name: jdi-ship
-description: Finalizes phase after verify. Updates ROADMAP.md, marks phase as done, advances pointer to next. Accepts slug or position.
+description: Finalizes phase after verify. Writes the SHIPPED.md marker in the phase folder, advances STATE hint to next phase. ROADMAP.md untouched (conflict-free for teams). Accepts slug or position.
 argument_hint: "<slug|position>"
 runtime_intent:
   invokes_agent: none
@@ -18,7 +18,7 @@ runtime_overrides:
 ---
 
 <objective>
-Finalizes phase after /jdi-verify approves. Updates ROADMAP.md (phase: done), advances STATE to next phase, final commit.
+Finalizes phase after /jdi-verify approves. Writes phases/<slug>/SHIPPED.md (the derived-status "done" marker), advances the STATE hint to the next phase, final commit. ROADMAP.md is not edited — parallel developers shipping different phases never conflict.
 </objective>
 
 <arguments>

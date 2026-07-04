@@ -1,141 +1,141 @@
 # JDI — Extension
 
-Como evoluir o JDI sem inflar. 2 caminhos:
+How to evolve JDI without bloating it. 2 paths:
 
-1. **Per-project specialists** (`/jdi-bootstrap`) — gera doer/reviewer customizados pro projeto. Caminho normal.
-2. **Agents/skills genericos no core** (`/jdi-create`) — cria agent ou skill novo no `core/`. So contributors do JDI fonte.
+1. **Per-project specialists** (`/jdi-bootstrap`) — generates doer/reviewer customized for the project. The normal path.
+2. **Generic agents/skills in core** (`/jdi-create`) — creates a new agent or skill in `core/`. JDI source contributors only.
 
-## Caminho 1: `/jdi-bootstrap` (per-project)
+## Path 1: `/jdi-bootstrap` (per-project)
 
-Roda no projeto consumindo JDI, apos `/jdi-new`.
+Runs in the project consuming JDI, after `/jdi-new` (or `/jdi-adopt`).
 
 ```
-cd meu-projeto
-/jdi-new "API REST .NET 10"
+cd my-project
+/jdi-new "REST API .NET 10"
 /jdi-bootstrap
 ```
 
-Architect modo specialist:
-1. Le `.jdi/PROJECT.md`
-2. Faz 6 perguntas (test framework, build/test commands, coverage min, lint, conventions)
-3. Gera `.jdi/agents/jdi-doer-{slug}.md` e `.jdi/agents/jdi-reviewer-{slug}.md`
-4. Atualiza routing
+Architect specialist mode:
+1. Reads `.jdi/PROJECT.md`
+2. Asks 6 questions (test framework, build/test commands, coverage min, lint, conventions)
+3. Generates `.jdi/agents/jdi-doer-{slug}.md` and `.jdi/agents/jdi-reviewer-{slug}.md`
+4. Updates routing
 5. Commit
 
-Doer/reviewer ficam **pequenos** (~150-200 linhas cada) porque so cobrem 1 stack.
+Doer/reviewer stay **small** (~150-200 lines each) because each covers 1 stack.
 
 ### Multi-stack (frontend + backend)
 
-Atualmente `/jdi-bootstrap` cria 1 doer agregado. Pra projetos com backend + frontend:
+Multi-specialist support is **native**:
 
-**Workaround atual:**
-- Doer agregado conhece ambas stacks (mais verbose, ainda menor que doer 100% generico)
-- OU: rode `/jdi-bootstrap` 2 vezes com slugs distintos (ex: `myapp-backend` + `myapp-frontend`)
-- Doer correto invocado por matching de `files_modified` no PLAN.md (futuro: `/jdi-do` faz routing automatico)
+- `/jdi-bootstrap` Step 2.7 auto-detects fullstack projects from PROJECT.md and offers N specialist pairs (default suggestion: backend + frontend), each with a `stack_label` + `file_glob` (e.g. `**/*.{cs,csproj,sln}` vs `**/*.{ts,tsx,css}`).
+- `/jdi-plan` assigns every task a `**Specialist:**` field via file-glob match against `.jdi/specialists.md`; tasks spanning 2+ specialists are split into per-specialist sub-tasks.
+- `/jdi-do` dispatches each task to its own specialist — different specialists can run in parallel within a wave (disjoint `files_modified`).
+- `/jdi-verify` chains the reviewers sequentially (build/test commands may conflict on ports/locks); each writes its own REVIEW.md segment, aggregate verdict = worst case.
 
-**Roadmap:** multi-doer nativo em versao futura.
+Single-stack (1 pair) remains the default for ~90% of projects.
 
-## Caminho 2: `/jdi-create` (core)
+## Path 2: `/jdi-create` (core)
 
-So contributors do JDI fonte usam. Cria agent ou skill GENERICO no `core/`.
+JDI source contributors only. Creates a GENERIC agent or skill in `core/`. Guarded: the command refuses to run unless `package.json` has `"name": "jdi-cli"` (i.e. you are inside the jdi-cli source repo).
 
 ```
 cd /path/to/jdi-source
-/jdi-create "skill com convencoes EF Core 9"
-/jdi-create "specialist pra Rust com cargo + clippy"
+/jdi-create "skill with EF Core 9 conventions"
+/jdi-create "specialist for Rust with cargo + clippy"
 ```
 
-Architect modo create:
-1. 8 perguntas (problema, trigger, input, output, reuso, decision-loop, custo, tools)
-2. Classificacao automatica:
-   - `agent` — tem decision loop proprio
-   - `skill` — procedimento reusavel sem loop
+Architect create mode:
+1. 8 questions (problem, trigger, input, output, reuse, decision-loop, cost, tools)
+2. Automatic classification:
+   - `agent` — has its own decision loop
+   - `skill` — reusable procedure without a loop
    - `composite` — agent + skill
-3. Validacao com user (approve / edit / cancel)
-4. Geracao em `core/agents/` ou `core/skills/`
+3. Validation with user (approve / edit / cancel)
+4. Generation in `core/agents/` or `core/skills/`
 5. Build + install
-6. Commit + audit em `.jdi/registry.md`
+6. Commit + audit in `.jdi/registry.md`
 
-## Anti-padroes
+## Anti-patterns
 
-Architect bloqueia ou avisa em:
+The architect blocks or warns on:
 
-- **Nome generico** ("review-code", "doer", "checker") — pede foco especifico
-- **Specialist por feature** ("auth-specialist") — redireciona pra phase
-- **Skill > 500 linhas estimadas** — sugere agent
-- **Agent sem decision loop** — sugere skill
-- **Soft cap > 15 agents core ou > 25 skills** — avisa, nao bloqueia
-- **Nome colide com agent/skill existente** — obriga renomear
+- **Generic name** ("review-code", "doer", "checker") — asks for a specific focus
+- **Specialist per feature** ("auth-specialist") — redirects to a phase
+- **Skill > 500 estimated lines** — suggests an agent
+- **Agent without a decision loop** — suggests a skill
+- **Soft cap > 15 core agents or > 25 skills** — warns, does not block
+- **Name collides with an existing agent/skill** — forces a rename
 
-## Quando criar agent vs skill
+## When to create an agent vs a skill
 
-| Pergunta | Agent | Skill |
+| Question | Agent | Skill |
 |---|---|---|
-| Tem decision loop? | sim | nao |
-| Multiplos callers? | nao (1 caller fica natural) | sim (varios agents reusam) |
-| Output proprio (file)? | sim | nao (modifica pai) |
-| Privilegios proprios? | sim | herda do pai |
-| Tamanho tipico | 100-500 linhas | 50-200 linhas |
+| Has a decision loop? | yes | no |
+| Multiple callers? | no (1 caller is natural) | yes (several agents reuse it) |
+| Own output (file)? | yes | no (modifies the parent's) |
+| Own privileges? | yes | inherits from parent |
+| Typical size | 100-500 lines | 50-200 lines |
 
-Em duvida -> agent. Refatora pra skill depois se virar reusavel.
+In doubt -> agent. Refactor into a skill later if it becomes reusable.
 
-## Quando criar specialist vs usar generico
+## When to create a specialist vs use a generic doer
 
-| Cenario | Specialist | Doer generico |
+| Scenario | Specialist | Generic doer |
 |---|---|---|
-| Stack conhecida e estavel | x | - |
-| Multi-stack mesmo projeto | x (1 por stack) | - |
-| Convencoes especificas (naming, error handling) | x | - |
-| Codigo legacy com regras unicas | x | - |
-| Projeto experimental, nao definido | - | x |
-| POC rapido (vai jogar fora) | - | x |
+| Known, stable stack | x | - |
+| Multi-stack in the same project | x (1 per stack) | - |
+| Specific conventions (naming, error handling) | x | - |
+| Legacy code with unique rules | x | - |
+| Experimental, undefined project | - | x |
+| Quick throwaway POC | - | x |
 
-JDI default = specialist. Generico eh fallback.
+JDI default = specialist. Generic is the fallback.
 
-## Checklist pra novo specialist
+## Checklist for a new specialist
 
-Apos `/jdi-bootstrap` rodar, conferir:
+After `/jdi-bootstrap` runs, check:
 
-- [ ] `.jdi/agents/jdi-doer-{slug}.md` existe e tem regras especificas (nao default genericas)
-- [ ] `.jdi/agents/jdi-reviewer-{slug}.md` existe com gates 1-6 customizados
-- [ ] `.jdi/specialists.md` tem linha do doer
-- [ ] `.jdi/reviewers.md` tem linha do reviewer
-- [ ] `.jdi/registry.md` tem entrada R-N audit trail
-- [ ] STATE.md tem `specialists_ready: true`
+- [ ] `.jdi/agents/jdi-doer-{slug}.md` exists and has specific rules (not generic defaults)
+- [ ] `.jdi/agents/jdi-reviewer-{slug}.md` exists with gates 1-8 customized
+- [ ] `.jdi/specialists.md` has the doer row (one per stack if multi-stack)
+- [ ] `.jdi/reviewers.md` has the reviewer row
+- [ ] `.jdi/registry.md` has the R-N audit entry
+- [ ] STATE.md has `specialists_ready: true`
 
-Se algum falta, rode bootstrap de novo (idempotente — pergunta antes de sobrescrever).
+If something is missing, run bootstrap again (idempotent — asks before overwriting).
 
-## Checklist pra novo agent core
+## Checklist for a new core agent
 
-Apos `/jdi-create` rodar, conferir:
+After `/jdi-create` runs, check:
 
-- [ ] `core/agents/jdi-{nome}.md` ou `core/skills/{nome}/SKILL.md` existe
-- [ ] Frontmatter completo (name, description, runtime_intent, tools_canonical, triggers, runtime_overrides)
-- [ ] `<role>`, `<process>`, `<rules>`, `<output>` blocks presentes
-- [ ] Build rodou (runtimes/ tem o agent novo nos 4 runtimes)
-- [ ] Install rodou (runtime ativo tem o agent)
-- [ ] `.jdi/registry.md` tem entrada R-N
+- [ ] `core/agents/jdi-{name}.md` or `core/skills/{name}/SKILL.md` exists
+- [ ] Frontmatter complete (name, description, runtime_intent, tools_canonical, triggers, runtime_overrides)
+- [ ] `<role>`, `<process>`, `<rules>`, `<output>` blocks present
+- [ ] Build ran (runtimes/ has the new agent in all 4 runtimes)
+- [ ] Install ran (active runtime has the agent)
+- [ ] `.jdi/registry.md` has the R-N entry
 
-## Manutencao
+## Maintenance
 
-Specialists envelhecem com o projeto (stack muda, conventions evoluem). Pra atualizar:
+Specialists age with the project (stack changes, conventions evolve). To update:
 
 ```
-# Edita manual:
+# Manual edit:
 edit .jdi/agents/jdi-doer-{slug}.md
 
-# OU: regera (perde customizacoes manuais)
+# OR: regenerate (loses manual customizations)
 rm .jdi/agents/jdi-doer-{slug}.md
 /jdi-bootstrap
 ```
 
-Recomendacao: edita manual pra mudancas pequenas (novas conventions). Regera so se stack mudou drasticamente.
+Recommendation: edit manually for small changes (new conventions). Regenerate only if the stack changed drastically.
 
-## Limites duros
+## Hard limits
 
-- Max 5 agents core (atual: 5)
-- Max 4 templates em `core/templates/` (atual: 4)
-- Soft cap 25 skills core (atual: 0 — JDI nao usa skills no core ainda)
-- Per-project: sem limite formal de specialists (mas projeto realista tem 1-3)
+- Soft cap 15 core agents (current: 6) — architect warns above it, does not block
+- Max 5 templates in `core/templates/` (current: 5 — agent, skill, doer-specialist, reviewer-specialist, dod-schema)
+- Soft cap 25 core skills (current: 13 — code-design enforcement + principles + frontend rules)
+- Per-project: no formal limit on specialists (a realistic project has 1-3 pairs)
 
-JDI cresce **com cuidado**. Se vai passar dos limites, considera fork dedicado em vez de inflar o core.
+JDI grows **carefully**. If you are about to exceed the caps, consider a dedicated fork instead of bloating the core.

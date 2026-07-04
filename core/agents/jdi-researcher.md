@@ -248,7 +248,7 @@ Decided in /jdi-new. Do not change.
 
 ## Definition of Done
 
-**LOCKED — project-wide baseline.** Inherited by every phase's reviewer (Gate 7). Change requires a new D-XX in DECISIONS.md plus manual edit here.
+**LOCKED — project-wide baseline.** Inherited by every phase's reviewer (Gate 8). Change requires a new D-XX in DECISIONS.md plus manual edit here.
 
 ### Auto-verifiable
 - [ ] {criterion text}

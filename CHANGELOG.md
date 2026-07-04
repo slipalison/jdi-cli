@@ -66,7 +66,7 @@ Existing installs that already have `.claude/hooks/jdi-*.js` on disk are unaffec
 - E2E test (`jdi-poc-todo/test-update-notifier.sh`, 32 checks) verifies a pre-existing `settings.json` (with `PreToolUse` hooks, `model` setting) is **byte-identical** before and after `jdi install`.
 
 ### Architecture credit
-- Update-notifier pattern adapted from `gsd-build/get-shit-done`'s hook architecture (`hooks/gsd-check-update*.js` + `hooks/gsd-update-banner.js`). Cache location and JSON envelope shape are JDI-namespaced.
+- Update-notifier pattern adapted from the hook architecture of an external agentic framework studied during development. Cache location and JSON envelope shape are JDI-namespaced.
 
 ## [0.1.9] - 2026-05-21
 

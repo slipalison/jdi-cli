@@ -116,7 +116,7 @@ Read `core/templates/dod-schema.md` rules before starting. Follow the loop proto
 
 1. **Priority 2 — Derived from D-XX (this session):** for each decision captured in Stage 1, propose 0-2 DoD items per the mapping in the schema (stack → test command; endpoint → integration test; external service → mock or contract; schema/migration → reverse-test). Cap subtotal at 4.
 2. **Priority 3 — Phase-type templates:** infer phase-type from the ROADMAP goal verb (feature / refactor / infra / docs / bugfix / unknown) and fill remaining slots until reaching 5 candidates.
-3. **Priority 1 — Baseline inheritance** is NOT proposed as candidate. Items in `PROJECT.md § Definition of Done` are inherited automatically by the reviewer in Gate 7; do not re-ask.
+3. **Priority 1 — Baseline inheritance** is NOT proposed as candidate. Items in `PROJECT.md § Definition of Done` are inherited automatically by the reviewer in Gate 8; do not re-ask.
 
 If fewer than 5 candidates can be derived, propose what you have. Do not pad with vague placeholders.
 
