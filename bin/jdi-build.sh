@@ -12,7 +12,11 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CORE="${ROOT}/core"
 OUT="${ROOT}/runtimes"
 TARGET="${1:-all}"
+# Repeated literals extracted to constants (S1192)
 readonly ANTIGRAVITY="antigravity"
+readonly RT_CLAUDE="$RT_CLAUDE"
+readonly RT_OPENCODE="$RT_OPENCODE"
+readonly K_DESC="description"
 
 ensure_dirs() {
   mkdir -p "${OUT}/claude/agents" "${OUT}/claude/commands" "${OUT}/claude/skills"
@@ -33,48 +37,53 @@ ensure_dirs() {
 # Everything after the closing `---` of the frontmatter (body verbatim,
 # including any `---` horizontal rules inside it).
 extract_body() {
+  local file="$1"
   awk '
     fm >= 2 { print; next }
     /^---$/ { fm++ }
-  ' "$1"
+  ' "$file"
 }
 
 # Scalar value of a top-level frontmatter key (e.g. description).
-base_fm_value() { # <file> <key>
-  awk -v key="$2" '
+base_fm_value() {
+  local file="$1" key="$2"
+  awk -v key="$key" '
     /^---$/ { fm++; if (fm == 2) exit; next }
     fm == 1 && index($0, key ":") == 1 {
       sub("^" key ":[[:space:]]*", ""); print; exit
     }
-  ' "$1"
+  ' "$file"
 }
 
 # Multiline block of a top-level frontmatter key (key line + indented lines).
-base_fm_block() { # <file> <key>
-  awk -v key="$2" '
+base_fm_block() {
+  local file="$1" key="$2"
+  awk -v key="$key" '
     /^---$/ { fm++; if (fm == 2) exit; next }
     fm == 1 && $0 == key ":" { b = 1; print; next }
     b && /^[^ \t]/ { b = 0 }
     b && /^[[:space:]]+[^ \t]/ { print }
-  ' "$1"
+  ' "$file"
 }
 
 # Scalar under runtime_overrides.<runtime> (4-space keys).
-override_scalar() { # <file> <runtime> <key>
-  awk -v rt="$2" -v key="$3" '
+override_scalar() {
+  local file="$1" rt="$2" key="$3"
+  awk -v rt="$rt" -v key="$key" '
     /^---$/ { fm++; if (fm == 2) exit; next }
     fm == 1 && $0 == "  " rt ":" { r = 1; next }
     r && /^  [a-z_-]+:/ { r = 0 }
     r && index($0, "    " key ":") == 1 {
       sub("^    " key ":[[:space:]]*", ""); print; exit
     }
-  ' "$1"
+  ' "$file"
 }
 
 # Sub-block under runtime_overrides.<runtime>.<subkey>: emits the 6-space
 # child lines re-indented to 2 spaces (same as the ps1 SubBlocks strip).
-override_block() { # <file> <runtime> <subkey>
-  awk -v rt="$2" -v sub_key="$3" '
+override_block() {
+  local file="$1" rt="$2" sub_key="$3"
+  awk -v rt="$rt" -v sub_key="$sub_key" '
     /^---$/ { fm++; if (fm == 2) exit; next }
     fm == 1 && $0 == "  " rt ":" { r = 1; next }
     r && /^  [a-z_-]+:/ { r = 0 }
@@ -82,7 +91,7 @@ override_block() { # <file> <runtime> <subkey>
     b && /^    [a-z_]+:/ { b = 0 }
     b && /^[[:space:]]*-[[:space:]]+/ { sub(/^[[:space:]]*/, "  "); print; next }
     b && /^      / { sub(/^[[:space:]]{6}/, "  "); print }
-  ' "$1"
+  ' "$file"
 }
 
 build_claude_agent() {
@@ -91,9 +100,9 @@ build_claude_agent() {
   local dst="${OUT}/claude/agents/${name}.md"
 
   local desc model tools
-  desc=$(base_fm_value "$src" "description")
-  model=$(override_scalar "$src" "claude" "model")
-  tools=$(override_scalar "$src" "claude" "tools")
+  desc=$(base_fm_value "$src" "$K_DESC")
+  model=$(override_scalar "$src" "$RT_CLAUDE" "model")
+  tools=$(override_scalar "$src" "$RT_CLAUDE" "tools")
 
   {
     echo "---"
@@ -114,7 +123,7 @@ build_copilot_agent() {
   local dst="${OUT}/copilot/agents/${name}.agent.md"
 
   local desc model tools
-  desc=$(base_fm_value "$src" "description")
+  desc=$(base_fm_value "$src" "$K_DESC")
   model=$(override_scalar "$src" "copilot" "model")
   tools=$(override_scalar "$src" "copilot" "tools")
 
@@ -140,7 +149,7 @@ build_antigravity_skill() {
   mkdir -p "$skill_dir/references" "$skill_dir/scripts"
 
   local desc triggers_block extras
-  desc=$(base_fm_value "$src" "description")
+  desc=$(base_fm_value "$src" "$K_DESC")
   triggers_block=$(base_fm_block "$src" "triggers")
   extras=$(override_block "$src" "antigravity" "triggers_extra")
 
@@ -165,11 +174,11 @@ build_opencode_agent() {
   local dst="${OUT}/opencode/agents/${name}.md"
 
   local desc mode model temperature perm
-  desc=$(base_fm_value "$src" "description")
-  mode=$(override_scalar "$src" "opencode" "mode")
-  model=$(override_scalar "$src" "opencode" "model")
-  temperature=$(override_scalar "$src" "opencode" "temperature")
-  perm=$(override_block "$src" "opencode" "permission")
+  desc=$(base_fm_value "$src" "$K_DESC")
+  mode=$(override_scalar "$src" "$RT_OPENCODE" "mode")
+  model=$(override_scalar "$src" "$RT_OPENCODE" "model")
+  temperature=$(override_scalar "$src" "$RT_OPENCODE" "temperature")
+  perm=$(override_block "$src" "$RT_OPENCODE" "permission")
 
   {
     echo "---"
@@ -281,7 +290,7 @@ main() {
 
   echo "JDI build — gerando runtimes a partir de core/"
 
-  if [[ "$TARGET" == "claude" || "$TARGET" == "all" ]]; then
+  if [[ "$TARGET" == "$RT_CLAUDE" || "$TARGET" == "all" ]]; then
     echo
     echo "claude:"
     for f in "$CORE"/agents/*.md; do
@@ -305,7 +314,7 @@ main() {
     done
   fi
 
-  if [[ "$TARGET" == "opencode" || "$TARGET" == "all" ]]; then
+  if [[ "$TARGET" == "$RT_OPENCODE" || "$TARGET" == "all" ]]; then
     echo
     echo "opencode:"
     for f in "$CORE"/agents/*.md; do
@@ -327,11 +336,11 @@ main() {
       [[ ! -d "$skill_dir" ]] && continue
       skill_name=$(basename "$skill_dir")
 
-      if [[ "$TARGET" == "claude" || "$TARGET" == "all" ]]; then
-        build_standalone_skill "$skill_dir" "claude" "${OUT}/claude/skills/${skill_name}"
+      if [[ "$TARGET" == "$RT_CLAUDE" || "$TARGET" == "all" ]]; then
+        build_standalone_skill "$skill_dir" "$RT_CLAUDE" "${OUT}/claude/skills/${skill_name}"
       fi
-      if [[ "$TARGET" == "opencode" || "$TARGET" == "all" ]]; then
-        build_standalone_skill "$skill_dir" "opencode" "${OUT}/opencode/skills/${skill_name}"
+      if [[ "$TARGET" == "$RT_OPENCODE" || "$TARGET" == "all" ]]; then
+        build_standalone_skill "$skill_dir" "$RT_OPENCODE" "${OUT}/opencode/skills/${skill_name}"
       fi
       if [[ "$TARGET" == "$ANTIGRAVITY" || "$TARGET" == "all" ]]; then
         build_standalone_skill "$skill_dir" "$ANTIGRAVITY" "${OUT}/antigravity/skills/${skill_name}"

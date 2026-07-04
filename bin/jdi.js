@@ -18,6 +18,19 @@ const VALID_SCOPES = ['user', 'project'];
 // Argument parsing — minimal, no deps
 // =================================================================
 
+// Canonical flag key per alias; any other --long keeps its own name.
+const FLAG_ALIAS = {
+  '-s': 'scope', '--scope': 'scope',
+  '-v': 'verbose', '--verbose': 'verbose',
+  '-h': 'help', '--help': 'help',
+  '--no-color': 'noColor',
+};
+const BOOL_FLAGS = new Set(['verbose', 'help', 'version', 'noColor']);
+// Flags whose value is the NEXT token (`--flag value`), besides `--flag=value`.
+// Without this, `--runtime claude` parsed as {runtime:true} + positional
+// "claude" and broke the shell delegation.
+const VALUE_FLAGS = new Set(['scope', 'runtime', 'repo', 'antigravity-scope']);
+
 function parseArgs(argv) {
   const args = argv.slice(2);
   if (args.length === 0) return { cmd: 'help' };
@@ -27,34 +40,23 @@ function parseArgs(argv) {
   const flags = {};
   const positional = [];
 
-  // Flags that take a value as the NEXT token (`--flag value`), besides the
-  // `--flag=value` form. Without this list, `--runtime claude` parsed as
-  // {runtime: true} + positional "claude" and broke the shell delegation.
-  const VALUE_FLAGS = ['runtime', 'repo', 'antigravity-scope'];
-
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
-    if (['--scope', '-s'].includes(a)) {
-      flags.scope = rest[++i];
-    } else if (['--verbose', '-v'].includes(a)) {
-      flags.verbose = true;
-    } else if (['--help', '-h'].includes(a)) {
-      flags.help = true;
-    } else if (a === '--version') {
-      flags.version = true;
-    } else if (a === '--no-color') {
-      flags.noColor = true;
-    } else if (a.startsWith('--')) {
-      const [k, v] = a.slice(2).split('=');
-      if (v !== undefined) {
-        flags[k] = v;
-      } else if (VALUE_FLAGS.includes(k) && rest[i + 1] !== undefined && !rest[i + 1].startsWith('-')) {
-        flags[k] = rest[++i];
-      } else {
-        flags[k] = true;
-      }
+    if (!a.startsWith('-')) { positional.push(a); continue; }
+
+    const eq = a.indexOf('=');
+    const raw = eq === -1 ? a : a.slice(0, eq);
+    const key = FLAG_ALIAS[raw] || raw.replace(/^--?/, '');
+
+    if (eq !== -1) { flags[key] = a.slice(eq + 1); continue; }
+    if (BOOL_FLAGS.has(key)) { flags[key] = true; continue; }
+
+    const next = rest[i + 1];
+    if (VALUE_FLAGS.has(key) && next !== undefined && !next.startsWith('-')) {
+      flags[key] = next;
+      i++;
     } else {
-      positional.push(a);
+      flags[key] = true;
     }
   }
 
@@ -139,8 +141,8 @@ function parseResolverOutput(text) {
   return {
     slug: map.JDI_PHASE_SLUG ?? null,
     dir: map.JDI_PHASE_DIR ?? null,
-    position: map.JDI_PHASE_POSITION != null ? Number(map.JDI_PHASE_POSITION) : null,
-    schema_version: map.JDI_PHASE_SCHEMA != null ? Number(map.JDI_PHASE_SCHEMA) : null,
+    position: map.JDI_PHASE_POSITION == null ? null : Number(map.JDI_PHASE_POSITION),
+    schema_version: map.JDI_PHASE_SCHEMA == null ? null : Number(map.JDI_PHASE_SCHEMA),
     folder_exists: map.JDI_PHASE_FOLDER_EXISTS === 'true',
   };
 }
