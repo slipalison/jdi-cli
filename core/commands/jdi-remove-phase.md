@@ -44,8 +44,6 @@ test -f .jdi/ROADMAP.md || { echo "ROADMAP.md missing."; exit 1; }
 test -f .jdi/STATE.md || { echo "STATE.md missing."; exit 1; }
 
 [ -n "${1:-}" ] || { echo "Phase id required. Usage: /jdi-remove-phase <slug|position> [--force]"; exit 1; }
-
-JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
 ```
 
 PowerShell mirrors via `Test-Path`. Same `$args` parsing.
@@ -53,10 +51,11 @@ PowerShell mirrors via `Test-Path`. Same `$args` parsing.
 ### Step 2: Resolve phase
 
 ```bash
-eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$1") || {
+RESOLVED="$(npx -y jdi-cli resolve-phase "$1")" || {
   echo "Phase '$1' not found in ROADMAP."
   exit 1
 }
+eval "$RESOLVED"
 
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
@@ -66,9 +65,9 @@ PHASE_FOLDER_EXISTS="$JDI_PHASE_FOLDER_EXISTS"
 
 PowerShell:
 ```powershell
-$r = & "$JDI_LIB\jdi-resolve-phase.ps1" -Id $args[0] -AsObject
-if (-not $r) { Write-Error "Phase '$($args[0])' not found in ROADMAP."; exit 1 }
-$phaseSlug = $r.Slug; $phaseDir = $r.Dir; $phasePosition = $r.Position; $phaseFolderExists = $r.FolderExists
+$r = npx -y jdi-cli resolve-phase $args[0] --json | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) { Write-Error "Phase '$($args[0])' not found in ROADMAP."; exit $LASTEXITCODE }
+$phaseSlug = $r.slug; $phaseDir = $r.dir; $phasePosition = $r.position; $phaseFolderExists = $r.folder_exists
 ```
 
 ### Step 3: Read state + hard refuses
@@ -216,7 +215,7 @@ Note: slugs of remaining phases are not changed. Display positions renumbered.
 
 <gates>
 - pre: `.jdi/ROADMAP.md` + `.jdi/STATE.md` exist
-- pre: phase resolves via `jdi-resolve-phase.sh`
+- pre: phase resolves via `npx -y jdi-cli resolve-phase`
 - pre: phase is not the current phase, not past, status != `done`
 - pre: `--force` provided if phase has artifacts
 - post: ROADMAP.md section removed + `total_phases` recomputed + artifacts archived (if any) + DECISIONS.md appended + atomic commit

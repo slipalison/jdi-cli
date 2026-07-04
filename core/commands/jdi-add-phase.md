@@ -54,8 +54,6 @@ Examples:
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new first."; exit 1; }
 test -f .jdi/ROADMAP.md || { echo "ROADMAP.md missing."; exit 1; }
 test -f .jdi/STATE.md || { echo "STATE.md missing."; exit 1; }
-
-JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
 ```
 
 PowerShell mirrors via Test-Path. See `bin/lib/jdi-*.ps1` helpers.
@@ -102,14 +100,14 @@ if [ -z "$SLUG" ]; then
 fi
 
 # Strict validation + uniqueness check
-SLUG=$(bash "$JDI_LIB/jdi-validate-slug.sh" "$SLUG" --check-unique)
+SLUG=$(npx -y jdi-cli validate-slug "$SLUG" --check-unique)
 if [ -z "$SLUG" ]; then
   # validator already printed the error to stderr
   exit $?
 fi
 ```
 
-PowerShell parallel: `& "$JDI_LIB\jdi-validate-slug.ps1" -Slug $slug -CheckUnique`.
+PowerShell parallel: `npx -y jdi-cli validate-slug $slug --check-unique`.
 
 **Validation failures (any aborts before any write):**
 - Invalid shape (uppercase, underscores, leading hyphen, etc.) → exit 1
@@ -131,11 +129,11 @@ CURRENT_PHASE_INT=$(grep -oE 'current_phase:\s*[0-9]+' .jdi/STATE.md | grep -oE 
 
 if [ -n "$BEFORE_SLUG" ]; then
   # Find position of the anchor phase
-  TARGET_POS=$(bash "$JDI_LIB/jdi-resolve-phase.sh" "$BEFORE_SLUG" 2>/dev/null | grep '^JDI_PHASE_POSITION=' | cut -d"'" -f2)
+  TARGET_POS=$(npx -y jdi-cli resolve-phase "$BEFORE_SLUG" 2>/dev/null | grep '^JDI_PHASE_POSITION=' | cut -d"'" -f2)
   [ -z "$TARGET_POS" ] && { echo "ERROR: anchor slug '$BEFORE_SLUG' not found"; exit 1; }
   INSERT_POS=$TARGET_POS
 elif [ -n "$AFTER_SLUG" ]; then
-  TARGET_POS=$(bash "$JDI_LIB/jdi-resolve-phase.sh" "$AFTER_SLUG" 2>/dev/null | grep '^JDI_PHASE_POSITION=' | cut -d"'" -f2)
+  TARGET_POS=$(npx -y jdi-cli resolve-phase "$AFTER_SLUG" 2>/dev/null | grep '^JDI_PHASE_POSITION=' | cut -d"'" -f2)
   [ -z "$TARGET_POS" ] && { echo "ERROR: anchor slug '$AFTER_SLUG' not found"; exit 1; }
   INSERT_POS=$((TARGET_POS + 1))
 else
@@ -214,7 +212,7 @@ Next: /jdi-discuss {slug}
 
 <gates>
 - pre: `.jdi/ROADMAP.md` + `.jdi/STATE.md` exist
-- pre: slug passes shape + reserved + uniqueness checks (`jdi-validate-slug.sh --check-unique`)
+- pre: slug passes shape + reserved + uniqueness checks (`npx -y jdi-cli validate-slug --check-unique`)
 - pre: `--before`/`--after` anchor resolves successfully if provided
 - pre: insert position > current_phase
 - pre: `--at` not used on v2 schema

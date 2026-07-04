@@ -34,8 +34,6 @@ Executes all tasks of the given phase. Reads PLAN.md, groups into waves, dispatc
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new."; exit 1; }
 test -f .jdi/STATE.md || { echo "STATE.md missing."; exit 1; }
 
-JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
-
 # Verify specialist exists
 ls .jdi/agents/jdi-doer-*.md 2>/dev/null | head -1 || {
   echo "Doer specialist missing. Run /jdi-bootstrap."
@@ -46,7 +44,8 @@ ls .jdi/agents/jdi-doer-*.md 2>/dev/null | head -1 || {
 ### Step 2: Resolve phase
 
 ```bash
-eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$1") || { echo "Phase '$1' not found."; exit 1; }
+RESOLVED="$(npx -y jdi-cli resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+eval "$RESOLVED"
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
 PHASE_POSITION="$JDI_PHASE_POSITION"
@@ -55,9 +54,7 @@ PHASE_POSITION="$JDI_PHASE_POSITION"
 test -f "$PHASE_DIR/PLAN.md" || { echo "PLAN.md missing for phase $PHASE_SLUG. Run /jdi-plan $PHASE_SLUG."; exit 1; }
 
 # Context budget warm-up
-if [ -f "$JDI_LIB/jdi-monitor.sh" ]; then
-  bash "$JDI_LIB/jdi-monitor.sh" .jdi/PROJECT.md .jdi/DECISIONS.md "$PHASE_DIR/PLAN.md" "$PHASE_DIR/CONTEXT.md" || true
-fi
+npx -y jdi-cli monitor .jdi/PROJECT.md .jdi/DECISIONS.md "$PHASE_DIR/PLAN.md" "$PHASE_DIR/CONTEXT.md" || true
 ```
 
 ### Step 3: Resolve doer specialist(s)

@@ -30,13 +30,13 @@ Finalizes phase after /jdi-verify approves. Updates ROADMAP.md (phase: done), ad
 ### Step 1: Validation
 ```bash
 test -d .jdi/ || { echo "Not a JDI project."; exit 1; }
-JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
 ```
 
 ### Step 2: Resolve phase
 
 ```bash
-eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$1") || { echo "Phase '$1' not found."; exit 1; }
+RESOLVED="$(npx -y jdi-cli resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+eval "$RESOLVED"
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
 PHASE_POSITION="$JDI_PHASE_POSITION"
@@ -114,7 +114,8 @@ Project delivered.
 
 ```bash
 NEXT_PHASE_SLUG=""
-if eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$NEXT_POSITION" 2>/dev/null); then
+if RESOLVED="$(npx -y jdi-cli resolve-phase "$NEXT_POSITION" 2>/dev/null)"; then
+  eval "$RESOLVED"
   NEXT_PHASE_SLUG="$JDI_PHASE_SLUG"
 fi
 ```
@@ -159,7 +160,8 @@ if [ "$THRESHOLD" -ge 1 ]; then
     }
   ' .jdi/ROADMAP.md | while IFS='|' read -r pos raw_slug; do
     [ "$pos" -le "$THRESHOLD" ] || continue
-    eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$pos" 2>/dev/null) || continue
+    RESOLVED="$(npx -y jdi-cli resolve-phase "$pos" 2>/dev/null)" || continue
+    eval "$RESOLVED"
     [ "$JDI_PHASE_FOLDER_EXISTS" = "true" ] || continue
 
     VERDICT_OLD=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|BLOCKED)' "$JDI_PHASE_DIR/REVIEW.md" 2>/dev/null | awk '{print $2}' || echo "UNKNOWN")

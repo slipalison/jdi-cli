@@ -40,8 +40,6 @@ None.
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new first."; exit 1; }
 test -f .jdi/STATE.md || { echo "STATE.md missing — broken project."; exit 1; }
-
-JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
 ```
 
 ### Step 2: Read state
@@ -67,7 +65,8 @@ TOTAL=$(grep -oE 'total_phases:\s*[0-9]+' .jdi/ROADMAP.md | grep -oE '[0-9]+' ||
 # Resolve phase (handles slug OR int)
 PHASE_DIR=""; PHASE_NAME=""; PHASE_POSITION=""
 if [ -n "$CURRENT_ID" ]; then
-  if eval $(bash "$JDI_LIB/jdi-resolve-phase.sh" "$CURRENT_ID" 2>/dev/null); then
+  if RESOLVED="$(npx -y jdi-cli resolve-phase "$CURRENT_ID" 2>/dev/null)"; then
+    eval "$RESOLVED"
     PHASE_DIR="$JDI_PHASE_DIR"
     PHASE_POSITION="$JDI_PHASE_POSITION"
     CURRENT_SLUG="$JDI_PHASE_SLUG"

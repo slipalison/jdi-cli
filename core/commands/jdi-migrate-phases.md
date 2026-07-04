@@ -95,12 +95,10 @@ Strict checks (any failure aborts migration with a named error):
 
 - **C1 — Folder/ROADMAP parity:** every ROADMAP phase with a folder must match by canonical slug. Mismatch ⇒ abort, list offenders.
 - **C2 — No duplicate canonical slugs:** if two folders have the same canonical slug (e.g. `01-auth/` and `auth/`), abort. User must merge or rename manually.
-- **C3 — No invalid slugs:** every existing slug must pass `bin/lib/jdi-validate-slug.sh` shape rules. Pre-existing malformed slugs (mixed case, underscores) ⇒ abort with a remediation hint (rename + commit before re-running).
+- **C3 — No invalid slugs:** every existing slug must pass `npx -y jdi-cli validate-slug` shape rules. Pre-existing malformed slugs (mixed case, underscores) ⇒ abort with a remediation hint (rename + commit before re-running).
 - **C4 — No orphan folders:** folders without a ROADMAP entry ⇒ warn, do not block (user may have removed phase from ROADMAP without archiving).
 
 ```bash
-JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
-
 errors=0
 phases=()
 
@@ -110,7 +108,7 @@ while IFS=$'\t' read -r pos raw status; do
   canonical=$(echo "$raw" | sed -E 's/^[0-9]+-//')
 
   # Shape check (C3)
-  if ! bash "$JDI_LIB/jdi-validate-slug.sh" "$canonical" >/dev/null 2>&1; then
+  if ! npx -y jdi-cli validate-slug "$canonical" >/dev/null 2>&1; then
     echo "C3 FAIL: phase $pos slug '$canonical' has invalid shape"
     errors=$((errors + 1))
   fi
@@ -239,7 +237,6 @@ If Cancel: exit 0 clean.
 The `legacy: true` flag marks folders still using the v1 naming. Commands use it to know they must use the legacy folder path even when the canonical slug is shorter.
 
 ```bash
-JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/../lib"
 ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 {
