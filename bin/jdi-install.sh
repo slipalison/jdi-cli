@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # jdi-install: copia runtimes/<runtime>/ pra destino do runtime.
-# Uso: ./bin/jdi-install.sh <runtime> [--scope user|project]
-#   runtime: claude | copilot | antigravity | all
-#   scope:   user (global) | project (default)
+# Uso: ./bin/jdi-install.sh <runtime> [--scope user|project] [--githooks]
+#   runtime:    claude | copilot | antigravity | all
+#   scope:      user (global) | project (default)
+#   --githooks: opt-in — copia hooks no-op pra .githooks/ (shell no repo do
+#               consumidor; desligado por padrao pela invariante
+#               no-code-in-consumer-repo)
 
 set -euo pipefail
 
@@ -16,7 +19,12 @@ case "$SCOPE_ARG" in
   *)                                SCOPE=project ;;
 esac
 
-[[ "$2" == "--scope" ]] && SCOPE="${3:-project}"
+[[ "${2:-}" == "--scope" ]] && SCOPE="${3:-project}"
+
+GITHOOKS=0
+for arg in "$@"; do
+  [[ "$arg" == "--githooks" ]] && GITHOOKS=1
+done
 
 install_claude() {
   local dest
@@ -126,7 +134,12 @@ case "$RUNTIME" in
   *)           echo "runtime invalido: $RUNTIME"; exit 1 ;;
 esac
 
-install_githooks
+# Opt-in: shell scripts no repo do consumidor so com pedido explicito.
+if [[ "$GITHOOKS" -eq 1 ]]; then
+  install_githooks
+else
+  echo "  (git hooks nao instalados — opcional via --githooks)"
+fi
 
 # Escreve .jdi/VERSION pra rastreio em updates futuros
 if [[ -d "$PWD/.jdi" ]]; then

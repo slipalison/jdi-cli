@@ -238,6 +238,7 @@ async function cmdInstall({ positional, flags }) {
   const args = isWindows
     ? ['-Runtime', runtime, '-Scope', scope]
     : [runtime, '--scope', scope];
+  if (flags.githooks) args.push(isWindows ? '-Githooks' : '--githooks');
 
   const sp = ui.spinner(`Instalando adapters em ${runtime}...`);
   sp.stop();
@@ -455,6 +456,7 @@ async function cmdHelp() {
 
   console.log(`${c.bold}Opcoes:${c.reset}`);
   console.log(`  ${c.cyan}--scope${c.reset} ${c.gray}<user|project|both>${c.reset}  Escopo (default install: project; default uninstall: both)`);
+  console.log(`  ${c.cyan}--githooks${c.reset}             Install: copia hooks no-op pra .githooks/ (opt-in)`);
   console.log(`  ${c.cyan}--verbose${c.reset}              Output detalhado (so doctor)`);
   console.log(`  ${c.cyan}--dry-run${c.reset}              Mostra o que faria sem aplicar (update, uninstall)`);
   console.log(`  ${c.cyan}--purge${c.reset}                Uninstall: remove tambem .jdi/ (DESTRUTIVO)`);
