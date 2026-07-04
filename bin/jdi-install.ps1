@@ -39,36 +39,6 @@ function Copy-Tree {
   Copy-Item -Path (Join-Path $From '*') -Destination $To -Recurse -Force
 }
 
-function Install-JdiHooks {
-  param([string]$HooksDest)
-
-  New-Item -ItemType Directory -Force -Path $HooksDest | Out-Null
-
-  $pkgJson = Get-Content "$Root\package.json" -Raw | ConvertFrom-Json
-  $pkgVersion = $pkgJson.version
-
-  # Strip BOM if present (Node refuses BOM before shebang). UTF8NoBomEncoding
-  # is the .NET stable way to write text without a byte-order mark.
-  $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-
-  $hookFiles = @('jdi-check-update.js', 'jdi-check-update-worker.js', 'jdi-update-banner.js')
-  foreach ($hook in $hookFiles) {
-    $src = Join-Path $Root "bin\lib\$hook"
-    $dst = Join-Path $HooksDest $hook
-    if (Test-Path $src) {
-      $content = (Get-Content $src -Raw).Replace('{{JDI_VERSION}}', $pkgVersion)
-      # Strip leading BOM character (U+FEFF) if any
-      if ($content.Length -gt 0 -and [int][char]$content[0] -eq 0xFEFF) {
-        $content = $content.Substring(1)
-      }
-      [System.IO.File]::WriteAllText($dst, $content, $utf8NoBom)
-    }
-  }
-
-  # Stamp JDI_VERSION sibling — no BOM, no trailing newline
-  [System.IO.File]::WriteAllText((Join-Path $HooksDest 'JDI_VERSION'), $pkgVersion, $utf8NoBom)
-}
-
 function Install-Claude {
   $dest = if ($Scope -eq 'user') { Join-Path $UserHome '.claude' } else { Join-Path $ProjectDir '.claude' }
   New-Item -ItemType Directory -Force -Path "$dest\agents" | Out-Null
@@ -78,9 +48,6 @@ function Install-Claude {
   Copy-Tree -From "$Root\runtimes\claude\agents" -To "$dest\agents"
   Copy-Tree -From "$Root\runtimes\claude\commands" -To "$dest\commands"
   Copy-Tree -From "$Root\runtimes\claude\skills" -To "$dest\skills"
-
-  # Hooks: copy update-notifier scripts (additive only — settings.json untouched).
-  Install-JdiHooks -HooksDest "$dest\hooks"
 
   if ($Scope -eq 'project') {
     if (Test-Path "$Root\runtimes\claude\CLAUDE.md") {
@@ -95,7 +62,6 @@ function Install-Claude {
     }
   }
   Write-Output "Claude Code instalado em: $dest (scope=$Scope)"
-  Write-Output "  -> hooks copiados pra $dest\hooks\ (opt-in via: npx jdi-cli enable-update-check)"
 }
 
 function Install-Copilot {
