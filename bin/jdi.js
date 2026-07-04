@@ -27,6 +27,11 @@ function parseArgs(argv) {
   const flags = {};
   const positional = [];
 
+  // Flags that take a value as the NEXT token (`--flag value`), besides the
+  // `--flag=value` form. Without this list, `--runtime claude` parsed as
+  // {runtime: true} + positional "claude" and broke the shell delegation.
+  const VALUE_FLAGS = ['runtime', 'repo', 'antigravity-scope'];
+
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
     if (['--scope', '-s'].includes(a)) {
@@ -41,7 +46,13 @@ function parseArgs(argv) {
       flags.noColor = true;
     } else if (a.startsWith('--')) {
       const [k, v] = a.slice(2).split('=');
-      flags[k] = v === undefined ? true : v;
+      if (v !== undefined) {
+        flags[k] = v;
+      } else if (VALUE_FLAGS.includes(k) && rest[i + 1] !== undefined && !rest[i + 1].startsWith('-')) {
+        flags[k] = rest[++i];
+      } else {
+        flags[k] = true;
+      }
     } else {
       positional.push(a);
     }
@@ -82,6 +93,85 @@ function runShellScript(scriptName, scriptArgs = []) {
   });
 
   return { code: result.status ?? 0 };
+}
+
+// =================================================================
+// Lib helper plumbing — exposes bin/lib scripts as CLI subcommands
+// so slash commands inside a consumer project can call them via
+// `jdi <helper>` / `npx jdi-cli <helper>` without any JDI code being
+// copied into the project (no-code-in-consumer-repo invariant).
+// =================================================================
+
+function runLibScript(baseName, scriptArgs = [], opts = {}) {
+  const ext = isWindows ? '.ps1' : '.sh';
+  const scriptPath = path.join(PKG_ROOT, 'bin', 'lib', `${baseName}${ext}`);
+
+  if (!fs.existsSync(scriptPath)) {
+    console.error(`ERROR: helper not found: ${scriptPath}`);
+    return { code: 1, stdout: '' };
+  }
+
+  let cmd, args;
+  if (isWindows) {
+    cmd = 'powershell.exe';
+    args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, ...scriptArgs];
+  } else {
+    cmd = 'bash';
+    args = [scriptPath, ...scriptArgs];
+  }
+
+  const result = spawnSync(cmd, args, {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+    stdio: opts.capture ? ['ignore', 'pipe', 'inherit'] : 'inherit',
+  });
+
+  return { code: result.status ?? 0, stdout: opts.capture ? (result.stdout || '') : '' };
+}
+
+// Parse the resolver's KEY='value' lines into a plain object.
+function parseResolverOutput(text) {
+  const map = {};
+  for (const line of text.split(/\r?\n/)) {
+    const m = /^([A-Z_]+)='(.*)'$/.exec(line);
+    if (m) map[m[1]] = m[2];
+  }
+  return {
+    slug: map.JDI_PHASE_SLUG ?? null,
+    dir: map.JDI_PHASE_DIR ?? null,
+    position: map.JDI_PHASE_POSITION != null ? Number(map.JDI_PHASE_POSITION) : null,
+    schema_version: map.JDI_PHASE_SCHEMA != null ? Number(map.JDI_PHASE_SCHEMA) : null,
+    folder_exists: map.JDI_PHASE_FOLDER_EXISTS === 'true',
+  };
+}
+
+// Plumbing subcommands receive RAW argv (everything after the subcommand):
+// their flags (--json, --check-unique, ...) belong to the helper scripts,
+// not to jdi.js's own flag parser.
+function cmdResolvePhase(rawArgs) {
+  const json = rawArgs.includes('--json');
+  const rest = rawArgs.filter((a) => a !== '--json');
+  if (rest.length === 0) {
+    console.error('usage: jdi resolve-phase <slug|position> [--json]');
+    process.exit(1);
+  }
+  if (json) {
+    const { code, stdout } = runLibScript('jdi-resolve-phase', rest, { capture: true });
+    if (code !== 0) process.exit(code);
+    console.log(JSON.stringify(parseResolverOutput(stdout)));
+    return;
+  }
+  const { code } = runLibScript('jdi-resolve-phase', rest);
+  process.exit(code);
+}
+
+function cmdLibPassthrough(baseName, usage, rawArgs) {
+  if (rawArgs.length === 0) {
+    console.error(`usage: jdi ${usage}`);
+    process.exit(1);
+  }
+  const { code } = runLibScript(baseName, rawArgs);
+  process.exit(code);
 }
 
 // Build CLI args from a flag spec, picking the platform-correct flag name.
@@ -259,6 +349,7 @@ async function cmdInstallPlaywright({ flags }) {
     { key: 'skip-browser', win: '-SkipBrowser', nix: '--skip-browser' },
     { key: 'skip-mcp', win: '-SkipMcp', nix: '--skip-mcp' },
     { key: 'runtime', win: '-Runtime', nix: '--runtime', value: true },
+    { key: 'antigravity-scope', win: '-AntigravityScope', nix: '--antigravity-scope', value: true },
   ]);
 
   const { code } = runShellScript('jdi-install-playwright', args);
@@ -347,6 +438,13 @@ async function cmdHelp() {
   console.log(`  ${c.cyan}--version${c.reset}              Mostra versao`);
   console.log('');
 
+  console.log(`${c.bold}Helpers (plumbing usado pelos slash commands):${c.reset}`);
+  console.log(`  ${c.cyan}resolve-phase${c.reset} ${c.gray}<slug|pos> [--json]${c.reset}  Resolve phase id -> slug/dir/position`);
+  console.log(`  ${c.cyan}validate-slug${c.reset} ${c.gray}<slug> [--check-unique]${c.reset}  Valida shape de slug`);
+  console.log(`  ${c.cyan}truncate${c.reset} ${c.gray}<file> <max>${c.reset}      Trunca arquivo preservando estrutura`);
+  console.log(`  ${c.cyan}monitor${c.reset} ${c.gray}<file...>${c.reset}          Estima context budget dos arquivos`);
+  console.log('');
+
   console.log(`${c.bold}Runtimes (install):${c.reset}`);
   console.log(`  ${c.cyan}claude${c.reset}                 Claude Code`);
   console.log(`  ${c.cyan}copilot${c.reset}                GitHub Copilot`);
@@ -387,7 +485,7 @@ async function cmdHelp() {
   console.log(`  ${c.cyan}npx jdi-cli@latest doctor${c.reset}`);
   console.log('');
 
-  console.log(`${c.bold}Saiba mais:${c.reset} ${c.cyan}https://github.com/<owner>/jdi${c.reset}`);
+  console.log(`${c.bold}Saiba mais:${c.reset} ${c.cyan}https://github.com/slipalison/jdi-cli${c.reset}`);
   console.log('');
 }
 
@@ -436,6 +534,20 @@ async function main() {
       break;
     case 'doctor':
       await cmdDoctor(parsed);
+      break;
+    // Plumbing helpers for slash commands inside consumer projects — raw argv,
+    // no banner, exit code passthrough.
+    case 'resolve-phase':
+      cmdResolvePhase(process.argv.slice(3));
+      break;
+    case 'validate-slug':
+      cmdLibPassthrough('jdi-validate-slug', 'validate-slug <slug> [--check-unique]', process.argv.slice(3));
+      break;
+    case 'truncate':
+      cmdLibPassthrough('jdi-truncate', 'truncate <file> <max_chars>', process.argv.slice(3));
+      break;
+    case 'monitor':
+      cmdLibPassthrough('jdi-monitor', 'monitor <file...>', process.argv.slice(3));
       break;
     case 'help':
     case '--help':
