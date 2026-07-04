@@ -140,7 +140,13 @@ Read updated PLAN.md (doer updates status). Count:
 - blocked
 - pending
 
-If any task `blocked` in critical wave → stop execution, mark phase `partial`, skip to Step 9.
+Blocked-task rule (every wave except the last is "critical" by construction —
+later waves depend on it):
+- Blocked task in a NON-FINAL wave → finish the current wave's remaining
+  tasks, then STOP before dispatching the next wave (its dependencies cannot
+  be satisfied). Mark phase `partial`, skip to Step 9.
+- Blocked task in the FINAL wave → the other final-wave tasks still run;
+  phase is marked `partial` at the end.
 
 ### Step 8: After all waves
 

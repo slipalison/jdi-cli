@@ -34,6 +34,10 @@ Capture locked decisions for the given phase. Output: CONTEXT.md consumed by the
 ### Step 1: Validation
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new first."; exit 1; }
+
+# Gate promised by the loop: specialists exist before phase work starts
+ls .jdi/agents/jdi-doer-*.md >/dev/null 2>&1 || { echo "Doer specialist missing. Run /jdi-bootstrap first."; exit 1; }
+ls .jdi/agents/jdi-reviewer-*.md >/dev/null 2>&1 || { echo "Reviewer specialist missing. Run /jdi-bootstrap first."; exit 1; }
 ```
 
 ### Step 2: Resolve phase
@@ -70,6 +74,13 @@ Invoke `jdi-asker` with:
 
 Agent runs its own process. Returns when CONTEXT.md is written to `$PHASE_DIR/CONTEXT.md`.
 
+### Step 4.5: Verify output
+
+```bash
+test -f "$PHASE_DIR/CONTEXT.md" || { echo "CONTEXT.md not created"; exit 1; }
+grep -q '## Definition of Done' "$PHASE_DIR/CONTEXT.md" || { echo "CONTEXT.md missing § Definition of Done (asker Stage 2 incomplete)"; exit 1; }
+```
+
 ### Step 5: Commit
 ```bash
 git add "$PHASE_DIR/CONTEXT.md" .jdi/DECISIONS.md .jdi/todos.md 2>/dev/null
@@ -96,8 +107,8 @@ Next: /jdi-plan $PHASE_SLUG
 </process>
 
 <gates>
-- pre: `.jdi/` exists + phase resolves via `npx -y jdi-cli resolve-phase`
-- post: CONTEXT.md written + commit made + STATE.md updated
+- pre: `.jdi/` exists + doer/reviewer specialists exist + phase resolves via `npx -y jdi-cli resolve-phase`
+- post: CONTEXT.md written (including `## Definition of Done`) + commit made + STATE.md updated
 </gates>
 
 <errors>
