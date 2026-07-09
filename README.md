@@ -34,6 +34,34 @@ Full-blown AI workflows (33+ agents, 60+ commands, 100+ subworkflows) burn token
 
 Every phase command accepts either a **slug** (`auth-flow`, canonical) or an integer **position** (`2`, display ordering). Slugs are stable across branch merges; positions are not. New phases default to slug-as-ID; legacy `NN-slug` projects keep working until you opt into `/jdi-migrate-phases`.
 
+Each command writes ONE artifact into the phase folder — the artifact IS the gate to the next command, and the phase status is derived from whichever artifacts exist (nothing is ever stored as "status"):
+
+```mermaid
+flowchart TD
+    new["/jdi-new — greenfield"] --> boot
+    adopt["/jdi-adopt — brownfield"] --> boot
+    boot["/jdi-bootstrap<br/>generates doer + reviewer specialists"] --> discuss
+
+    discuss["/jdi-discuss slug"] -- "writes CONTEXT.md<br/>(locked decisions + DoD)" --> plan
+    plan["/jdi-plan slug"] -- "writes PLAN.md<br/>(tasks + waves)" --> do
+    do["/jdi-do slug<br/>doer executes waves, atomic commits"] -- "writes SUMMARY.md" --> verify
+    verify["/jdi-verify slug<br/>reviewer runs 8 gates (read-only)"] -- "writes REVIEW.md (recreated per run)" --> v{verdict}
+
+    v -- "BLOCKED" --> fix["/jdi-do slug — fix mode<br/>doer attacks REVIEW blockers"]
+    fix --> verify
+    v -- "APPROVED_PENDING_MANUAL" --> dod["/jdi-confirm-dod slug<br/>human confirms manual DoD items"]
+    dod --> ship
+    v -- "APPROVED /<br/>APPROVED_WITH_WARNINGS" --> ship
+
+    ship["/jdi-ship slug"] -- "writes SHIPPED.md + § Learnings<br/>(≤5 bullets; ROADMAP untouched)" --> more{"more phases?"}
+    more -- "yes — planner/doer of next phases<br/>read last 3 § Learnings" --> discuss
+    more -- "no" --> done(["project delivered"])
+
+    loop["/jdi-loop slug — ralph mode<br/>runs do ↔ verify automatically"] -.replaces the manual do/verify cycle.-> do
+```
+
+Anytime: `/jdi-status` (read-only snapshot), `/jdi-add-phase` / `/jdi-remove-phase` (roadmap mutation, team-safe).
+
 ### Greenfield (new project)
 
 ```
@@ -80,6 +108,30 @@ Instead of manually running `/jdi-do` then `/jdi-verify`, use:
 ```
 
 Runs `/jdi-do` ↔ `/jdi-verify` in a bounded loop (default 5 iter per round, max 3 resets = 15 iter absolute). Exits when verdict is `APPROVED` or `APPROVED_WITH_WARNINGS`; a verdict of `APPROVED_PENDING_MANUAL` exits cleanly routing to `/jdi-confirm-dod` (the loop cannot confirm manual DoD items). Oscillation detection (finding-hash compare across the current round) cuts dead loops early. Resuming an `escalated`/`paused` loop consumes a reset; a `killed` loop is final unless you pass `--reset-loop` (confirmed, audited).
+
+Every iteration appends one line to `phases/<slug>/LOOP.md` (append-only audit trail); the frontmatter tracks `iter`, `total_resets`, `status`:
+
+```mermaid
+stateDiagram-v2
+    [*] --> running: /jdi-loop slug
+    running --> running: iter++ (doer fixes, reviewer verdicts — fresh context per agent)
+
+    running --> converged: APPROVED or APPROVED_WITH_WARNINGS
+    running --> pendingManual: APPROVED_PENDING_MANUAL
+    running --> humanGate: iter ≥ 5 OR oscillation (finding-hash repeats this round)
+
+    humanGate --> running: Continue (total_resets++)
+    humanGate --> escalated: Abort
+    humanGate --> paused: Adjust plan (edit PLAN/CONTEXT)
+
+    escalated --> running: re-run /jdi-loop (consumes a reset)
+    paused --> running: re-run /jdi-loop (consumes a reset)
+    running --> killed: total_resets ≥ 3 (15 iter absolute cap)
+
+    converged --> [*]: /jdi-ship slug
+    pendingManual --> [*]: /jdi-confirm-dod slug
+    killed --> [*]: human review — only --reset-loop restarts (audited)
+```
 
 ## Quickstart — `npx` in 30 seconds
 
@@ -424,6 +476,80 @@ your-project/
 ```
 
 For other runtimes, swap `.claude/` for `.github/`, `.gemini/antigravity/`, or `.opencode/`. See [PORTABILITY.md](PORTABILITY.md).
+
+### Memory layers — who writes what, and for how long
+
+`.jdi/` is layered memory. Each layer has a different lifespan and a single writer — that is what makes it merge-safe and cheap to read:
+
+```mermaid
+flowchart LR
+    subgraph LT["Long-term — project lifetime (always read in full: short + stable = prompt-cache friendly)"]
+        PROJECT["PROJECT.md<br/>immutable after new/adopt"]
+        ROADMAP["ROADMAP.md<br/>append/insert-only, NO status"]
+        DECISIONS["DECISIONS.md<br/>append-only, merge=union"]
+        CONFIG["config.json<br/>budgets + thresholds"]
+    end
+
+    subgraph PH["Per-phase — phases/slug/ (dies with the phase; read-depth scales with distance)"]
+        CONTEXT["CONTEXT.md ← discuss"]
+        PLAN["PLAN.md ← plan"]
+        SUMMARY["SUMMARY.md ← do"]
+        REVIEW["REVIEW.md ← verify<br/>(recreated per run)"]
+        SHIPPED["SHIPPED.md + § Learnings ← ship<br/>(≤10 lines — outlives the phase)"]
+        LOOPMD["LOOP.md ← loop only<br/>(append-only audit)"]
+    end
+
+    subgraph ROUTE["Routing — append-only, merge=union"]
+        SPEC["specialists.md / reviewers.md<br/>registry.md / skills-registry.md"]
+    end
+
+    subgraph LOCAL["Local cache — NEVER committed"]
+        STATE["STATE.md — untracked, gitignored<br/>rewritten by every command;<br/>regenerated from artifacts on a fresh clone"]
+    end
+
+    PH -- "old phases move to .jdi/archive/<br/>(ship compaction, keep last 5)" --> ARCH["archive/<br/>out of the read path"]
+```
+
+**Read-depth ladder (token economy):** current phase = full body · previous phase = frontmatter + verdict only · 2+ back = never read (only `ls`/`head`) · exception: `§ Learnings` of the last 3 SHIPPED.md (≤10 lines each). Long-term files are always read whole — they are short by design and stable, so they hit the prompt cache.
+
+### When memory is written and read (one phase, end to end)
+
+Solid arrows = writes. Every command also rewrites the local `STATE.md` cache (not shown — untracked, advisory only):
+
+```mermaid
+sequenceDiagram
+    participant LT as Long-term<br/>(PROJECT/ROADMAP/DECISIONS/config)
+    participant CMD as command / agent
+    participant PH as phases/slug/
+    participant PREV as SHIPPED.md of<br/>last 3 phases
+
+    Note over CMD: /jdi-discuss (asker)
+    LT->>CMD: read goal + prior decisions
+    CMD->>PH: write CONTEXT.md (decisions + phase DoD)
+    CMD->>LT: append D-{date}-{slug}-{seq} to DECISIONS.md
+
+    Note over CMD: /jdi-plan (planner)
+    LT->>CMD: read (full — short by design)
+    PH->>CMD: read CONTEXT.md
+    PREV->>CMD: read § Learnings (≤15 bullets)<br/>recurring items → acceptance criteria
+    CMD->>PH: write PLAN.md (tasks + waves)
+
+    Note over CMD: /jdi-do (doer specialist)
+    PH->>CMD: read PLAN.md + CONTEXT.md
+    PREV->>CMD: read § Learnings (known pitfalls)
+    CMD->>PH: update task status in PLAN.md<br/>write SUMMARY.md (+ atomic code commits)
+
+    Note over CMD: /jdi-verify (reviewer — READ-ONLY on code)
+    PH->>CMD: read PLAN + SUMMARY (+ code, tests, coverage)
+    CMD->>PH: write REVIEW.md (verdict + 8 gates + DoD table)
+
+    Note over CMD: /jdi-ship
+    PH->>CMD: read REVIEW verdict + SUMMARY blockers
+    CMD->>PH: write SHIPPED.md + distill § Learnings (≤5 bullets)
+    CMD->>PH: move old phases → archive/ (keep last 5)
+```
+
+The cycle: what a phase LEARNS (warnings, blockers, waivers) survives as ≤5 distilled bullets that the NEXT phases' planner and doer consume — ~300 tokens instead of dragging whole REVIEW files forward. Full schema: [MEMORY.md](MEMORY.md).
 
 ### Invariants
 
