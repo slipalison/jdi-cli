@@ -254,8 +254,8 @@ PowerShell parity: same idempotent insert/update via `Get-Content -Raw` + regex 
 ### Step 7: Commit
 
 ```bash
-git add .jdi/STATE.md
-git commit -m "chore(jdi): migrate to schema v2 (slug-as-ID)"
+git add .jdi/STATE.md 2>/dev/null || true
+git diff --cached --quiet || git commit -m "chore(jdi): migrate to schema v2 (slug-as-ID)"
 ```
 
 ### Step 8: Confirm

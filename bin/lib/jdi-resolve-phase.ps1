@@ -14,7 +14,7 @@
 #   0  resolved
 #   1  invalid input
 #   2  phase not found in ROADMAP
-#   3  .jdi/ROADMAP.md or .jdi/STATE.md missing
+#   3  .jdi/ROADMAP.md missing (STATE.md is optional — untracked advisory cache)
 #   4  multiple folder candidates (corrupt state)
 
 [CmdletBinding()]
@@ -47,13 +47,18 @@ if (-not $isInteger -and -not ($Id -match '^[a-z0-9][a-z0-9-]{2,49}$')) {
 
 # --- State files ---
 if (-not (Test-Path .jdi/ROADMAP.md)) { Fail 3 '.jdi/ROADMAP.md not found (run /jdi-new first)' }
-if (-not (Test-Path .jdi/STATE.md))   { Fail 3 '.jdi/STATE.md not found (corrupt project)' }
 
 # --- Schema detection ---
-$schemaVersion = 1
-$state = Get-Content .jdi/STATE.md -Raw
-$svMatch = [regex]::Match($state, 'schema_version:\s*(\d+)')
-if ($svMatch.Success) { $schemaVersion = [int]$svMatch.Groups[1].Value }
+# STATE.md is an untracked advisory cache (0.3.0+) — absence is normal on a
+# fresh clone and only schema_version is read from it. Missing file implies
+# v2: legacy v1 projects always track STATE.md in git.
+$schemaVersion = 2
+if (Test-Path .jdi/STATE.md) {
+  $schemaVersion = 1
+  $state = Get-Content .jdi/STATE.md -Raw
+  $svMatch = [regex]::Match($state, 'schema_version:\s*(\d+)')
+  if ($svMatch.Success) { $schemaVersion = [int]$svMatch.Groups[1].Value }
+}
 
 # --- Parse ROADMAP phases into (position, rawSlug) tuples ---
 $roadmap = Get-Content .jdi/ROADMAP.md
