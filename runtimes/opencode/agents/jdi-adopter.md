@@ -373,19 +373,38 @@ D-2 ({date}): Adopted brownfield. Coverage 80% enforced ONLY on new files (creat
 
 `{current_commit_hash}` = `git rev-parse HEAD` (if repo). If no git, use ISO date. Reviewer uses this marker to distinguish "new" vs "legacy".
 
-### Step 8: mkdir + .gitattributes
+### Step 8: mkdir + .gitattributes + .gitignore
 
 ```bash
 mkdir -p .jdi/phases
 mkdir -p .jdi/agents
 
-# .gitattributes — only create if absent (existing project may have its own)
+# .gitattributes — only create the EOL block if absent (existing project may have its own)
 [ -f .gitattributes ] || cat > .gitattributes <<'EOF'
 * text=auto eol=lf
 *.{cmd,bat,ps1} text eol=crlf
 *.{png,jpg,jpeg,gif,webp,ico,pdf,zip,tar,gz} binary
 EOF
+
+# merge=union on the append-only JDI files (idempotent append — safe on an
+# existing .gitattributes). Two devs appending on parallel branches auto-merge
+# instead of conflicting; safe because these files are append-only by contract.
+grep -q '\.jdi/DECISIONS\.md merge=union' .gitattributes 2>/dev/null || cat >> .gitattributes <<'EOF'
+.jdi/DECISIONS.md merge=union
+.jdi/todos.md merge=union
+.jdi/registry.md merge=union
+.jdi/specialists.md merge=union
+.jdi/reviewers.md merge=union
+.jdi/skills-registry.md merge=union
+.jdi/archive/index.md merge=union
+EOF
+
+# STATE.md is a per-clone advisory cache — never versioned, never a merge
+# conflict (commands regenerate it from phase artifacts when absent)
+grep -qxF '.jdi/STATE.md' .gitignore 2>/dev/null || echo '.jdi/STATE.md' >> .gitignore
 ```
+
+Do NOT put `merge=union` on ROADMAP.md (remove-phase deletions could silently resurrect on merge), PROJECT.md, or config.json — conflicts there must stay visible.
 
 ### Step 9: Commit
 
@@ -393,7 +412,7 @@ EOF
 # init git only if not yet a repo (rare in adopt — usually already is)
 git rev-parse --git-dir >/dev/null 2>&1 || git init -q
 
-git add .jdi/ .gitattributes 2>/dev/null
+git add .jdi/ .gitattributes .gitignore 2>/dev/null
 git commit -m "chore(jdi): adopt {project_name} brownfield"
 ```
 
@@ -434,7 +453,8 @@ Next: /jdi-bootstrap
 - `.jdi/DECISIONS.md` (D-1 code design, D-2 adopted boundary)
 - `.jdi/phases/` (empty)
 - `.jdi/agents/` (empty)
-- `.gitattributes` (only if absent)
+- `.gitattributes` (EOL block only if absent; merge=union block appended idempotently)
+- `.gitignore` entry `.jdi/STATE.md` (advisory cache, never versioned)
 - Commit `chore(jdi): adopt {name} brownfield`
 - Final message with next step
 </output>

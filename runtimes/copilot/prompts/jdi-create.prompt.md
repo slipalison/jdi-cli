@@ -72,7 +72,7 @@ Architect returns 1 of 3 statuses:
 
 If **created**:
 ```
-jdi-{name} ({type}) ok. Audit: R-{N}. Commit: {sha}.
+jdi-{name} ({type}) ok. Audit: R-{date}-{name}. Commit: {sha}.
 Invoke: {runtime instructions}
 ```
 

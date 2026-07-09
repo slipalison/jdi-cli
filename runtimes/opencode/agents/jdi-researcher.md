@@ -300,7 +300,7 @@ current_phase_slug: {slug1}
 next_step: /jdi-bootstrap
 ```
 
-`schema_version: 2` activates slug-as-ID. `current_phase_slug` is the canonical phase identifier; `current_phase` is kept as a display mirror.
+`schema_version: 2` activates slug-as-ID. `current_phase_slug` is the canonical phase identifier; `current_phase` is kept as a display mirror. STATE.md is an untracked advisory cache (gitignored in Step 7) — commands regenerate it from phase artifacts when absent.
 
 ```markdown
 # .jdi/DECISIONS.md
@@ -309,7 +309,7 @@ next_step: /jdi-bootstrap
 D-1 ({date}): Code design locked = {Q3}
 ```
 
-### Step 7: mkdir + .gitattributes
+### Step 7: mkdir + .gitattributes + .gitignore
 
 ```bash
 mkdir -p .jdi/phases
@@ -318,19 +318,36 @@ mkdir -p .jdi/agents
 
 Do NOT create empty placeholders for `specialists.md`, `reviewers.md`, `registry.md`. Architect (specialist mode) creates them populated when `/jdi-bootstrap` runs.
 
-Create `.gitattributes` at root to normalize line endings (avoids CRLF warnings on Windows):
+Create `.gitattributes` at root — line-ending normalization (avoids CRLF warnings on Windows) plus `merge=union` on the append-only JDI files, so two developers appending on parallel branches auto-merge instead of conflicting (union keeps both sides' lines; safe because these files are append-only by contract and v2 IDs are collision-free):
 
 ```
 * text=auto eol=lf
 *.{cmd,bat,ps1} text eol=crlf
 *.{png,jpg,jpeg,gif,webp,ico,pdf,zip,tar,gz} binary
+.jdi/DECISIONS.md merge=union
+.jdi/todos.md merge=union
+.jdi/registry.md merge=union
+.jdi/specialists.md merge=union
+.jdi/reviewers.md merge=union
+.jdi/skills-registry.md merge=union
+.jdi/archive/index.md merge=union
+```
+
+Do NOT put `merge=union` on ROADMAP.md (remove-phase deletions could silently resurrect on merge), PROJECT.md, or config.json — conflicts there must stay visible.
+
+STATE.md is a per-clone advisory cache — keep it out of git so it can never
+be a merge conflict (every command rewrites it; commands regenerate it from
+phase artifacts when absent):
+
+```bash
+grep -qxF '.jdi/STATE.md' .gitignore 2>/dev/null || echo '.jdi/STATE.md' >> .gitignore
 ```
 
 ### Step 8: Commit
 
 ```bash
 git init -q 2>/dev/null  # in case it's not a repo yet
-git add .jdi/ .gitattributes
+git add .jdi/ .gitattributes .gitignore
 git commit -m "chore(jdi): initialize {project_name}"
 ```
 
@@ -370,7 +387,8 @@ Next: /jdi-bootstrap
 - `.jdi/DECISIONS.md`
 - `.jdi/phases/` (empty, ready for phases)
 - `.jdi/agents/` (empty, ready for bootstrap)
-- `.gitattributes` (root, normalizes line endings)
+- `.gitattributes` (root: line endings + merge=union on append-only JDI files)
+- `.gitignore` entry `.jdi/STATE.md` (advisory cache, never versioned)
 - Initial commit
 - Final message with next step (includes DoD baseline counts: N auto + N manual)
 </output>

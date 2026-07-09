@@ -136,6 +136,30 @@ EOF
 NEXT_POSITION=$((PHASE_POSITION + 1))
 ```
 
+### Step 4.5: Distill learnings into SHIPPED.md
+
+Read `$PHASE_DIR/REVIEW.md` (`## Warnings`, `## Blockers`, `## DoD Rejected`
+sections) and `$PHASE_DIR/SUMMARY.md` (`## Blocked tasks`). Distill into at
+most **5 one-line bullets** — only items that could recur in FUTURE phases
+(recurring pitfalls, waived criteria, systemic warnings). Skip phase-specific
+noise. If nothing qualifies, skip this step entirely — SHIPPED.md stays tiny.
+
+Append to `$PHASE_DIR/SHIPPED.md`:
+
+```markdown
+
+## Learnings
+- {one line, future-facing, e.g. "Watch N+1 on repository queries — flagged twice by reviewer"}
+- {max 5 bullets total}
+```
+
+Rules:
+- Bullets are imperative and self-contained (readable without opening REVIEW.md).
+- Never copy full gate output — one line each.
+- These bullets are read by `/jdi-plan` and the doer on the NEXT phases (last
+  3 shipped phases) and turned into acceptance criteria when they recur.
+- Team-safe: lives in the phase folder, written once by ship (double-ship guard).
+
 **Legacy compatibility:** if this project's ROADMAP.md still carries
 `- **Status:**` lines (pre-0.2.0 layout), update THIS phase's line to `done`
 best-effort — never add such a line where none exists. New ROADMAPs have no
@@ -227,7 +251,7 @@ Archived phases remain accessible via `.jdi/archive/` but exit the default read-
 ### Step 8: Final commit
 
 ```bash
-git add "$PHASE_DIR/SHIPPED.md" .jdi/STATE.md
+git add "$PHASE_DIR/SHIPPED.md"; git add .jdi/STATE.md 2>/dev/null || true
 git add .jdi/archive/ 2>/dev/null || true
 # Legacy layout only (ROADMAP with per-phase Status lines):
 git add .jdi/ROADMAP.md 2>/dev/null || true

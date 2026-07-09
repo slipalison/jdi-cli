@@ -172,7 +172,7 @@ next_step: {if APPROVED or WITH_WARNINGS: /jdi-ship $PHASE_SLUG; if PENDING_MANU
 ```
 
 ```bash
-git add "$PHASE_DIR/REVIEW.md" .jdi/STATE.md
+git add "$PHASE_DIR/REVIEW.md"; git add .jdi/STATE.md 2>/dev/null || true
 git commit -m "docs($PHASE_SLUG): verify phase ($VERDICT)"
 ```
 

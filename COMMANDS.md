@@ -4,7 +4,7 @@
 
 Every command that takes a phase accepts a **slug** (`auth-flow`, canonical) OR an **integer position** (`2`, display). Slugs are stable across branches; positions renumber on insert/remove. Schema v2 uses slug-as-ID; legacy v1 (numeric) projects keep working until you run `/jdi-migrate-phases`.
 
-Phase status is never stored — it is **derived from the artifacts** in the phase folder: `SHIPPED.md` → done, `REVIEW.md` → verified, `SUMMARY.md` → executed, `PLAN.md` → planned, `CONTEXT.md` → discussed, nothing → pending. `STATE.md` is an advisory next-step hint for the local clone; gates check artifacts, not STATE.
+Phase status is never stored — it is **derived from the artifacts** in the phase folder: `SHIPPED.md` → done, `REVIEW.md` → verified, `SUMMARY.md` → executed, `PLAN.md` → planned, `CONTEXT.md` → discussed, nothing → pending. `STATE.md` is an advisory next-step cache for the local clone — untracked (gitignored) since 0.3.0 and regenerated from artifacts when absent; gates check artifacts, not STATE.
 
 Phase helpers (resolver, slug validator, truncate, monitor) ship in the npm package and are invoked by the commands as CLI subcommands — `npx -y jdi-cli resolve-phase|validate-slug|truncate|monitor` (with `resolve-phase --json` for PowerShell). No helper code is copied into your repo.
 
@@ -106,7 +106,7 @@ Executes the phase tasks via the project's doer specialist.
 Does:
 1. Validation: PLAN.md exists + doer registered in `.jdi/specialists.md`; context budget warm-up via `npx -y jdi-cli monitor`
 2. Resolves doer specialist(s) — single-stack: the one registered doer; multi-stack: each task's `**Specialist:**` field from PLAN.md (fallback: first registered doer)
-3. Reads PLAN.md, identifies pending tasks, groups waves
+3. Reads PLAN.md, identifies pending tasks, groups waves. **Fix mode:** zero pending tasks + REVIEW.md verdict BLOCKED (gate failure after all tasks completed — coverage, lint, …) → dispatches ONE doer in fix mode against the listed blockers instead of exiting; zero pending + no BLOCKED review → "already executed", exit 0
 4. For each wave:
    - Intra-wave overlap check (files_modified disjoint?)
    - If parallel: sequential dispatch (ONE Agent per message with `run_in_background: true`); multi-stack waves may spawn DIFFERENT specialists in parallel (disjoint scopes)
@@ -189,7 +189,8 @@ Does:
 3. Re-verifies DoD freshness: counts rows still `MANUAL_REQUIRED` in the DoD Checklist — any remaining → abort, suggests `/jdi-confirm-dod`. (`REJECTED` rows are audited waivers and do not block)
 4. If WITH_WARNINGS: asks "ship anyway?"
 5. Writes the completion marker `phases/<slug>/SHIPPED.md` (`shipped_at`, `verdict`, `by`) — **team-safe: completion lives in the phase folder, not in ROADMAP.md**, so two developers shipping different phases on different branches produce zero merge conflicts. **ROADMAP.md is not touched** — except on legacy pre-0.2.0 ROADMAPs that still carry `- **Status:**` lines, where this phase's line is updated to `done` best-effort (never added where absent)
-6. Updates STATE.md (advisory hint: next phase position + slug, `phase_status: ready`, next step — or `all_phases_complete: true` on the last phase)
+5b. Distills `SHIPPED.md § Learnings` — ≤5 one-line bullets from REVIEW.md warnings/blockers/waived DoD items + SUMMARY.md blocked tasks (section omitted when nothing qualifies). Planner and doer of the next phases read the last 3 and convert recurring items into acceptance criteria
+6. Updates STATE.md (untracked advisory cache: next phase position + slug, `phase_status: ready`, next step — or `all_phases_complete: true` on the last phase)
 7. Archives old phases per `config.json compaction.archive_after` (default 5) into `.jdi/archive/` (+ index)
 8. Commit: `feat(<slug>): ship phase ({VERDICT})`
 9. Optional tag: `phase-<slug>` (if PROJECT.md has `tag_phases: true`)
@@ -254,7 +255,7 @@ Does:
    - `Abort` -> status=escalated, clean exit
    - `Adjust plan` -> status=paused, exit, user edits PLAN/CONTEXT, re-runs /jdi-loop
 5. Hard cap: total_resets >= max_resets -> status=killed, absolute kill switch
-6. Each iter = atomic doer commit + reviewer commit (granular audit trail in git). **Every terminal transition (converged/killed/escalated/paused) commits LOOP.md + STATE.md** — the loop never leaves the tree dirty
+6. Each iter = atomic doer commit + reviewer commit (granular audit trail in git). **Every terminal transition (converged/killed/escalated/paused) commits LOOP.md** (+ STATE.md only on legacy projects that still track it) — the loop never leaves the tree dirty
 
 **Generator/Judge separation:** doer writes, reviewer reads (read-only). Ralph invariant.
 
@@ -283,7 +284,7 @@ Registers a new phase in ROADMAP.md. **Slug-as-ID** — strict validation + uniq
 ```
 
 Does:
-1. Validation: `.jdi/STATE.md` + `.jdi/ROADMAP.md` exist
+1. Validation: `.jdi/ROADMAP.md` exists (STATE.md regenerated from artifacts if absent)
 2. Detects `schema_version` (on v1, advises running `/jdi-migrate-phases`)
 3. Derives the slug from `name` (or uses `--slug` if given)
 4. Validates the slug via `npx -y jdi-cli validate-slug --check-unique`:
@@ -355,7 +356,7 @@ Non-destructive upgrade from v1 (numeric IDs) → v2 (slug-as-ID). Idempotent.
 ```
 
 Does:
-1. Validation: `.jdi/STATE.md` + `.jdi/ROADMAP.md` exist; clean working tree in `.jdi/` (or `--force`)
+1. Validation: `.jdi/ROADMAP.md` exists (STATE.md regenerated if absent); clean working tree in `.jdi/` (or `--force`)
 2. Detects `schema_version` — already v2 → exit 0 (no-op)
 3. **Audit (always, even with --force)** before any write:
    - **C1** — Folder/ROADMAP parity (folder slug == ROADMAP slug)

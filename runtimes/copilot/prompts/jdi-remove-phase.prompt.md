@@ -41,7 +41,18 @@ Examples:
 ```bash
 test -d .jdi/ || { echo "Not a JDI project."; exit 1; }
 test -f .jdi/ROADMAP.md || { echo "ROADMAP.md missing."; exit 1; }
-test -f .jdi/STATE.md || { echo "STATE.md missing."; exit 1; }
+
+# STATE.md is an untracked advisory cache — regenerate minimal fields if
+# absent (fresh clone): current phase = first ROADMAP phase without SHIPPED.md
+if [ ! -f .jdi/STATE.md ]; then
+  POS=1
+  while RESOLVED="$(npx -y jdi-cli resolve-phase "$POS" 2>/dev/null)"; do
+    eval "$RESOLVED"
+    [ -f "$JDI_PHASE_DIR/SHIPPED.md" ] || break
+    POS=$((POS+1))
+  done
+  printf 'schema_version: 2\ncurrent_phase: %s\ncurrent_phase_slug: %s\n' "$POS" "${JDI_PHASE_SLUG:-}" > .jdi/STATE.md
+fi
 
 [ -n "${1:-}" ] || { echo "Phase id required. Usage: /jdi-remove-phase <slug|position> [--force]"; exit 1; }
 ```
@@ -218,7 +229,7 @@ Note: slugs of remaining phases are not changed. Display positions renumbered.
 </process>
 
 <gates>
-- pre: `.jdi/ROADMAP.md` + `.jdi/STATE.md` exist
+- pre: `.jdi/ROADMAP.md` exists (STATE.md regenerated from artifacts if absent)
 - pre: phase resolves via `npx -y jdi-cli resolve-phase`
 - pre: phase is not the current phase, not past, status != `done`
 - pre: `--force` provided if phase has artifacts

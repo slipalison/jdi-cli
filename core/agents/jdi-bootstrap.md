@@ -250,8 +250,9 @@ next_step: /jdi-discuss {first_phase_slug}
 ```
 
 ```bash
-git add .jdi/STATE.md
-git commit -m "chore(state): specialists ready for {slug}"
+# STATE.md is untracked on 0.3.0+ projects — commit only if a legacy project still tracks it
+git add .jdi/STATE.md 2>/dev/null || true
+git diff --cached --quiet || git commit -m "chore(state): specialists ready for {slug}"
 ```
 
 ### Step 6: Confirm

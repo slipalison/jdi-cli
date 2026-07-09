@@ -14,8 +14,8 @@ OUT="${ROOT}/runtimes"
 TARGET="${1:-all}"
 # Repeated literals extracted to constants (S1192)
 readonly ANTIGRAVITY="antigravity"
-readonly RT_CLAUDE="$RT_CLAUDE"
-readonly RT_OPENCODE="$RT_OPENCODE"
+readonly RT_CLAUDE="claude"
+readonly RT_OPENCODE="opencode"
 readonly K_DESC="description"
 
 ensure_dirs() {

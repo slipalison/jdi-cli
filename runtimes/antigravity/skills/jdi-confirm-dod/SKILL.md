@@ -208,7 +208,7 @@ next_step: {if APPROVED or WITH_WARNINGS: /jdi-ship $PHASE_SLUG; if PENDING_MANU
 
 ```bash
 rm -f "$PHASE_DIR/.dod-pending.txt"
-git add "$PHASE_DIR/REVIEW.md" .jdi/STATE.md
+git add "$PHASE_DIR/REVIEW.md"; git add .jdi/STATE.md 2>/dev/null || true
 git commit -m "docs($PHASE_SLUG): confirm DoD manual items ($CONFIRMED confirmed, $REJECTED rejected, $SKIPPED skipped, verdict $NEW_VERDICT)"
 ```
 

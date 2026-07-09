@@ -39,8 +39,42 @@ None.
 
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new first."; exit 1; }
-test -f .jdi/STATE.md || { echo "STATE.md missing — broken project."; exit 1; }
 ```
+
+### Step 1.5: Regenerate STATE.md if absent (fresh clone)
+
+STATE.md is an untracked per-clone advisory cache (gitignored since 0.3.0) —
+a fresh clone legitimately has none. Regenerate it from artifacts: the current
+phase is the first ROADMAP phase without SHIPPED.md.
+
+```bash
+if [ ! -f .jdi/STATE.md ]; then
+  echo "STATE.md absent — regenerating advisory cache from phase artifacts."
+  PROJECT_SLUG=$(awk '/^## Slug/{getline; while ($0 ~ /^[[:space:]]*$/) getline; print; exit}' .jdi/PROJECT.md)
+  POS=1; SLUG=""; FOUND=false
+  while RESOLVED="$(npx -y jdi-cli resolve-phase "$POS" 2>/dev/null)"; do
+    eval "$RESOLVED"
+    if [ ! -f "$JDI_PHASE_DIR/SHIPPED.md" ]; then SLUG="$JDI_PHASE_SLUG"; FOUND=true; break; fi
+    POS=$((POS+1))
+  done
+  {
+    echo "# ${PROJECT_SLUG} — State (regenerated advisory cache)"
+    echo "project_slug: ${PROJECT_SLUG}"
+    echo "schema_version: 2"
+    if [ "$FOUND" = true ]; then
+      echo "current_phase: $POS"
+      echo "current_phase_slug: $SLUG"
+      echo "next_step: (derived below)"
+    else
+      echo "current_phase: $((POS - 1))"
+      echo "all_phases_complete: true"
+      echo "next_step: project delivered"
+    fi
+  } > .jdi/STATE.md
+fi
+```
+
+PowerShell mirrors with `ConvertFrom-Json` on the resolver output + `Set-Content`.
 
 ### Step 2: Read state
 
@@ -118,6 +152,22 @@ TODO_COUNT=0
 LOOP_STATE=""
 [ -n "$PHASE_DIR" ] && [ -f "$PHASE_DIR/LOOP.md" ] && \
   LOOP_STATE=$(grep -m1 -oE '^status: [a-z]+' "$PHASE_DIR/LOOP.md" | awk '{print $2}')
+
+# If STATE carries no usable next_step (regenerated cache), derive it from artifacts
+if [ -z "$NEXT_STEP" ] || [ "$NEXT_STEP" = "(derived below)" ]; then
+  case "$DERIVED" in
+    done)      NEXT_STEP="/jdi-discuss (next phase)" ;;
+    verified)
+      RV=$(grep -oE '(Verdict|Veredicto):\*\* [A-Z_]+' "$PHASE_DIR/REVIEW.md" 2>/dev/null | awk '{print $2}')
+      if echo "$RV" | grep -qx BLOCKED; then NEXT_STEP="fix blockers → /jdi-do $CURRENT_SLUG"
+      elif echo "$RV" | grep -qx APPROVED_PENDING_MANUAL; then NEXT_STEP="/jdi-confirm-dod $CURRENT_SLUG"
+      else NEXT_STEP="/jdi-ship $CURRENT_SLUG"; fi ;;
+    executed)  NEXT_STEP="/jdi-verify $CURRENT_SLUG" ;;
+    planned)   NEXT_STEP="/jdi-do $CURRENT_SLUG" ;;
+    discussed) NEXT_STEP="/jdi-plan $CURRENT_SLUG" ;;
+    pending)   NEXT_STEP="/jdi-discuss $CURRENT_SLUG" ;;
+  esac
+fi
 ```
 
 ### Step 3: Detect last artifact in current phase
@@ -224,13 +274,13 @@ Reserved for later, do not implement now:
 </process>
 
 <gates>
-- pre: `.jdi/` exists + STATE.md exists
-- post: status snapshot printed. No files modified. No commit. No agent spawned.
+- pre: `.jdi/` exists (STATE.md optional — regenerated from artifacts when absent)
+- post: status snapshot printed. Only possible write: regenerated STATE.md (untracked cache). No commit. No agent spawned.
 </gates>
 
 <errors>
 - `.jdi/` missing → "Run /jdi-new first"
-- STATE.md missing → abort with corrupted-state message
+- STATE.md missing → regenerate advisory cache from artifacts (Step 1.5) — not an error
 - ROADMAP.md missing → warn and continue (some fields empty)
 - Phase id unresolvable → print "(phase id stale)" but do not fail
 - Not a git repo → commit fields print "(no commits yet)" — does not fail

@@ -19,7 +19,7 @@
 #   0  resolved (folder may or may not exist — check JDI_PHASE_FOLDER_EXISTS)
 #   1  invalid input (empty arg, malformed slug, bad integer)
 #   2  phase not found in ROADMAP (integer out of range, slug not listed)
-#   3  .jdi/ROADMAP.md or .jdi/STATE.md missing
+#   3  .jdi/ROADMAP.md missing (STATE.md is optional — untracked advisory cache)
 #   4  multiple folder candidates (corrupt repo state)
 #
 # Multi-developer notes:
@@ -61,17 +61,20 @@ if [[ ! -f .jdi/ROADMAP.md ]]; then
   echo "ERROR: .jdi/ROADMAP.md not found (run /jdi-new first)" >&2
   exit 3
 fi
-if [[ ! -f .jdi/STATE.md ]]; then
-  echo "ERROR: .jdi/STATE.md not found (corrupt project)" >&2
-  exit 3
-fi
 
 # --- Schema detection ---------------------------------------------------
+# STATE.md is an untracked advisory cache (0.3.0+) — absence is normal on a
+# fresh clone and only schema_version is read from it. Missing file implies
+# v2: legacy v1 projects always track STATE.md in git.
 
-SCHEMA_VERSION=1
-SV_LINE=$(grep -oE 'schema_version:[[:space:]]*[0-9]+' .jdi/STATE.md 2>/dev/null | head -1 || true)
-if [[ -n "$SV_LINE" ]]; then
-  SCHEMA_VERSION=$(echo "$SV_LINE" | grep -oE '[0-9]+' | head -1)
+if [[ -f .jdi/STATE.md ]]; then
+  SCHEMA_VERSION=1
+  SV_LINE=$(grep -oE 'schema_version:[[:space:]]*[0-9]+' .jdi/STATE.md 2>/dev/null | head -1 || true)
+  if [[ -n "$SV_LINE" ]]; then
+    SCHEMA_VERSION=$(echo "$SV_LINE" | grep -oE '[0-9]+' | head -1)
+  fi
+else
+  SCHEMA_VERSION=2
 fi
 
 # --- ROADMAP lookup -----------------------------------------------------

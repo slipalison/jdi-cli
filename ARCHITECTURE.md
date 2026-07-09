@@ -214,12 +214,13 @@ Flow:
 
 ## Team model
 
-Multi-developer coordination rests on four invariants:
+Multi-developer coordination rests on five invariants:
 
 1. **Status is derived from artifacts, never stored.** The ladder: `SHIPPED.md` → done, `REVIEW.md` → verified, `SUMMARY.md` → executed, `PLAN.md` → planned, `CONTEXT.md` → discussed, nothing → pending. Any clone computes the same answer from the files alone.
-2. **STATE.md is advisory.** It is a per-clone next-step hint; no gate depends on it. A stale STATE.md after a merge costs nothing.
-3. **IDs are collision-free.** Phases are identified by slug (validated shape + reserved words + uniqueness); decisions on v2 use `D-{YYYY-MM-DD}-{slug}-{seq}`. Two devs on parallel branches never silently collide — same-slug races surface as explicit git conflicts.
+2. **STATE.md is advisory and untracked (0.3.0+).** It is a per-clone next-step cache in `.gitignore`; no gate depends on it and it never reaches a merge. Commands regenerate it from artifacts when absent (fresh clone): current phase = first ROADMAP phase without `SHIPPED.md`.
+3. **IDs are collision-free.** Phases are identified by slug (validated shape + reserved words + uniqueness); decisions on v2 use `D-{YYYY-MM-DD}-{slug}-{seq}`; registry entries use `R-{YYYY-MM-DD}-{slug}`. Two devs on parallel branches never silently collide — same-slug races surface as explicit git conflicts.
 4. **ROADMAP.md is append/insert-only.** It carries no per-phase status and no current-phase pointer, so `/jdi-ship` never edits it (completion is the phase-local `SHIPPED.md` marker; legacy ROADMAPs with `Status:` lines get a best-effort update only). Developers shipping different phases touch disjoint files — merges are trivial.
+5. **Append-only files auto-merge.** The generated `.gitattributes` marks `DECISIONS.md`, `todos.md`, `registry.md`, `specialists.md`, `reviewers.md`, `skills-registry.md`, and `archive/index.md` with `merge=union` (built-in git driver, zero per-clone setup): simultaneous appends on two branches merge cleanly, both sides kept. Not applied to ROADMAP.md/PROJECT.md/config.json — conflicts there must stay visible.
 
 ## Read-depth scaling (token budget)
 
@@ -235,6 +236,7 @@ Hard rule: **read-depth scales with distance from the current phase**. The orche
 - `/jdi-verify N` may read `PLAN.md` of phase `N-1` if the current task references a D-XX from that phase (traceability)
 - `/jdi-discuss N` (asker) reads up to **2 previous CONTEXT.md files** (rule already in `core/agents/jdi-asker.md`)
 - `jdi-researcher` reads PROJECT/ROADMAP in full — they are short by design (PROJECT cap 80 lines, ROADMAP is a summary)
+- `jdi-planner` and the doer read `## Learnings` from the SHIPPED.md of the up-to-3 most recently shipped phases (≤10 lines each): cross-phase failure feedback at a few hundred tokens — one avoided ralph iteration repays it ~30×
 
 **Why:**
 - Phase 8 does not need the body of phase 1's SUMMARY. The frontmatter already carries `status` + `verdict`.
@@ -258,7 +260,7 @@ Hard rule: **read-depth scales with distance from the current phase**. The orche
 | `PROJECT.md` | Project lifetime | Vision, stack, code-design locked, § DoD |
 | `ROADMAP.md` | Project lifetime | Phase list (no status — append/insert-only) |
 | `DECISIONS.md` | Append-only | Locked decisions (v1 `D-N`; v2 `D-{date}-{slug}-{seq}`) |
-| `STATE.md` | Overwritten | Advisory hint: current phase + next_step |
+| `STATE.md` | Overwritten, untracked | Advisory cache: current phase + next_step (regenerated when absent) |
 | `config.json` | Project lifetime | Context budget, thresholds, compaction, orchestration mode |
 | `todos.md` | Append-only, optional | Scope creep captured by the asker |
 | `specialists.md`, `reviewers.md` | Append-only | Per-project routing |

@@ -88,6 +88,9 @@ Spawned by: `/jdi-do {PHASE_SLUG}` (or legacy `/jdi-do {N}`)
   - `{PHASE_DIR}/PLAN.md`
   - `{PHASE_DIR}/LOOP.md` (optional — only exists if running in ralph mode via /jdi-loop)
   - `{PHASE_DIR}/REVIEW.md` (optional — only exists if reviewer ran at least once)
+  - `## Learnings` from SHIPPED.md of the up-to-3 most recently shipped phases
+    (`.jdi/phases/*/SHIPPED.md`, `.jdi/archive/*/SHIPPED.md`) — treat as known
+    pitfalls for THIS project. Tiny files; the only read-depth-ladder exception.
 - Write on:
   - code (paths in PLAN's `files_modified`)
   - `{PHASE_DIR}/SUMMARY.md`
@@ -130,12 +133,17 @@ Expected examples in this section (filled by architect):
 ### Step 1: Load plan
 Read phase PLAN.md. Identify tasks with `status: pending`.
 
-If all tasks already complete -> return "phase already executed".
+If all tasks already complete AND no REVIEW.md with BLOCKED/warnings exists
+-> return "phase already executed". (With a BLOCKED review, completed tasks
+do NOT end the job — the blockers are the job; see fix mode below.)
 
-**Ralph mode detection:** if `{PHASE_DIR}/LOOP.md` AND `{PHASE_DIR}/REVIEW.md` exist:
-- You are running in iter > 1 of the ralph loop
-- Read LOOP.md `## History` to see finding hash from previous iters (failed approaches)
-- Read REVIEW.md `## Blockers` and `## Warnings` from previous iter — those ARE your work now
+**Fix mode detection:** if `{PHASE_DIR}/REVIEW.md` exists, a review already
+ran — its findings take priority (this covers BOTH the ralph loop AND the
+manual flow `/jdi-verify → BLOCKED → /jdi-do`, where all tasks may already be
+`completed` and the real work is the blockers):
+- Read REVIEW.md `## Blockers` and `## Warnings` from the previous run — those ARE your work now
+- If `{PHASE_DIR}/LOOP.md` also exists (ralph mode): read LOOP.md `## History`
+  for finding hashes from previous iters (failed approaches)
 - If REVIEW.md verdict = BLOCKED:
   - Main focus is fixing the listed blockers
   - Do not re-implement already-completed tasks without reason
