@@ -94,8 +94,9 @@ Edit `.jdi/STATE.md`:
 - `next_step: /jdi-plan $PHASE_SLUG`
 
 ```bash
-git add .jdi/STATE.md
-git commit -m "chore(state): phase $PHASE_SLUG discussed"
+# STATE.md is untracked on 0.3.0+ projects — commit only if a legacy project still tracks it
+git add .jdi/STATE.md 2>/dev/null || true
+git diff --cached --quiet || git commit -m "chore(state): phase $PHASE_SLUG discussed"
 ```
 
 ### Step 7: Confirm

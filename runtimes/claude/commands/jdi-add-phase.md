@@ -53,7 +53,18 @@ Examples:
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new first."; exit 1; }
 test -f .jdi/ROADMAP.md || { echo "ROADMAP.md missing."; exit 1; }
-test -f .jdi/STATE.md || { echo "STATE.md missing."; exit 1; }
+
+# STATE.md is an untracked advisory cache — regenerate minimal fields if
+# absent (fresh clone): current phase = first ROADMAP phase without SHIPPED.md
+if [ ! -f .jdi/STATE.md ]; then
+  POS=1
+  while RESOLVED="$(npx -y jdi-cli resolve-phase "$POS" 2>/dev/null)"; do
+    eval "$RESOLVED"
+    [ -f "$JDI_PHASE_DIR/SHIPPED.md" ] || break
+    POS=$((POS+1))
+  done
+  printf 'schema_version: 2\ncurrent_phase: %s\ncurrent_phase_slug: %s\n' "$POS" "${JDI_PHASE_SLUG:-}" > .jdi/STATE.md
+fi
 ```
 
 PowerShell mirrors via Test-Path. See `bin/lib/jdi-*.ps1` helpers.
@@ -216,7 +227,7 @@ Next: /jdi-discuss {slug}
 </process>
 
 <gates>
-- pre: `.jdi/ROADMAP.md` + `.jdi/STATE.md` exist
+- pre: `.jdi/ROADMAP.md` exists (STATE.md regenerated from artifacts if absent)
 - pre: slug passes shape + reserved + uniqueness checks (`npx -y jdi-cli validate-slug --check-unique`)
 - pre: `--before`/`--after` anchor resolves successfully if provided
 - pre: insert position > current_phase

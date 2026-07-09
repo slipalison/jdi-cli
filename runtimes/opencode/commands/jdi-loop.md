@@ -44,7 +44,8 @@ Ralph pattern (Huntley + ASDLC):
 
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new."; exit 1; }
-test -f .jdi/STATE.md || { echo "STATE.md missing."; exit 1; }
+# STATE.md is an untracked advisory cache — absence is normal on a fresh clone
+[ -f .jdi/STATE.md ] || echo "note: STATE.md absent — will be rewritten by the loop."
 
 # Specialists registered
 ls .jdi/agents/jdi-doer-*.md 2>/dev/null | head -1 || { echo "Doer missing. /jdi-bootstrap."; exit 1; }
@@ -179,7 +180,7 @@ EOF
   if [ "$VERDICT" = "APPROVED" ] || [ "$VERDICT" = "APPROVED_WITH_WARNINGS" ]; then
     Update LOOP.md frontmatter -> status: converged
     Update STATE.md -> current_phase_slug: $PHASE_SLUG, phase_status: verified, phase_verdict: $VERDICT, next_step: /jdi-ship $PHASE_SLUG
-    git add "$PHASE_DIR/LOOP.md" .jdi/STATE.md
+    git add "$PHASE_DIR/LOOP.md"; git add .jdi/STATE.md 2>/dev/null || true
     git commit -m "chore($PHASE_SLUG): loop converged at iter $iter ($VERDICT)"
     echo "Phase $PHASE_SLUG converged at iter $iter. Verdict: $VERDICT"
     echo "Next: /jdi-ship $PHASE_SLUG"
@@ -192,7 +193,7 @@ EOF
   if [ "$VERDICT" = "APPROVED_PENDING_MANUAL" ]; then
     Update LOOP.md frontmatter -> status: converged
     Update STATE.md -> phase_status: pending_manual_dod, phase_verdict: APPROVED_PENDING_MANUAL, next_step: /jdi-confirm-dod $PHASE_SLUG
-    git add "$PHASE_DIR/LOOP.md" .jdi/STATE.md
+    git add "$PHASE_DIR/LOOP.md"; git add .jdi/STATE.md 2>/dev/null || true
     git commit -m "chore($PHASE_SLUG): loop converged at iter $iter (pending manual DoD)"
     echo "Phase $PHASE_SLUG: auto gates green at iter $iter; manual DoD items pending."
     echo "Next: /jdi-confirm-dod $PHASE_SLUG"
@@ -254,7 +255,7 @@ reset_logic:
   if [ "$total_resets" -ge "${MAX_RESETS:-3}" ]; then
     Update LOOP.md -> status: killed
     Update STATE.md -> phase_status: blocked, phase_verdict: BLOCKED, next_step: human review of PLAN.md/CONTEXT.md (loop killed)
-    git add "$PHASE_DIR/LOOP.md" .jdi/STATE.md
+    git add "$PHASE_DIR/LOOP.md"; git add .jdi/STATE.md 2>/dev/null || true
     git commit -m "chore($PHASE_SLUG): loop killed (3 resets, $((iter * total_resets)) iter total)"
     echo "Hard cap reached. Loop killed."
     exit 1
@@ -272,7 +273,7 @@ reset_logic:
 abort_logic:
   Update LOOP.md -> status: escalated
   Update STATE.md -> phase_status: blocked, phase_verdict: BLOCKED, next_step: review REVIEW.md, fix manually or /jdi-loop $PHASE_SLUG to resume
-  git add "$PHASE_DIR/LOOP.md" .jdi/STATE.md
+  git add "$PHASE_DIR/LOOP.md"; git add .jdi/STATE.md 2>/dev/null || true
   git commit -m "chore($PHASE_SLUG): loop aborted at iter $iter (user escalated)"
   exit 0
 ```
@@ -283,13 +284,15 @@ abort_logic:
 pause_logic:
   Update LOOP.md -> status: paused
   Update STATE.md -> phase_status: paused, next_step: edit PLAN.md/CONTEXT.md and re-run /jdi-loop $PHASE_SLUG
-  git add "$PHASE_DIR/LOOP.md" .jdi/STATE.md
+  git add "$PHASE_DIR/LOOP.md"; git add .jdi/STATE.md 2>/dev/null || true
   git commit -m "chore($PHASE_SLUG): loop paused at iter $iter (plan adjustment)"
   exit 0
 ```
 
 (All four terminal transitions — converged, killed, escalated, paused — commit
-LOOP.md + STATE.md; the working tree is never left dirty by the loop itself.)
+LOOP.md (+ STATE.md only on legacy projects that still track it; on 0.3.0+
+projects STATE.md is an untracked cache); the working tree is never left
+dirty by the loop itself.)
 
 ### Step 8: Final confirmation (convergence)
 

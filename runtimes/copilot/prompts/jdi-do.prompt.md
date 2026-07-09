@@ -32,7 +32,8 @@ Executes all tasks of the given phase. Reads PLAN.md, groups into waves, dispatc
 ### Step 1: Validation
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new."; exit 1; }
-test -f .jdi/STATE.md || { echo "STATE.md missing."; exit 1; }
+# STATE.md is an untracked advisory cache — absence is normal on a fresh clone
+[ -f .jdi/STATE.md ] || echo "note: STATE.md absent — will be rewritten at the end of this command."
 
 # Verify specialist exists
 ls .jdi/agents/jdi-doer-*.md 2>/dev/null | head -1 || {
@@ -90,6 +91,23 @@ Parse PLAN.md, extract:
 - List of pending tasks (`status: pending`)
 - Each task's wave
 - Files_modified
+
+**Fix mode (zero pending tasks):** if no task is `pending` but
+`$PHASE_DIR/REVIEW.md` exists with verdict BLOCKED (gates failed after all
+tasks completed — e.g. coverage, lint), do NOT exit. Dispatch ONE doer in fix
+mode and skip to Step 7:
+
+```
+Agent(
+  subagent_type="$DOER",
+  description="Fix blockers phase $PHASE_SLUG",
+  prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, mode=fix_blockers.
+          All tasks completed; REVIEW.md verdict is BLOCKED. Fix the items in
+          REVIEW.md ## Blockers, run tests, commit atomically."
+)
+```
+
+If no pending tasks and no BLOCKED review → "phase already executed", exit 0.
 
 If `--sequential` or phase has <3 parallel tasks: use sequential execution (1 doer at a time).
 
@@ -165,8 +183,10 @@ next_step: /jdi-verify $PHASE_SLUG
 ```
 
 ```bash
-git add .jdi/STATE.md
-git commit -m "chore(state): phase $PHASE_SLUG executed"
+# STATE.md is gitignored on 0.3.0+ projects (untracked cache) — stage it only
+# where legacy projects still track it, and skip the commit when nothing staged
+git add .jdi/STATE.md 2>/dev/null || true
+git diff --cached --quiet || git commit -m "chore(state): phase $PHASE_SLUG executed"
 ```
 
 ### Step 10: Confirm

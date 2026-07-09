@@ -465,9 +465,12 @@ In multi-stack, append ONE row per iteration. Existing single-row tables stay co
 
 ### S7: Audit + commit
 
-`.jdi/registry.md` (create with R-1 or append R-{N+1}):
+`.jdi/registry.md` (create or append). Entry ID is deterministic —
+`R-{YYYY-MM-DD}-{slug}` — so two developers bootstrapping different stacks on
+parallel branches never collide (same rationale as v2 D-IDs; legacy `R-{N}`
+entries are accepted on read, never rewritten):
 ```markdown
-## R-{N} ({date})
+## R-{date}-{slug} ({date})
 **Type:** specialist (doer + reviewer)
 **Slug:** {slug}
 **Stack:** {stack}
@@ -806,10 +809,11 @@ Edit each agent listed in `agents that load it`, `<skills_to_load>` section:
 
 ### Step 9: Audit trail
 
-Append to `.jdi/registry.md`:
+Append to `.jdi/registry.md` (deterministic ID `R-{YYYY-MM-DD}-{name}` —
+collision-free across branches; legacy `R-{N}` accepted on read):
 
 ```markdown
-## R-{N} ({date})
+## R-{date}-{name} ({date})
 **Type:** {agent|skill|composite}
 **Name:** jdi-{name}
 **Created by:** /jdi-create
