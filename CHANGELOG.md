@@ -5,6 +5,11 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-07-09
+
+### Added
+- **README mermaid diagrams** (docs-only release so npmjs.com picks them up): main flow (command → artifact → gate chain, verdict routing, Learnings feedback), ralph-mode state machine (LOOP.md semantics), memory layers by lifespan (long-term / per-phase / routing / untracked STATE cache + read-depth ladder), and a sequence diagram of when each `.jdi/` file is written and read across one phase. All render-validated with mermaid-cli.
+
 ## [0.3.0] - 2026-07-09
 
 Zero-merge-conflict guarantee completed + cross-phase learning. Closes the two
