@@ -5,6 +5,17 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-07-11
+
+Docs-only: README reorganized around the reader's journey (decide → install →
+use → understand → team → features → reference → meta).
+
+### Changed
+- **Section order**: "When NOT to use JDI" moved to the top (adoption decision belongs at the door); Quickstart now precedes The flow; the 150-line CLI flag reference moved out of the narrative into the reference block; lifecycle (Update/Uninstall/Reset) grouped; inventories (commands/agents/skills) grouped.
+- **Merged** "Multi-developer concurrency" into "Team usage" (they were two sections about the same topic).
+- **Deduplicated**: Update/Uninstall example blocks (kept once, in the CLI reference); "Power users" sub-table that repeated the following section verbatim.
+- **Fixed stale content**: "Publishing to npm" now documents the real flow (GitHub Release → `release: published` workflow → provenance publish) instead of the old manual-tag flow; Agents inventory model column now reflects 0.4.0 model-agnosticism (runtime default; Claude tier aliases); tagline says solo **or team**; registry example uses 0.3.0 deterministic IDs.
+
 ## [0.5.0] - 2026-07-11
 
 Backpressure release — three small changes from a spec-anchored-development
