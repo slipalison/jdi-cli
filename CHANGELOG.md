@@ -5,6 +5,11 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-07-11
+
+### Fixed
+- **Copilot CLI could not see any JDI command.** Root cause: the CLI does not read `.github/prompts/*.prompt.md` — that discovery path is VS-Code-only (upstream feature requests github/copilot-cli#618 and #1113 are still open). JDI's Copilot adapter predated the CLI. Fix: the builder now also emits every command and standalone skill as **Agent Skills** (`runtimes/copilot/skills/<n>/SKILL.md` — GA on Copilot since Apr/2026), and `jdi install copilot` writes them to `.github/skills/`, which **all three Copilot surfaces** discover: the CLI, VS Code agent mode, and the github.com coding agent. Prompt files stay (VS Code `/` menu); agents stay (`.github/agents/`, read by CLI + coding agent). After updating: `npx jdi-cli@latest install copilot`, then `/skills reload` in the CLI session and type the command in the message ("/jdi-status"). `doctor` now checks `.github/skills/` and flags a prompts-without-skills install with a fix hint; `uninstall` cleans the new dir.
+
 ## [0.9.0] - 2026-07-11
 
 ### Added

@@ -8,9 +8,9 @@ Strategy: 1 source of truth (`core/`) + adapters per runtime (`runtimes/<name>/`
 
 | JDI concept | Claude Code | GitHub Copilot | Antigravity | OpenCode | Junie (JetBrains) |
 |---|---|---|---|---|---|
-| Command | `.claude/commands/<n>.md` | `.github/prompts/<n>.prompt.md` | `.agents/skills/<n>/SKILL.md` | `.opencode/commands/<n>.md` | `.junie/skills/<n>/SKILL.md` (as skills — see note) |
+| Command | `.claude/commands/<n>.md` | `.github/prompts/<n>.prompt.md` (VS Code) + `.github/skills/<n>/SKILL.md` (CLI + coding agent — the CLI does NOT read prompts/) | `.agents/skills/<n>/SKILL.md` | `.opencode/commands/<n>.md` | `.junie/skills/<n>/SKILL.md` (as skills — see note) |
 | Agent | `.claude/agents/<n>.md` | `.github/agents/<n>.agent.md` | `.agents/skills/<n>/SKILL.md` | `.opencode/agents/<n>.md` | `.junie/agents/<n>.md` |
-| Skill | `.claude/skills/<n>/SKILL.md` | n/a | `.agents/skills/<n>/` (2.0; user scope: `~/.gemini/config/skills/`) | `.opencode/skills/<n>/SKILL.md` (also reads `.claude/skills/`) | `.junie/skills/<n>/SKILL.md` (user scope: `~/.junie/skills/`) |
+| Skill | `.claude/skills/<n>/SKILL.md` | `.github/skills/<n>/SKILL.md` (Agent Skills GA Apr/2026; also reads `.claude/skills/` and `.agents/skills/`; user scope `~/.copilot/skills/`) | `.agents/skills/<n>/` (2.0; user scope: `~/.gemini/config/skills/`) | `.opencode/skills/<n>/SKILL.md` (also reads `.claude/skills/`) | `.junie/skills/<n>/SKILL.md` (user scope: `~/.junie/skills/`) |
 | Global instructions | `CLAUDE.md` | `.github/copilot-instructions.md` | `agents.md` | `AGENTS.md` | `.junie/AGENTS.md` (+ `.junie/rules/*.md`) |
 | Hook | `settings.json` `hooks` | none | none | `opencode.jsonc` `permission` | `~/.junie/config.json` `hooks` |
 | Invocation | `/jdi-discuss` | `/jdi-discuss` or `@jdi-asker` | discovery by trigger | `/jdi-discuss` or `@jdi-asker` | semantic discovery (type "/jdi-discuss auth-flow" in the message) |

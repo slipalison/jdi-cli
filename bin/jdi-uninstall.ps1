@@ -183,6 +183,13 @@ function Uninstall-Copilot {
     param($t)
     Remove-PrefixedFiles -BaseDir $t.Dir -SubDir 'agents' -Filter 'jdi-*.agent.md'
     Remove-PrefixedFiles -BaseDir $t.Dir -SubDir 'prompts' -Filter 'jdi-*.prompt.md'
+    $skillsDir = Join-Path $t.Dir 'skills'
+    if (Test-Path $skillsDir) {
+      Get-ChildItem $skillsDir -Directory -Filter 'jdi-*' -ErrorAction SilentlyContinue | ForEach-Object {
+        Remove-Item-Safe $_.FullName "skills/$($_.Name)/"
+      }
+    }
+    Remove-UniversalSkills -BaseDir $t.Dir
     Remove-FileWithConfirm -Path (Join-Path $t.Dir 'copilot-instructions.md') `
       -Label ".github/copilot-instructions.md" `
       -Prompt "Remover .github/copilot-instructions.md? (pode ter sido editado)"

@@ -25,7 +25,9 @@ Este projeto usa **JDI (Just Do It)** como workflow de desenvolvimento. JDI eh u
 
 ## Comandos (prompts)
 
-Em `.github/prompts/`. Invoque via `/` no chat.
+Em `.github/prompts/` (VS Code: invoque via `/` no chat) e em `.github/skills/`
+(Copilot CLI + coding agent do github.com: descoberta semantica — digite o
+comando na mensagem, ex. "/jdi-status"; na CLI, `/skills reload` recarrega).
 
 ## Agentes (referencie via `@`)
 

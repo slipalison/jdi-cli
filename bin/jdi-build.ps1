@@ -28,7 +28,7 @@ $Out  = Join-Path $Root 'runtimes'
 function Ensure-Dirs {
   $dirs = @(
     "$Out\claude\agents", "$Out\claude\commands", "$Out\claude\skills",
-    "$Out\copilot\agents", "$Out\copilot\prompts",
+    "$Out\copilot\agents", "$Out\copilot\prompts", "$Out\copilot\skills",
     "$Out\antigravity\skills",
     "$Out\opencode\agents", "$Out\opencode\commands", "$Out\opencode\skills",
     "$Out\junie\agents", "$Out\junie\skills"
@@ -325,7 +325,13 @@ function Build-Command {
   $name = [System.IO.Path]::GetFileNameWithoutExtension($SrcPath)
 
   Copy-Item -Path $SrcPath -Destination (Join-Path "$Out\claude\commands" "$name.md") -Force
+  # copilot: prompts/<name>.prompt.md (VS Code slash) + skills/<name>/SKILL.md
+  # (Copilot CLI + cloud agent: Agent Skills GA Apr/2026 — the CLI does NOT
+  # read .github/prompts/, so skills are the CLI's discovery path)
   Copy-Item -Path $SrcPath -Destination (Join-Path "$Out\copilot\prompts" "$name.prompt.md") -Force
+  $copilotSkillDir = Join-Path "$Out\copilot\skills" $name
+  New-Item -ItemType Directory -Force -Path $copilotSkillDir | Out-Null
+  Copy-Item -Path $SrcPath -Destination (Join-Path $copilotSkillDir 'SKILL.md') -Force
 
   $skillDir = Join-Path "$Out\antigravity\skills" $name
   New-Item -ItemType Directory -Force -Path "$skillDir\scripts" | Out-Null
@@ -436,6 +442,9 @@ function Build-StandaloneSkillForTargets {
   }
   if ($Target -in 'junie','all') {
     Build-StandaloneSkill -SrcDir $SkillDir.FullName -Runtime 'junie' -DestRoot (Join-Path "$Out\junie\skills" $SkillDir.Name)
+  }
+  if ($Target -in 'copilot','all') {
+    Build-StandaloneSkill -SrcDir $SkillDir.FullName -Runtime 'copilot' -DestRoot (Join-Path "$Out\copilot\skills" $SkillDir.Name)
   }
 }
 

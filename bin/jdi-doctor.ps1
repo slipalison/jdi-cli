@@ -264,6 +264,7 @@ function Check-Install {
 
 Check-Install -Path "$ProjectDir\.claude\agents" -Filter 'jdi-*.md' -Label '.claude/agents/'
 Check-Install -Path "$ProjectDir\.github\agents" -Filter 'jdi-*.agent.md' -Label '.github/agents/'
+Check-Install -Path "$ProjectDir\.github\skills" -Filter 'SKILL.md' -Label '.github/skills/ (Copilot CLI + coding agent)'
 Check-Install -Path "$ProjectDir\.agents\skills" -Filter 'SKILL.md' -Label '.agents/skills/ (Antigravity 2.0)'
 Check-Install -Path "$ProjectDir\.gemini\antigravity\skills" -Filter 'SKILL.md' -Label '.gemini/antigravity/skills/ (1.x legado — jdi update migra)'
 Check-Install -Path "$ProjectDir\.junie\skills" -Filter 'SKILL.md' -Label '.junie/skills/'

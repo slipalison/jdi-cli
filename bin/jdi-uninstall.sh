@@ -125,6 +125,15 @@ uninstall_copilot() {
     done
   fi
 
+  if [[ -d "$dest/skills" ]]; then
+    for sd in "$dest/skills"/jdi-*; do
+      [[ -d "$sd" ]] && remove_safe "$sd" "skills/$(basename "$sd")/"
+    done
+    for skill in "${UNIVERSAL_SKILLS[@]}"; do
+      remove_safe "$dest/skills/$skill" "skills/$skill/"
+    done
+  fi
+
   if [[ -f "$dest/copilot-instructions.md" ]] && confirm_action "Remover .github/copilot-instructions.md? (pode ter sido editado)"; then
     remove_safe "$dest/copilot-instructions.md" ".github/copilot-instructions.md"
   fi

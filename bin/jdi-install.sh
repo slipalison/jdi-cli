@@ -55,12 +55,16 @@ install_claude() {
 
 install_copilot() {
   local dest="$PWD/.github"
-  mkdir -p "$dest/agents" "$dest/prompts"
+  mkdir -p "$dest/agents" "$dest/prompts" "$dest/skills"
   cp -R "$ROOT/runtimes/copilot/agents/." "$dest/agents/"
   cp -R "$ROOT/runtimes/copilot/prompts/." "$dest/prompts/"
+  # Skills servem as 3 superficies: Copilot CLI (que NAO le .github/prompts/),
+  # VS Code agent mode e o coding agent do github.com
+  cp -R "$ROOT/runtimes/copilot/skills/." "$dest/skills/"
   cp "$ROOT/runtimes/copilot/copilot-instructions.md" "$dest/copilot-instructions.md"
   echo "Copilot instalado em: $dest"
   echo "  -> Copilot e sempre project-scoped via .github/"
+  echo "  -> CLI: comandos JDI aparecem como skills ('/skills reload' na sessao; digite '/jdi-status' na mensagem)"
 }
 
 install_antigravity() {
