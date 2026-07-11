@@ -1,7 +1,6 @@
 ---
 description: Fires jdi-architect in specialist mode to generate doer + reviewer per-project. Reads PROJECT.md, drives architect, validates outputs, updates routing.
 mode: subagent
-model: anthropic/claude-sonnet-4-20250514
 temperature: 0.2
 permission:
   edit: allow

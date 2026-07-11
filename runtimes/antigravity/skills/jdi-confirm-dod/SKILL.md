@@ -113,12 +113,19 @@ extracted — re-runs resume exactly at the still-pending items.
 
 ### Step 5: Per-item confirmation loop
 
+The reviewer may have pre-collected evidence for manual items (Evidence cell
+starting with `suggested:` — what it FOUND in the repo, without confirming).
+Surface it so confirming is a judgment call, not a scavenger hunt.
+
 For each pending row, run:
 
 ```
 AskUserQuestion(
-  question="DoD manual #{N}: '{criterion text}'\nSource: {source}  | Expected evidence: {evidence_hint}",
+  question="DoD manual #{N}: '{criterion text}'\nSource: {source}  | Expected evidence: {evidence_hint}{if suggested: | Reviewer found: {suggested_evidence}}",
   options=[
+    {if suggested evidence exists:}
+    "Confirm — the reviewer's finding is correct evidence",
+    {always:}
     "Confirm — I verified this and will provide evidence",
     "Skip — leave pending (will not ship)",
     "Reject DoD item — waive: criterion not applicable anymore (audited, does not block ship)"
@@ -126,7 +133,8 @@ AskUserQuestion(
 )
 ```
 
-- **Confirm** → sub-prompt (free text): "Evidence (URL / commit sha / path / short description)?". Then flip the row's Status cell in the DoD Checklist table: `MANUAL_REQUIRED` → `CONFIRMED`. Evidence recorded in Step 6.
+- **Confirm (reviewer's finding)** → use the `suggested:` text as the evidence (strip the prefix). Flip Status: `MANUAL_REQUIRED` → `CONFIRMED`.
+- **Confirm (own evidence)** → sub-prompt (free text): "Evidence (URL / commit sha / path / short description)?". Then flip the row's Status cell in the DoD Checklist table: `MANUAL_REQUIRED` → `CONFIRMED`. Evidence recorded in Step 6.
 - **Skip** → row stays `MANUAL_REQUIRED` (no change). Continue.
 - **Reject** → only allowed if user types a justification. Flip the row's Status cell: `MANUAL_REQUIRED` → `REJECTED`. Justification recorded in `## DoD Rejected (post-hoc)` (Step 6). A REJECTED row is an audited waiver — it does not block `/jdi-ship`.
 

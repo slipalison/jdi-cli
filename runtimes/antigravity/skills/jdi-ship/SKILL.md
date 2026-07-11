@@ -1,7 +1,7 @@
 ---
 name: jdi-ship
-description: Finalizes phase after verify. Writes the SHIPPED.md marker in the phase folder, advances STATE hint to next phase. ROADMAP.md untouched (conflict-free for teams). Accepts slug or position.
-argument_hint: "<slug|position>"
+description: Finalizes phase after verify. Writes the SHIPPED.md marker in the phase folder, advances STATE hint to next phase. ROADMAP.md untouched (conflict-free for teams). --pr opens a pull request via gh (best-effort). Accepts slug or position.
+argument_hint: "<slug|position> [--pr]"
 runtime_intent:
   invokes_agent: none
 runtime_overrides:
@@ -23,6 +23,9 @@ Finalizes phase after /jdi-verify approves. Writes phases/<slug>/SHIPPED.md (the
 
 <arguments>
 - `phase_id` (required): canonical slug, legacy slug, or integer position
+- `--pr` (optional): after the final commit, open a pull request via `gh`
+  (best-effort — never fails the ship). Fits the team flow "one phase per
+  branch": the artifact ends up where it belongs, in the system of record.
 </arguments>
 
 <process>
@@ -30,6 +33,9 @@ Finalizes phase after /jdi-verify approves. Writes phases/<slug>/SHIPPED.md (the
 ### Step 1: Validation
 ```bash
 test -d .jdi/ || { echo "Not a JDI project."; exit 1; }
+
+WITH_PR=false
+for a in "$@"; do [ "$a" = "--pr" ] && WITH_PR=true; done
 ```
 
 ### Step 2: Resolve phase
@@ -263,6 +269,42 @@ Optional tag (if PROJECT.md has `tag_phases: true`):
 git tag "phase-$PHASE_SLUG"
 ```
 
+### Step 8.5: Open pull request (only with `--pr`)
+
+Best-effort — a failed PR never fails the ship (SHIPPED.md is already the
+source of truth). Requires: `gh` CLI, a remote, and a non-default branch.
+
+```bash
+if [ "$WITH_PR" = true ]; then
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "note: gh CLI not found — skipping PR. Install: cli.github.com"
+  elif ! git remote get-url origin >/dev/null 2>&1; then
+    echo "note: no git remote — skipping PR."
+  else
+    DEFAULT_BRANCH=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null || echo main)
+    CURRENT_BRANCH=$(git branch --show-current)
+    if [ "$CURRENT_BRANCH" = "$DEFAULT_BRANCH" ]; then
+      echo "note: on default branch ($DEFAULT_BRANCH) — skipping PR. Team flow: one phase per branch."
+    else
+      git push -u origin "$CURRENT_BRANCH" || { echo "note: push failed — skipping PR."; }
+      LEARNINGS=$(sed -n '/^## Learnings/,$p' "$PHASE_DIR/SHIPPED.md" 2>/dev/null)
+      gh pr create \
+        --title "feat($PHASE_SLUG): ship phase ($VERDICT)" \
+        --body "Phase \`$PHASE_SLUG\` shipped via JDI.
+
+**Verdict:** $VERDICT
+**Review:** \`$PHASE_DIR/REVIEW.md\` (gates + DoD checklist in the diff)
+**Summary:** \`$PHASE_DIR/SUMMARY.md\`
+
+$LEARNINGS" \
+        && echo "PR opened." || echo "note: gh pr create failed — open manually."
+    fi
+  fi
+fi
+```
+
+PowerShell mirrors with `Get-Command gh` + the same `gh` calls.
+
 ### Step 9: Confirm
 
 ```
@@ -275,7 +317,7 @@ Phase $PHASE_SLUG shipped.
 
 <gates>
 - pre: REVIEW.md exists + verdict ∉ {BLOCKED, APPROVED_PENDING_MANUAL} + no DoD row still MANUAL_REQUIRED + SHIPPED.md absent
-- post: SHIPPED.md written + STATE.md updated + old phases archived (if applicable) + commit (+ optional tag). ROADMAP.md untouched except legacy Status-line projects.
+- post: SHIPPED.md written + STATE.md updated + old phases archived (if applicable) + commit (+ optional tag) (+ PR when --pr and gh/remote/branch allow — best-effort, never blocks). ROADMAP.md untouched except legacy Status-line projects.
 </gates>
 
 <errors>

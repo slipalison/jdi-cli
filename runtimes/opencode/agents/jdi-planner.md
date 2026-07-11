@@ -1,7 +1,6 @@
 ---
 description: Generates PLAN.md for the phase. Reads CONTEXT.md (from asker) + PROJECT.md, decomposes into tasks, maps files_modified, execution order. No fluff.
 mode: subagent
-model: anthropic/claude-sonnet-4-20250514
 temperature: 0.2
 permission:
   edit: deny
