@@ -5,6 +5,11 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.1] - 2026-07-11
+
+### Fixed
+- **SonarCloud quality gate on PR #17 failed and the merge raced past it** (chained command did not stop on the failing check — process error, documented here for the record). Two findings, both addressed: (1) `bin/jdi-build.sh` used the literal `'copilot'` 5x — extracted `RT_COPILOT` (same S1192 class as 0.2.0's `RT_CLAUDE`; builder re-EXECUTED after the change, 0 drift); (2) new-code duplication 5.2% came from `runtimes/copilot/skills/` duplicating the prompt files — that is build output duplicated by construction (one source, five generated adapters), now excluded from duplication measurement via `.sonarcloud.properties` (`sonar.cpd.exclusions=runtimes/**`). Duplication stays measured on real sources.
+
 ## [0.10.0] - 2026-07-11
 
 ### Fixed

@@ -17,6 +17,7 @@ readonly ANTIGRAVITY="antigravity"
 readonly RT_CLAUDE="claude"
 readonly RT_OPENCODE="opencode"
 readonly RT_JUNIE="junie"
+readonly RT_COPILOT="copilot"
 readonly K_DESC="description"
 
 ensure_dirs() {
@@ -126,8 +127,8 @@ build_copilot_agent() {
 
   local desc model tools
   desc=$(base_fm_value "$src" "$K_DESC")
-  model=$(override_scalar "$src" "copilot" "model")
-  tools=$(override_scalar "$src" "copilot" "tools")
+  model=$(override_scalar "$src" "$RT_COPILOT" "model")
+  tools=$(override_scalar "$src" "$RT_COPILOT" "tools")
 
   {
     echo "---"
@@ -359,7 +360,7 @@ main() {
     done
   fi
 
-  if [[ "$TARGET" == "copilot" || "$TARGET" == "all" ]]; then
+  if [[ "$TARGET" == "$RT_COPILOT" || "$TARGET" == "all" ]]; then
     echo
     echo "copilot:"
     for f in "$CORE"/agents/*.md; do
@@ -417,8 +418,8 @@ main() {
       if [[ "$TARGET" == "$RT_JUNIE" || "$TARGET" == "all" ]]; then
         build_standalone_skill "$skill_dir" "$RT_JUNIE" "${OUT}/junie/skills/${skill_name}"
       fi
-      if [[ "$TARGET" == "copilot" || "$TARGET" == "all" ]]; then
-        build_standalone_skill "$skill_dir" "copilot" "${OUT}/copilot/skills/${skill_name}"
+      if [[ "$TARGET" == "$RT_COPILOT" || "$TARGET" == "all" ]]; then
+        build_standalone_skill "$skill_dir" "$RT_COPILOT" "${OUT}/copilot/skills/${skill_name}"
       fi
     done
   fi
