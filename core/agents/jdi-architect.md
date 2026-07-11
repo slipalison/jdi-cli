@@ -26,7 +26,6 @@ runtime_overrides:
     model: opus
     tools: [Read, Write, Edit, Bash, Grep, Glob, AskUserQuestion, WebSearch, WebFetch]
   copilot:
-    model: gpt-5
     tools: [read, write, edit, grep, glob, terminal]
   antigravity:
     triggers_extra:
@@ -120,9 +119,11 @@ If `specialist_count == 1`, single pass (existing behavior). Specialist slug = `
   - `dev_command` (e.g.: `pnpm dev`)
   - `critical_paths` (list of routes to validate)
 
-If `llm_config` missing or only has `default_model_opencode: anthropic/claude-sonnet-4-20250514`:
-- Use hardcoded default in template
-- Skip merge in opencode.jsonc (Anthropic provider is already native)
+If `llm_config` missing (no explicit model choice in PROJECT.md):
+- REMOVE the `model:` line from the specialist frontmatter entirely — the
+  specialist inherits the runtime's configured default model (model-agnostic:
+  JDI never pins a model the user did not choose)
+- Skip merge in opencode.jsonc
 
 If `llm_config.provider` present:
 - Replace placeholder `{LLM_OPENCODE_MODEL}` with `default_model_opencode`
@@ -387,8 +388,9 @@ Read `core/templates/reviewer-specialist.md`. Replace placeholders:
 
 **`{LLM_OPENCODE_MODEL}` substitution:**
 - Read `llm_config.default_model_opencode` from PROJECT.md
-- Default fallback: `anthropic/claude-sonnet-4-20250514`
-- Replace in frontmatter `runtime_overrides.opencode.model:` of doer and reviewer
+- If present: replace in frontmatter `runtime_overrides.opencode.model:` of doer and reviewer
+- If absent: DELETE the `model:` line from both specialists — they inherit the
+  runtime's configured default (never pin a model the user did not choose)
 
 For each `{X_COMMAND}` (build/test/coverage/lint), also generate `{X_COMMAND_PS}` — PowerShell equivalent. Common mapping:
 
