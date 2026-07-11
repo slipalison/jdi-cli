@@ -5,6 +5,14 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-07-11
+
+### Added
+- **`/jdi-new --auto` (alias `--yolo`)** — fully autonomous project creation, zero questions. Whatever the description does not answer, the researcher decides itself: context7/web research when available, stack heuristics otherwise; every guessed decision records a 1-line rationale (D-1 reads `auto-locked: <why>`; the DoD baseline keeps the 5 derived candidates without the edit loop). Explicit choices in the description are never overridden, and the destructive `--reset` confirmation is never bypassed. Consistent with the existing `/jdi-discuss --auto`.
+
+### Docs
+- **Team usage:** documented the ONE file that can still conflict — ROADMAP.md under simultaneous `add-phase`/`remove-phase` on parallel branches — why it is deliberate (a `merge=union` there could silently resurrect a removed phase), and the trivial resolution (keep both blocks, fix display numbering; slugs never collide). Verified empirically: normal commits and simultaneous DECISIONS.md appends merge clean; only concurrent roadmap mutation conflicts.
+
 ## [0.6.0] - 2026-07-11
 
 Antigravity 2.0 support (Google, May 2026 — IDE + `agy` CLI + SDK; replaces

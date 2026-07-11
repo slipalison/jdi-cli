@@ -1,7 +1,7 @@
 ---
 name: jdi-new
-description: Entry point for new project. Runs research + asker, generates PROJECT.md + ROADMAP.md.
-argument_hint: "<short project description> [--reset]"
+description: Entry point for new project. Runs research + asker, generates PROJECT.md + ROADMAP.md. --auto (alias --yolo) skips all questions — the researcher decides everything itself, using web/context7 research when available, and records the rationale.
+argument_hint: "<short project description> [--reset] [--auto]"
 runtime_intent:
   invokes_agent: jdi-researcher
 runtime_overrides:
@@ -25,10 +25,17 @@ Initializes new JDI project. Runs research + key questions + generates PROJECT.m
 
 <arguments>
 - `description` (optional but recommended): short text of what to build.
+- `--auto` (alias: `--yolo`): fully autonomous — ZERO questions. Whatever the
+  description does not answer, the researcher decides itself (researching via
+  context7/web when available, else stack heuristics) and records the
+  rationale. D-1 is auto-locked with a 1-line justification. The DoD baseline
+  keeps the 5 derived candidates as-is. The richer the description, the fewer
+  decisions are guessed — pair `--auto` with a dense prompt.
+  `--auto` does NOT bypass the `--reset` confirmation (destructive stays human).
 
 Examples:
 - `/jdi-new "TODO app .NET 10 + React 19"`
-- `/jdi-new "Inventory REST API in Python + FastAPI"`
+- `/jdi-new "Inventory REST API in Python + FastAPI" --auto`
 - `/jdi-new "Go CLI tool for log parsing"`
 - `/jdi-new` (asker starts from scratch)
 </arguments>
@@ -73,7 +80,8 @@ if ($files.Count -ge 3) {
 If `--reset` passed, AskUserQuestion confirms + wipes `.jdi/`.
 
 ### Step 2: Spawn researcher
-Invoke `jdi-researcher` passing description. Wait.
+Invoke `jdi-researcher` passing the description AND `auto=true` when `--auto`
+(or its alias `--yolo`) was passed. Wait.
 
 ### Step 3: Verify outputs
 ```bash

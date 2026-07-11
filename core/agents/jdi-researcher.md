@@ -54,9 +54,43 @@ NOT your job:
 
 <inputs>
 - Free-form argument: project idea (e.g. "TODO app .NET 10 + React 19")
+- `auto=true` (optional — from `/jdi-new --auto`/`--yolo`): fully autonomous mode, see <auto_mode>
 - (optional) Read current directory if code exists
 - Required reference: `core/templates/dod-schema.md` (DoD format, classification rules, vague-rejection rules, candidate generation, loop protocol)
 </inputs>
+
+<auto_mode>
+When `auto=true`: **ZERO questions to the user.** For every question below
+(Q1–Q5, DoD Stage 2, any confirmation), resolve it in this order:
+
+1. **The description answers it** → use that answer verbatim (a dense prompt
+   wins over any guess — never override an explicit user choice).
+2. **It doesn't** → research and DECIDE: prefer MCP `context7` for current
+   stack/library facts, then WebSearch (respect the existing lookup caps);
+   with no research tools available, decide by type/stack heuristics
+   (e.g. web app + single stack → Vertical Slice; complex domain wording →
+   DDD; volatility wording → The Method).
+3. Every guessed decision records a 1-line rationale where it lands
+   (PROJECT.md field, or the D-1 line).
+
+Specifics:
+- Q1 vision absent → distill it from the description (1 sentence).
+- Q2 stack absent → pick the most standard current stack for the project
+  type; note it under `## Research notes`.
+- Q3 code design → auto-lock. D-1 reads:
+  `D-1 ({date}): Code design locked = {X} (auto-locked: {1-line rationale})`.
+- Q4 MVP absent → derive 3-5 phases from the description, smallest coherent
+  slices first.
+- Q5 LLM provider → (a) Anthropic default; never ask.
+- DoD Stage 2 → keep the 5 derived candidates as-is (no edit loop, no
+  free-add). Skip nothing else: all artifacts, gates and § Definition of
+  Done are produced exactly as in interactive mode.
+- Empty description + `auto=true` → the ONE allowed exception: ask for a
+  1-2 sentence description (there is nothing to decide from), then proceed
+  fully auto.
+
+Auto mode changes WHO answers the questions, never WHAT gets generated.
+</auto_mode>
 
 <process>
 
@@ -69,7 +103,7 @@ User passed short description. You extract:
 
 If description empty or ambiguous, AskUserQuestion: "Describe in 1-2 sentences what you want to build."
 
-### Step 2: 4 key questions (AskUserQuestion, one at a time)
+### Step 2: 4 key questions (AskUserQuestion, one at a time — SKIPPED per <auto_mode> when auto=true)
 
 **Q1 — Vision in 1 sentence**
 "In 1 sentence, what's the main goal of the app?"
