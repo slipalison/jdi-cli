@@ -23,7 +23,7 @@ core/                    <- shipped, generators (lives in the JDI repo)
     jdi-asker.md
     jdi-planner.md
     jdi-architect.md
-  commands/              <- 15 commands
+  commands/              <- 16 commands
     jdi-new.md, jdi-adopt.md, jdi-bootstrap.md, jdi-discuss.md,
     jdi-plan.md, jdi-do.md, jdi-verify.md, jdi-confirm-dod.md,
     jdi-ship.md, jdi-loop.md, jdi-status.md, jdi-add-phase.md,
