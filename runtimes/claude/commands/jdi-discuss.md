@@ -70,6 +70,10 @@ Invoke `jdi-asker` with:
 - `phase_dir=$PHASE_DIR`
 - `phase_position=$PHASE_POSITION` (display only)
 - `mode=auto` if `--auto`, otherwise `mode=interactive`
+- Orchestrators (e.g. `/jdi-issue`) may additionally pass `brief=<card text>`
+  (external card = primary source) and `dod=auto_only` (only executable DoD;
+  human-only criteria go to `## Deferred to PR review`) — see the asker's
+  `<brief_mode>`
 
 Agent runs its own process. Returns when CONTEXT.md is written to `$PHASE_DIR/CONTEXT.md`.
 

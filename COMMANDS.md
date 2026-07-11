@@ -1,12 +1,38 @@
 # JDI — Commands
 
-16 commands. Auto-router (1) + 7 in the main loop + DoD confirmation (1) + brownfield entry (1) + ralph mode (1) + continuity (1) + roadmap mutation (2) + migration (1) + meta (1).
+17 commands. Autonomous intake (1) + auto-router (1) + 7 in the main loop + DoD confirmation (1) + brownfield entry (1) + ralph mode (1) + continuity (1) + roadmap mutation (2) + migration (1) + meta (1).
 
 Every command that takes a phase accepts a **slug** (`auth-flow`, canonical) OR an **integer position** (`2`, display). Slugs are stable across branches; positions renumber on insert/remove. Schema v2 uses slug-as-ID; legacy v1 (numeric) projects keep working until you run `/jdi-migrate-phases`.
 
 Phase status is never stored — it is **derived from the artifacts** in the phase folder: `SHIPPED.md` → done, `REVIEW.md` → verified, `SUMMARY.md` → executed, `PLAN.md` → planned, `CONTEXT.md` → discussed, nothing → pending. `STATE.md` is an advisory next-step cache for the local clone — untracked (gitignored) since 0.3.0 and regenerated from artifacts when absent; gates check artifacts, not STATE.
 
 Phase helpers (resolver, slug validator, truncate, monitor) ship in the npm package and are invoked by the commands as CLI subcommands — `npx -y jdi-cli resolve-phase|validate-slug|truncate|monitor` (with `resolve-phase --json` for PowerShell). No helper code is copied into your repo.
+
+## Autonomous intake
+
+### `/jdi-issue <issue-url | card-id | card text> [--no-pr]`
+
+**Card → PR, no human in the chain.** Reads a task/issue/card, registers a phase, and runs the whole flow autonomously — rigor compensates the missing human.
+
+```
+/jdi-issue https://github.com/org/repo/issues/42
+/jdi-issue PROJ-123                        # via provider MCP (Linear/Jira/ADO/Trello) when connected
+/jdi-issue "Add rate limiting: requests over 100/min per key must get 429..."
+```
+
+Does:
+1. **Provider ladder**: GitHub URL via `gh issue view` → tracker URL/ID via the provider's **MCP tools when connected** (searches available tools for linear/jira/atlassian/azure/trello) → pasted text (universal fallback). Extracts title, goal, acceptance criteria
+2. Registers the phase (`add-phase` process; slug derived + validated; `--reason` = card url/id)
+3. `discuss --auto` with the card as PRIMARY source (`brief=`): card constraints → locked decisions; card checklists → DoD candidates. **`dod=auto_only`**: every DoD item must carry an executable `Verify:`; inherently-human criteria go to `## Deferred to PR review` (never silent waivers, zero MANUAL_REQUIRED rows)
+4. `plan` + `loop` with ONE declared deviation: at the loop's human gate it auto-continues (`AUTO-RESET` logged in LOOP.md) — all hard caps stay (max 3 resets / 15 iterations → `killed` = FULL STOP, never shipped)
+5. **DoD critic forced on** in every verify (when the runtime spawns sub-agents) regardless of `orchestration.mode` — the critic only tightens
+6. **Warnings get one fix round** (stricter than interactive): one doer pass targeting warnings + re-verify; persisting warnings ship listed under `## Shipped with warnings` in the PR body
+7. `ship --pr` (unless `--no-pr`); PR body gains the card source, deferred items, warnings, verdict + loop stats, `§ Learnings`
+8. One-screen final report: verdict, iterations/auto-resets, PR url, what (if anything) awaits a human
+
+**Invariants:** killed/escalated work is never shipped; JDI never merges the PR; no chained gate is weakened — autonomy only ADDS rigor. The proactive trigger lives outside JDI: fire it from CI/webhooks (`claude`/`agy` headless with `/jdi-issue <url>`).
+
+**Next:** review the PR (the human touchpoint that remains).
 
 ## Auto-router
 

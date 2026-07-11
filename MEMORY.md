@@ -222,6 +222,7 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
 - `compaction.archive_after` — phases older than this delta from the current position move to `.jdi/archive/` (executed by `/jdi-ship`).
 - `coverage_min` — overridable per PROJECT.md. Reviewer uses it.
 - `orchestration.mode` — `standard` (default) or `enhanced`. Host-neutral flag: when `enhanced` AND the host can orchestrate sub-agents, commands MAY run optional multi-agent layers (advisory critics); otherwise they degrade to the standard path. Off-path is byte-identical. Capability boolean, NOT a token ledger.
+- `orchestration.next_execution` — `step` (default) or `loop`. With `loop`, `/jdi-next` routes the execute/verify states (`planned`, `executed`, `verified+BLOCKED`) to `/jdi-loop` instead of single `do`/`verify` steps. Per-project opt-in — ralph presumes a trustworthy test suite. Absent = `step`.
 - `orchestration.source` — `default` | `user` | `detected`. Provenance/audit only, never drives behavior.
 
 **Lifespan:** life of the project. Versioned in git.

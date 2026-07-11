@@ -5,6 +5,18 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-07-11
+
+### Added
+- **`/jdi-issue` — autonomous intake (17th command). Card → PR with no human in the chain.** Reads a task/issue/card through a provider ladder — GitHub URL via `gh`, tracker URL/ID via the provider's MCP tools when connected (Linear, Jira/Atlassian, Azure DevOps, Trello), pasted text as the universal fallback — then chains add-phase → discuss `--auto` (card as primary source: constraints → locked decisions, checklists → DoD) → plan → loop → ship `--pr`. Autonomy is earned by rigor, not by skipping checks:
+  - **DoD `auto_only`**: every DoD item must carry an executable `Verify:`; inherently-human criteria are surfaced as `## Deferred to PR review` in the PR body — never silently waived, never MANUAL_REQUIRED (nothing blocks on an absent human).
+  - **DoD critic forced on** in every verify when the runtime spawns sub-agents, regardless of `orchestration.mode` (the critic can only tighten).
+  - **Warnings get one dedicated fix round** before shipping (stricter than interactive mode's "ship anyway?"); persisting warnings are listed in the PR body.
+  - **Loop auto-continues its human gate** (`AUTO-RESET` audited in LOOP.md) but ALL hard fuses stay: max 3 resets / 15 iterations absolute → `killed` = full stop; killed work is never shipped; JDI never merges the PR.
+  - The proactive trigger stays outside JDI (CI/webhook invokes the runtime headless) — daemon-free as always.
+- Asker `<brief_mode>`: orchestrators can pass `brief=<card>` (external card = primary source) and `dod=auto_only`; `/jdi-verify` accepts `critic=on` from orchestrators.
+- **`/jdi-next --loop`** (and per-project `orchestration.next_execution: "loop"` in config.json): on the execute/verify states (`planned`, `executed`, `verified+BLOCKED`), route to `/jdi-loop` instead of single `do`/`verify` steps. Default stays `step` — a next that silently triggers up to 15 iterations would betray its "predictable one step" contract and ralph requires a trustworthy test suite; making loop primary is a per-project decision, not a global default.
+
 ## [0.7.0] - 2026-07-11
 
 ### Added
