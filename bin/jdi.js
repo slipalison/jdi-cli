@@ -11,7 +11,7 @@ const VERSION = require('../package.json').version;
 const PKG_ROOT = path.resolve(__dirname, '..');
 const isWindows = process.platform === 'win32';
 
-const VALID_RUNTIMES = ['claude', 'copilot', 'antigravity', 'opencode', 'all'];
+const VALID_RUNTIMES = ['claude', 'copilot', 'antigravity', 'opencode', 'junie', 'all'];
 const VALID_SCOPES = ['user', 'project'];
 
 // =================================================================

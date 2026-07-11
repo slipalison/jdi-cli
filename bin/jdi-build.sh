@@ -16,6 +16,7 @@ TARGET="${1:-all}"
 readonly ANTIGRAVITY="antigravity"
 readonly RT_CLAUDE="claude"
 readonly RT_OPENCODE="opencode"
+readonly RT_JUNIE="junie"
 readonly K_DESC="description"
 
 ensure_dirs() {
@@ -23,6 +24,7 @@ ensure_dirs() {
   mkdir -p "${OUT}/copilot/agents" "${OUT}/copilot/prompts"
   mkdir -p "${OUT}/antigravity/skills"
   mkdir -p "${OUT}/opencode/agents" "${OUT}/opencode/commands" "${OUT}/opencode/skills"
+  mkdir -p "${OUT}/junie/agents" "${OUT}/junie/skills"
 }
 
 # ---------------------------------------------------------------------------
@@ -197,6 +199,54 @@ build_opencode_agent() {
   echo "  opencode/agents/${name}.md"
 }
 
+build_junie_agent() {
+  # Junie subagent (.junie/agents/<n>.md): name + description + tools
+  # allowlist (enforced by Junie) + reasoningLevel. Tools derive from the
+  # claude override filtered to Junie's supported set; Agent/WebFetch/Skill
+  # drop out (Junie delegates natively and has WebSearch only). Model is
+  # never emitted — Junie is LLM-agnostic and the user picks the model.
+  local src="$1"
+  local name; name=$(basename "$src" .md)
+  local dst="${OUT}/junie/agents/${name}.md"
+
+  local desc tools reasoning tools_filtered level
+  desc=$(base_fm_value "$src" "$K_DESC")
+  tools=$(override_scalar "$src" "$RT_CLAUDE" "tools")
+  reasoning=$(awk '
+    /^---$/ { fm++; if (fm == 2) exit; next }
+    fm == 1 && /^runtime_intent:$/ { r = 1; next }
+    fm == 1 && r && /^[a-z_-]+:/ { r = 0 }
+    fm == 1 && r && /^  reasoning:/ { sub(/^  reasoning:[[:space:]]*/, ""); print; exit }
+  ' "$src")
+
+  tools_filtered=""
+  if [[ -n "$tools" ]]; then
+    tools_filtered=$(echo "$tools" | tr -d '[]' | tr ',' '\n' \
+      | sed 's/^ *//; s/ *$//' \
+      | grep -E '^(Read|Bash|Glob|Grep|Write|Edit|WebSearch|AskUserQuestion)$' \
+      | tr '\n' ',' | sed 's/,$//; s/,/, /g')
+  fi
+
+  case "$reasoning" in
+    deep) level="high" ;;
+    medium) level="medium" ;;
+    low) level="low" ;;
+    *) level="" ;;
+  esac
+
+  {
+    echo "---"
+    echo "name: ${name}"
+    [[ -n "$desc" ]] && echo "description: ${desc}"
+    [[ -n "$tools_filtered" ]] && echo "tools: [${tools_filtered}]"
+    [[ -n "$level" ]] && echo "reasoningLevel: ${level}"
+    echo "---"
+    extract_body "$src"
+  } > "$dst"
+
+  echo "  junie/agents/${name}.md"
+}
+
 build_command() {
   local src="$1"
   local name; name=$(basename "$src" .md)
@@ -214,6 +264,12 @@ build_command() {
 
   # opencode: commands/<name>.md (formato proprio com agent: e subtask:)
   cp "$src" "${OUT}/opencode/commands/${name}.md"
+
+  # junie: skills/<name>/SKILL.md (semantic discovery — NOT a custom command:
+  # Junie template args would treat the body's $VARS as required parameters)
+  local junie_skill_dir="${OUT}/junie/skills/${name}"
+  mkdir -p "$junie_skill_dir"
+  cp "$src" "${junie_skill_dir}/SKILL.md"
 
   echo "  command: ${name}"
 }
@@ -322,6 +378,14 @@ main() {
     done
   fi
 
+  if [[ "$TARGET" == "$RT_JUNIE" || "$TARGET" == "all" ]]; then
+    echo
+    echo "junie:"
+    for f in "$CORE"/agents/*.md; do
+      build_junie_agent "$f"
+    done
+  fi
+
   echo
   echo "commands (todos os runtimes):"
   for f in "$CORE"/commands/*.md; do
@@ -344,6 +408,9 @@ main() {
       fi
       if [[ "$TARGET" == "$ANTIGRAVITY" || "$TARGET" == "all" ]]; then
         build_standalone_skill "$skill_dir" "$ANTIGRAVITY" "${OUT}/antigravity/skills/${skill_name}"
+      fi
+      if [[ "$TARGET" == "$RT_JUNIE" || "$TARGET" == "all" ]]; then
+        build_standalone_skill "$skill_dir" "$RT_JUNIE" "${OUT}/junie/skills/${skill_name}"
       fi
       # Copilot: nao tem conceito nativo de skill - skip
     done

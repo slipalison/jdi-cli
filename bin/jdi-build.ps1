@@ -7,7 +7,7 @@
   Usa regex nativo PowerShell pra parser do frontmatter YAML.
 
 .PARAMETER Target
-  Runtime alvo: claude | copilot | antigravity | opencode | all (default).
+  Runtime alvo: claude | copilot | antigravity | opencode | junie | all (default).
 
 .EXAMPLE
   .\bin\jdi-build.ps1
@@ -15,7 +15,7 @@
 #>
 [CmdletBinding()]
 param(
-  [ValidateSet('claude','copilot','antigravity','opencode','all')]
+  [ValidateSet('claude','copilot','antigravity','opencode','junie','all')]
   [string]$Target = 'all'
 )
 
@@ -30,7 +30,8 @@ function Ensure-Dirs {
     "$Out\claude\agents", "$Out\claude\commands", "$Out\claude\skills",
     "$Out\copilot\agents", "$Out\copilot\prompts",
     "$Out\antigravity\skills",
-    "$Out\opencode\agents", "$Out\opencode\commands", "$Out\opencode\skills"
+    "$Out\opencode\agents", "$Out\opencode\commands", "$Out\opencode\skills",
+    "$Out\junie\agents", "$Out\junie\skills"
   )
   foreach ($d in $dirs) {
     New-Item -ItemType Directory -Force -Path $d | Out-Null
@@ -274,6 +275,51 @@ function Build-OpencodeAgent {
   Write-Output "  opencode/agents/$name.md"
 }
 
+function Build-JunieAgent {
+  # Junie subagent (.junie/agents/<n>.md): name + description + tools
+  # allowlist (enforced by Junie) + reasoningLevel. Tools derive from the
+  # claude override filtered to Junie's supported set; Agent/WebFetch/Skill
+  # drop out (Junie delegates natively and has WebSearch only). Model is
+  # never emitted — Junie is LLM-agnostic and the user picks the model.
+  param([string]$SrcPath)
+  $name = [System.IO.Path]::GetFileNameWithoutExtension($SrcPath)
+  $dst  = Join-Path "$Out\junie\agents" "$name.md"
+
+  $src = Read-MdSource -Path $SrcPath
+  $desc = Get-BaseFrontmatterValue -Frontmatter $src.Frontmatter -Key 'description'
+  $override = Get-RuntimeOverride -Frontmatter $src.Frontmatter -Runtime 'claude'
+
+  $toolsFiltered = ''
+  if ($override.Scalars['tools']) {
+    $allowed = @('Read','Bash','Glob','Grep','Write','Edit','WebSearch','AskUserQuestion')
+    $kept = ($override.Scalars['tools'] -replace '[\[\]]', '') -split ',' |
+      ForEach-Object { $_.Trim() } | Where-Object { $allowed -contains $_ }
+    if ($kept) { $toolsFiltered = ($kept -join ', ') }
+  }
+
+  $level = ''
+  if ($src.Frontmatter -match '(?ms)^runtime_intent:\s*$(.*?)(?=^\S|\z)') {
+    if ($Matches[1] -match '(?m)^\s{2}reasoning:\s*(\S+)') {
+      switch ($Matches[1]) {
+        'deep'   { $level = 'high' }
+        'medium' { $level = 'medium' }
+        'low'    { $level = 'low' }
+      }
+    }
+  }
+
+  $fm = New-Object System.Text.StringBuilder
+  [void]$fm.AppendLine('---')
+  [void]$fm.AppendLine("name: $name")
+  if ($desc) { [void]$fm.AppendLine("description: $desc") }
+  if ($toolsFiltered) { [void]$fm.AppendLine("tools: [$toolsFiltered]") }
+  if ($level) { [void]$fm.AppendLine("reasoningLevel: $level") }
+  [void]$fm.AppendLine('---')
+
+  Write-Utf8NoBom -Path $dst -Content ($fm.ToString() + $src.Body)
+  Write-Output "  junie/agents/$name.md"
+}
+
 function Build-Command {
   param([string]$SrcPath)
   $name = [System.IO.Path]::GetFileNameWithoutExtension($SrcPath)
@@ -286,6 +332,12 @@ function Build-Command {
   Copy-Item -Path $SrcPath -Destination (Join-Path $skillDir 'SKILL.md') -Force
 
   Copy-Item -Path $SrcPath -Destination (Join-Path "$Out\opencode\commands" "$name.md") -Force
+
+  # junie: skills/<name>/SKILL.md (semantic discovery — NOT a custom command:
+  # Junie template args would treat the body's $VARS as required parameters)
+  $junieSkillDir = Join-Path "$Out\junie\skills" $name
+  New-Item -ItemType Directory -Force -Path $junieSkillDir | Out-Null
+  Copy-Item -Path $SrcPath -Destination (Join-Path $junieSkillDir 'SKILL.md') -Force
 
   Write-Output "  command: $name"
 }
@@ -362,6 +414,10 @@ function Build-AgentsForTargets {
     Write-Output "`nopencode:"
     foreach ($f in $AgentFiles) { Build-OpencodeAgent -SrcPath $f.FullName }
   }
+  if ($Target -in 'junie','all') {
+    Write-Output "`njunie:"
+    foreach ($f in $AgentFiles) { Build-JunieAgent -SrcPath $f.FullName }
+  }
 }
 
 # Gera uma standalone skill (core/skills/<name>/) para cada runtime alvo.
@@ -377,6 +433,9 @@ function Build-StandaloneSkillForTargets {
   }
   if ($Target -in 'antigravity','all') {
     Build-StandaloneSkill -SrcDir $SkillDir.FullName -Runtime 'antigravity' -DestRoot (Join-Path "$Out\antigravity\skills" $SkillDir.Name)
+  }
+  if ($Target -in 'junie','all') {
+    Build-StandaloneSkill -SrcDir $SkillDir.FullName -Runtime 'junie' -DestRoot (Join-Path "$Out\junie\skills" $SkillDir.Name)
   }
 }
 

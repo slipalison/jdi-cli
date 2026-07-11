@@ -228,8 +228,43 @@ if [[ $YES -eq 0 && $DRY_RUN -eq 0 ]] && ! confirm_action "Continuar com uninsta
   exit 0
 fi
 
+uninstall_junie() {
+  local scope="$1"
+  local targets=()
+  [[ "$scope" == "$SCOPE_PROJECT" || "$scope" == "both" ]] && targets+=("$PROJECT_DIR/.junie:project")
+  [[ "$scope" == "user" || "$scope" == "both" ]] && targets+=("$USER_HOME/.junie:user")
+
+  for t in "${targets[@]}"; do
+    local dir="${t%:*}"
+    local sc="${t#*:}"
+    [[ ! -d "$dir" ]] && continue
+
+    echo
+    echo "Junie ($sc scope) em: $dir"
+
+    if [[ -d "$dir/agents" ]]; then
+      for f in "$dir/agents"/jdi-*.md; do
+        [[ -f "$f" ]] && remove_safe "$f" "agents/$(basename "$f")"
+      done
+    fi
+
+    if [[ -d "$dir/skills" ]]; then
+      for sd in "$dir/skills"/jdi-*; do
+        [[ -d "$sd" ]] && remove_safe "$sd" "skills/$(basename "$sd")/"
+      done
+      for skill in "${UNIVERSAL_SKILLS[@]}"; do
+        remove_safe "$dir/skills/$skill" "skills/$skill/"
+      done
+    fi
+
+    if [[ "$sc" == "$SCOPE_PROJECT" && -f "$dir/AGENTS.md" ]] && confirm_action "Remover .junie/AGENTS.md? (pode ter sido editado)"; then
+      remove_safe "$dir/AGENTS.md" ".junie/AGENTS.md"
+    fi
+  done
+}
+
 if [[ "$RUNTIME" == "all" ]]; then
-  runtimes=("claude" "copilot" "antigravity" "opencode")
+  runtimes=("claude" "copilot" "antigravity" "opencode" "junie")
 else
   runtimes=("$RUNTIME")
 fi
@@ -240,6 +275,7 @@ for r in "${runtimes[@]}"; do
     copilot)     uninstall_copilot ;;
     antigravity) uninstall_antigravity "$SCOPE" ;;
     opencode)    uninstall_opencode "$SCOPE" ;;
+    junie)       uninstall_junie "$SCOPE" ;;
     *)           echo "  Runtime desconhecido: $r (ignorado)" ;;
   esac
 done

@@ -1,22 +1,24 @@
 # JDI — Portability
 
-JDI runs on 4 runtimes: **Claude Code**, **GitHub Copilot**, **Google Antigravity**, **OpenCode**.
+JDI runs on 5 runtimes: **Claude Code**, **GitHub Copilot**, **Google Antigravity**, **OpenCode**, **JetBrains Junie (CLI)**.
 
 Strategy: 1 source of truth (`core/`) + adapters per runtime (`runtimes/<name>/`). 1 script that syncs them.
 
-## Mapping across the 4 runtimes
+## Mapping across the 5 runtimes
 
-| JDI concept | Claude Code | GitHub Copilot | Antigravity | OpenCode |
-|---|---|---|---|---|
-| Command | `.claude/commands/<n>.md` | `.github/prompts/<n>.prompt.md` | `.agents/skills/<n>/SKILL.md` | `.opencode/commands/<n>.md` |
-| Agent | `.claude/agents/<n>.md` | `.github/agents/<n>.agent.md` | `.agents/skills/<n>/SKILL.md` | `.opencode/agents/<n>.md` |
-| Skill | `.claude/skills/<n>/SKILL.md` | n/a | `.agents/skills/<n>/` (2.0; user scope: `~/.gemini/config/skills/`) | `.opencode/skills/<n>/SKILL.md` (also reads `.claude/skills/`) |
-| Global instructions | `CLAUDE.md` | `.github/copilot-instructions.md` | `agents.md` | `AGENTS.md` |
-| Hook | `settings.json` `hooks` | none | none | `opencode.jsonc` `permission` |
-| Invocation | `/jdi-discuss` | `/jdi-discuss` or `@jdi-asker` | discovery by trigger | `/jdi-discuss` or `@jdi-asker` |
-| Restricted tools | frontmatter `tools:` | frontmatter `tools:` | no formal restriction | frontmatter `permission:` |
-| Model selection | `model: opus\|sonnet\|haiku` | `model: gpt-5\|...` | not exposed | `model: anthropic/claude-...\|openai/...` |
-| Subagent flag | implicit (Agent tool spawn) | referenced via `@<name>` | discovery | `mode: subagent` + `subtask: true` |
+| JDI concept | Claude Code | GitHub Copilot | Antigravity | OpenCode | Junie (JetBrains) |
+|---|---|---|---|---|---|
+| Command | `.claude/commands/<n>.md` | `.github/prompts/<n>.prompt.md` | `.agents/skills/<n>/SKILL.md` | `.opencode/commands/<n>.md` | `.junie/skills/<n>/SKILL.md` (as skills — see note) |
+| Agent | `.claude/agents/<n>.md` | `.github/agents/<n>.agent.md` | `.agents/skills/<n>/SKILL.md` | `.opencode/agents/<n>.md` | `.junie/agents/<n>.md` |
+| Skill | `.claude/skills/<n>/SKILL.md` | n/a | `.agents/skills/<n>/` (2.0; user scope: `~/.gemini/config/skills/`) | `.opencode/skills/<n>/SKILL.md` (also reads `.claude/skills/`) | `.junie/skills/<n>/SKILL.md` (user scope: `~/.junie/skills/`) |
+| Global instructions | `CLAUDE.md` | `.github/copilot-instructions.md` | `agents.md` | `AGENTS.md` | `.junie/AGENTS.md` (+ `.junie/rules/*.md`) |
+| Hook | `settings.json` `hooks` | none | none | `opencode.jsonc` `permission` | `~/.junie/config.json` `hooks` |
+| Invocation | `/jdi-discuss` | `/jdi-discuss` or `@jdi-asker` | discovery by trigger | `/jdi-discuss` or `@jdi-asker` | semantic discovery (type "/jdi-discuss auth-flow" in the message) |
+| Restricted tools | frontmatter `tools:` | frontmatter `tools:` | no formal restriction | frontmatter `permission:` | frontmatter `tools:`/`disallowedTools:` (enforced) |
+| Model selection | `model: opus\|sonnet\|haiku` | inherited from picker | not exposed | inherited (or `llm_config`) | inherited — LLM-agnostic by design |
+| Subagent flag | implicit (Agent tool spawn) | referenced via `@<name>` | discovery | `mode: subagent` + `subtask: true` | automatic delegation by description match |
+
+**Junie note:** JDI commands ship as Junie **skills**, not Junie custom commands — Junie custom commands require named template arguments (`$phase`) that are all mandatory and would treat the `$VARS` inside JDI command bodies as parameters. Skills use semantic discovery instead: mention the command and the slug in your message ("run /jdi-plan for auth-flow"). Subagents delegate automatically by description match; there is no manual `@agent` invocation.
 
 Refs:
 - [Claude Code agents docs](https://docs.claude.com/en/docs/claude-code/sub-agents)
@@ -25,6 +27,7 @@ Refs:
 - [OpenCode agents](https://opencode.ai/docs/agents/)
 - [OpenCode commands](https://opencode.ai/docs/commands/)
 - [OpenCode skills](https://opencode.ai/docs/skills/)
+- [Junie CLI docs](https://junie.jetbrains.com/docs/junie-cli.html) · [subagents](https://junie.jetbrains.com/docs/junie-cli-subagents.html) · [skills](https://junie.jetbrains.com/docs/agent-skills.html)
 
 ## Key differences
 
@@ -104,7 +107,7 @@ npx -y jdi-cli monitor <file...>                        # context budget estimat
 
 ## Phase ID schema (slug-as-ID)
 
-Schema v2 (default in new projects) uses the **slug** as the canonical phase identifier instead of a number. The model is portable across all 4 runtimes — it depends on no runtime-specific feature:
+Schema v2 (default in new projects) uses the **slug** as the canonical phase identifier instead of a number. The model is portable across all 5 runtimes — it depends on no runtime-specific feature:
 
 - **STATE.md** carries `schema_version: 2` + `current_phase_slug: <slug>`. The `current_phase` (int) field is kept as a display mirror.
 - **Folder** = `.jdi/phases/<slug>/` (v2) or `.jdi/phases/NN-<slug>/` (v1 legacy, preserved).

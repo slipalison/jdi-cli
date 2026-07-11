@@ -87,6 +87,9 @@ if ((Test-Path (Join-Path $ProjectDir '.agents/skills/jdi-architect')) -or (Test
 if ((Test-Path (Join-Path $ProjectDir '.opencode')) -or (Test-Path (Join-Path $UserHome '.config/opencode/agents/jdi-architect.md'))) {
   $detected += 'opencode'
 }
+if ((Test-Path (Join-Path $ProjectDir '.junie/agents/jdi-architect.md')) -or (Test-Path (Join-Path $UserHome '.junie/agents/jdi-architect.md'))) {
+  $detected += 'junie'
+}
 
 if ($detected.Count -eq 0) {
   Write-Output "Nenhum runtime JDI detectado. Tem .jdi/ mas nao .claude/, .github/, .gemini/, .opencode/."
@@ -109,6 +112,7 @@ foreach ($runtime in $detected) {
     'claude'      { Join-Path $UserHome '.claude/agents/jdi-architect.md' }
     'antigravity' { Join-Path $UserHome '.gemini/config/skills/jdi-architect' }
     'opencode'    { Join-Path $UserHome '.config/opencode/agents/jdi-architect.md' }
+    'junie'       { Join-Path $UserHome '.junie/agents/jdi-architect.md' }
     default       { $null }
   }
 
@@ -124,6 +128,7 @@ foreach ($runtime in $detected) {
     'copilot'     { Join-Path $ProjectDir '.github/agents/jdi-architect.agent.md' }
     'antigravity' { Join-Path $ProjectDir '.agents/skills/jdi-architect' }
     'opencode'    { Join-Path $ProjectDir '.opencode/agents/jdi-architect.md' }
+    'junie'       { Join-Path $ProjectDir '.junie/agents/jdi-architect.md' }
   }
   $hasProjectScope = (Test-Path $projectMarker) -or $hasProjLegacy
 
