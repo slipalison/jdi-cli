@@ -5,6 +5,23 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-07-11
+
+Antigravity 2.0 support (Google, May 2026 — IDE + `agy` CLI + SDK; replaces
+Gemini CLI). The 1.x skill path (`~/.gemini/antigravity/`) is no longer read
+by the 2.0 suite, so JDI installs there were invisible to Antigravity 2.0.
+
+### Changed
+- **Installer targets the Antigravity 2.0 canonical paths**: project scope → `<root>/.agents/skills/` (tool-agnostic workspace dir, read by IDE + CLI; `agents.md` goes to `.agents/agents.md` instead of polluting the project root); user scope → `~/.gemini/config/skills/` (whole suite). Installing while a 1.x tree exists prints a migration warning.
+- **`update` migrates 1.x → 2.0 automatically**: detects legacy `.gemini/antigravity/` trees (project or user), installs into the 2.0 paths and removes the legacy dir (dry-run shows the plan).
+- **`uninstall` cleans both generations** — 2.0 paths and legacy 1.x trees, including the root-level `agents.md` from 1.x installs (with confirmation).
+- **`doctor` understands generations**: detects the `agy` binary and `~/.gemini/config/` (2.0), still recognizes 1.x, and flags legacy skill trees with a migrate hint; MCP check covers `~/.gemini/config/mcp_config.json` (2.0) and `settings.json` (1.x).
+- **`install-playwright` writes the 2.0 MCP file** — user scope auto-detects the generation (`~/.gemini/config/` or `agy` present → `mcp_config.json`; otherwise 1.x `settings.json`). Project scope keeps `.gemini/settings.json` (2.0 documents no project-scope MCP file).
+
+### Notes
+- **Skill format is already compatible**: Antigravity 2.0 discovers skills by semantic match on the `description` frontmatter field — JDI descriptions were designed to be specific. The legacy `triggers:` metadata is ignored by 2.0 (harmless); no builder change needed.
+- Sources: Antigravity 2.0 docs (antigravity.google/docs/skills), Google codelabs (skills authoring), google/agents-cli#26 (canonical path confirmation).
+
 ## [0.5.1] - 2026-07-11
 
 Docs-only: README reorganized around the reader's journey (decide → install →

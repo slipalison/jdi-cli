@@ -191,9 +191,9 @@ function Uninstall-Copilot {
 
 function Uninstall-Antigravity {
   param([string]$ScopeChoice)
-  Invoke-RuntimeUninstall -Label 'Antigravity' -ScopeChoice $ScopeChoice `
-    -ProjectPath (Join-Path $ProjectDir '.gemini/antigravity') `
-    -UserPath (Join-Path $UserHome '.gemini/antigravity') -Action {
+  # Cobre AMBAS as geracoes: 2.0 (.agents/skills, ~/.gemini/config/skills)
+  # e legado 1.x (.gemini/antigravity) — limpa o que existir.
+  $antigravityAction = {
     param($t)
     $skillsDir = Join-Path $t.Dir 'skills'
     if (Test-Path $skillsDir) {
@@ -203,11 +203,22 @@ function Uninstall-Antigravity {
     }
     Remove-UniversalSkills -BaseDir $t.Dir
     if ($t.Scope -eq 'project') {
-      Remove-FileWithConfirm -Path (Join-Path $ProjectDir 'agents.md') `
+      Remove-FileWithConfirm -Path (Join-Path $t.Dir 'agents.md') `
         -Label "agents.md" `
-        -Prompt "Remover agents.md (Antigravity)? (pode ter sido editado)"
+        -Prompt "Remover $($t.Dir)/agents.md (Antigravity)? (pode ter sido editado)"
+      Remove-FileWithConfirm -Path (Join-Path $ProjectDir 'agents.md') `
+        -Label "agents.md (root, 1.x)" `
+        -Prompt "Remover agents.md legado do root (Antigravity 1.x)? (pode ter sido editado)"
     }
   }
+  # 2.0 paths
+  Invoke-RuntimeUninstall -Label 'Antigravity 2.0' -ScopeChoice $ScopeChoice `
+    -ProjectPath (Join-Path $ProjectDir '.agents') `
+    -UserPath (Join-Path $UserHome '.gemini/config') -Action $antigravityAction
+  # 1.x legacy paths
+  Invoke-RuntimeUninstall -Label 'Antigravity 1.x (legado)' -ScopeChoice $ScopeChoice `
+    -ProjectPath (Join-Path $ProjectDir '.gemini/antigravity') `
+    -UserPath (Join-Path $UserHome '.gemini/antigravity') -Action $antigravityAction
 }
 
 function Uninstall-Opencode {

@@ -212,13 +212,24 @@ NODE_EOF
 }
 
 inject_antigravity_mcp() {
-  local base
+  # Antigravity 2.0 (May 2026): user-scope MCP lives in
+  # ~/.gemini/config/mcp_config.json (shared by IDE + agy CLI). Detect the
+  # generation by the presence of ~/.gemini/config/; fall back to the 1.x
+  # settings.json otherwise. Project scope keeps .gemini/settings.json
+  # (2.0 documents no project-scope MCP file).
+  local base f
   if [[ "$AG_SCOPE" == "user" ]]; then
-    base="$USER_HOME/.gemini"
+    if [[ -d "$USER_HOME/.gemini/config" ]] || command -v agy >/dev/null 2>&1; then
+      base="$USER_HOME/.gemini/config"
+      f="$base/mcp_config.json"
+    else
+      base="$USER_HOME/.gemini"
+      f="$base/settings.json"
+    fi
   else
     base="$PROJECT_DIR/.gemini"
+    f="$base/settings.json"
   fi
-  local f="$base/settings.json"
 
   if [[ -f "$f" ]] && grep -q '"playwright"' "$f" 2>/dev/null; then
     echo "  [skip] mcpServers.playwright already present in $f"

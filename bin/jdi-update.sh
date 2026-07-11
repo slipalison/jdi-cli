@@ -75,7 +75,9 @@ if [[ -d "$PROJECT_DIR/.github/agents" ]] && ls "$PROJECT_DIR/.github/agents/jdi
   detected+=("copilot")
 fi
 
-if [[ -d "$PROJECT_DIR/.gemini/antigravity" ]] || [[ -d "$USER_HOME/.gemini/antigravity/skills/jdi-architect" ]]; then
+# Antigravity 2.0 paths (+ legacy 1.x for migration)
+if [[ -d "$PROJECT_DIR/.agents/skills/jdi-architect" ]] || [[ -d "$USER_HOME/.gemini/config/skills/jdi-architect" ]] \
+   || [[ -d "$PROJECT_DIR/.gemini/antigravity" ]] || [[ -d "$USER_HOME/.gemini/antigravity/skills/jdi-architect" ]]; then
   detected+=("antigravity")
 fi
 
@@ -100,6 +102,7 @@ INSTALL_SCRIPT="$ROOT/bin/jdi-install.sh"
 
 for runtime in "${detected[@]}"; do
   # Detecta scope - se tem em user dir, atualiza user; se tem em project, atualiza project
+  USER_LEGACY=""; PROJ_LEGACY=""
   case "$runtime" in
     claude)
       USER_MARKER="$USER_HOME/.claude/agents/jdi-architect.md"
@@ -110,8 +113,11 @@ for runtime in "${detected[@]}"; do
       PROJ_MARKER="$PROJECT_DIR/.github/agents/jdi-architect.agent.md"
       ;;
     antigravity)
-      USER_MARKER="$USER_HOME/.gemini/antigravity/skills/jdi-architect"
-      PROJ_MARKER="$PROJECT_DIR/.gemini/antigravity/skills/jdi-architect"
+      # 2.0 markers; 1.x legado dispara migracao (instala no novo + remove o velho)
+      USER_MARKER="$USER_HOME/.gemini/config/skills/jdi-architect"
+      PROJ_MARKER="$PROJECT_DIR/.agents/skills/jdi-architect"
+      USER_LEGACY="$USER_HOME/.gemini/antigravity"
+      PROJ_LEGACY="$PROJECT_DIR/.gemini/antigravity"
       ;;
     opencode)
       USER_MARKER="$USER_HOME/.config/opencode/agents/jdi-architect.md"
@@ -123,21 +129,31 @@ for runtime in "${detected[@]}"; do
       ;;
   esac
 
-  if [[ -e "$PROJ_MARKER" ]]; then
+  if [[ -e "$PROJ_MARKER" ]] || [[ -n "$PROJ_LEGACY" && -d "$PROJ_LEGACY/skills" ]]; then
     echo "Atualizando $runtime (project scope)..."
     if [[ $DRY_RUN -eq 0 ]]; then
       bash "$INSTALL_SCRIPT" "$runtime" --scope project >/dev/null
+      if [[ -n "$PROJ_LEGACY" && -d "$PROJ_LEGACY/skills" ]]; then
+        rm -rf "$PROJ_LEGACY"
+        echo "  migrado: skills 1.x removidas de $PROJ_LEGACY (2.0 usa .agents/skills/)"
+      fi
     else
       echo "  [dry-run] copia runtimes/$runtime/* pra escopo project"
+      [[ -n "$PROJ_LEGACY" && -d "$PROJ_LEGACY/skills" ]] && echo "  [dry-run] migra 1.x: remove $PROJ_LEGACY"
     fi
   fi
 
-  if [[ -n "$USER_MARKER" && -e "$USER_MARKER" ]]; then
+  if [[ -n "$USER_MARKER" && -e "$USER_MARKER" ]] || [[ -n "$USER_LEGACY" && -d "$USER_LEGACY/skills" ]]; then
     echo "Atualizando $runtime (user scope)..."
     if [[ $DRY_RUN -eq 0 ]]; then
       bash "$INSTALL_SCRIPT" "$runtime" --scope user >/dev/null
+      if [[ -n "$USER_LEGACY" && -d "$USER_LEGACY/skills" ]]; then
+        rm -rf "$USER_LEGACY"
+        echo "  migrado: skills 1.x removidas de $USER_LEGACY (2.0 usa ~/.gemini/config/skills/)"
+      fi
     else
       echo "  [dry-run] copia runtimes/$runtime/* pra escopo user"
+      [[ -n "$USER_LEGACY" && -d "$USER_LEGACY/skills" ]] && echo "  [dry-run] migra 1.x: remove $USER_LEGACY"
     fi
   fi
 done

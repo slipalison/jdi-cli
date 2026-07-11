@@ -27,7 +27,9 @@
   Values: claude | opencode | copilot | antigravity | all
 
 .PARAMETER AntigravityScope
-  Antigravity MCP scope: user (~/.gemini/settings.json) or project (.gemini/settings.json).
+  Antigravity MCP scope. user: ~/.gemini/config/mcp_config.json on 2.0
+  (auto-detected via ~/.gemini/config/ or the agy binary), else the 1.x
+  ~/.gemini/settings.json. project: .gemini/settings.json.
   Default: user
 
 .EXAMPLE
@@ -240,8 +242,24 @@ function Inject-CopilotMcp {
 }
 
 function Inject-AntigravityMcp {
-  $base = if ($AntigravityScope -eq 'user') { Join-Path $UserHome '.gemini' } else { Join-Path $ProjectDir '.gemini' }
-  $f = Join-Path $base 'settings.json'
+  # Antigravity 2.0 (May 2026): user-scope MCP lives in
+  # ~/.gemini/config/mcp_config.json (shared by IDE + agy CLI). Detect the
+  # generation by ~/.gemini/config/ or the agy binary; fall back to the 1.x
+  # settings.json. Project scope keeps .gemini/settings.json (2.0 documents
+  # no project-scope MCP file).
+  if ($AntigravityScope -eq 'user') {
+    $is20 = (Test-Path (Join-Path $UserHome '.gemini\config')) -or (Get-Command agy -ErrorAction SilentlyContinue)
+    if ($is20) {
+      $base = Join-Path $UserHome '.gemini\config'
+      $f = Join-Path $base 'mcp_config.json'
+    } else {
+      $base = Join-Path $UserHome '.gemini'
+      $f = Join-Path $base 'settings.json'
+    }
+  } else {
+    $base = Join-Path $ProjectDir '.gemini'
+    $f = Join-Path $base 'settings.json'
+  }
 
   if ((Test-Path $f) -and ((Get-Content $f -Raw) -match '"playwright"\s*:')) {
     Write-Output "  [skip] mcpServers.playwright already present in $f"
