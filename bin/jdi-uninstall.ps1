@@ -34,7 +34,7 @@
 #>
 [CmdletBinding()]
 param(
-  [ValidateSet('claude','copilot','antigravity','opencode','all')]
+  [ValidateSet('claude','copilot','antigravity','opencode','junie','all')]
   [string]$Runtime = 'all',
 
   [ValidateSet('user','project','both')]
@@ -261,7 +261,29 @@ if (-not $Yes -and -not $DryRun) {
   }
 }
 
-$runtimes = if ($Runtime -eq 'all') { @('claude','copilot','antigravity','opencode') } else { @($Runtime) }
+function Uninstall-Junie {
+  param([string]$ScopeChoice)
+  Invoke-RuntimeUninstall -Label 'Junie' -ScopeChoice $ScopeChoice `
+    -ProjectPath (Join-Path $ProjectDir '.junie') `
+    -UserPath (Join-Path $UserHome '.junie') -Action {
+    param($t)
+    Remove-PrefixedFiles -BaseDir $t.Dir -SubDir 'agents' -Filter 'jdi-*.md'
+    $skillsDir = Join-Path $t.Dir 'skills'
+    if (Test-Path $skillsDir) {
+      Get-ChildItem $skillsDir -Directory -Filter 'jdi-*' -ErrorAction SilentlyContinue | ForEach-Object {
+        Remove-Item-Safe $_.FullName "skills/$($_.Name)/"
+      }
+    }
+    Remove-UniversalSkills -BaseDir $t.Dir
+    if ($t.Scope -eq 'project') {
+      Remove-FileWithConfirm -Path (Join-Path $t.Dir 'AGENTS.md') `
+        -Label ".junie/AGENTS.md" `
+        -Prompt "Remover .junie/AGENTS.md? (pode ter sido editado)"
+    }
+  }
+}
+
+$runtimes = if ($Runtime -eq 'all') { @('claude','copilot','antigravity','opencode','junie') } else { @($Runtime) }
 
 foreach ($r in $runtimes) {
   switch ($r) {
@@ -269,6 +291,7 @@ foreach ($r in $runtimes) {
     'copilot'     { Uninstall-Copilot }
     'antigravity' { Uninstall-Antigravity -ScopeChoice $Scope }
     'opencode'    { Uninstall-Opencode -ScopeChoice $Scope }
+    'junie'       { Uninstall-Junie -ScopeChoice $Scope }
   }
 }
 

@@ -108,6 +108,17 @@ if (Test-Cmd 'agy') {
   Write-WARN 'Antigravity nao detectado'
 }
 
+$JunieOK = $false
+if (Test-Cmd 'junie') {
+  Write-OK "Junie CLI: $((Get-Command junie).Source)"
+  $JunieOK = $true
+} elseif (Test-Path "$UserHome\.junie") {
+  Write-OK '~/.junie/ existe'
+  $JunieOK = $true
+} else {
+  Write-WARN 'Junie nao detectado'
+}
+
 $OpencodeOK = $false
 if (Test-Cmd 'opencode') {
   Write-OK "opencode CLI: $((Get-Command opencode).Source)"
@@ -255,6 +266,7 @@ Check-Install -Path "$ProjectDir\.claude\agents" -Filter 'jdi-*.md' -Label '.cla
 Check-Install -Path "$ProjectDir\.github\agents" -Filter 'jdi-*.agent.md' -Label '.github/agents/'
 Check-Install -Path "$ProjectDir\.agents\skills" -Filter 'SKILL.md' -Label '.agents/skills/ (Antigravity 2.0)'
 Check-Install -Path "$ProjectDir\.gemini\antigravity\skills" -Filter 'SKILL.md' -Label '.gemini/antigravity/skills/ (1.x legado — jdi update migra)'
+Check-Install -Path "$ProjectDir\.junie\skills" -Filter 'SKILL.md' -Label '.junie/skills/'
 Check-Install -Path "$ProjectDir\.opencode\agents" -Filter 'jdi-*.md' -Label '.opencode/agents/'
 Check-Install -Path "$UserHome\.claude\agents" -Filter 'jdi-*.md' -Label '~/.claude/agents/ (scope user)'
 Check-Install -Path "$UserHome\.config\opencode\agents" -Filter 'jdi-*.md' -Label '~/.config/opencode/agents/ (scope user)'

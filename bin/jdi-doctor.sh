@@ -99,6 +99,17 @@ else
   warn "Antigravity nao detectado"
 fi
 
+JUNIE_OK=false
+if command -v junie &>/dev/null; then
+  ok "Junie CLI: $(command -v junie)"
+  JUNIE_OK=true
+elif [[ -d "$HOME/.junie" ]]; then
+  ok "~/.junie/ existe"
+  JUNIE_OK=true
+else
+  warn "Junie nao detectado"
+fi
+
 OPENCODE_OK=false
 if command -v opencode &>/dev/null; then
   ok "opencode CLI: $(command -v opencode)"
@@ -273,6 +284,14 @@ if [[ -d "$PROJECT_DIR/.gemini/antigravity/skills" ]]; then
   count=$(find "$PROJECT_DIR/.gemini/antigravity/skills" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ')
   if [[ "$count" -gt 0 ]]; then
     warn ".gemini/antigravity/skills/ com $count skills JDI (1.x legado — o 2.0 nao le; 'jdi update' migra)"
+    INSTALL_FOUND=true
+  fi
+fi
+
+if [[ -d "$PROJECT_DIR/.junie/skills" ]]; then
+  count=$(find "$PROJECT_DIR/.junie/skills" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ')
+  if [[ "$count" -gt 0 ]]; then
+    ok ".junie/skills/ com $count skills JDI"
     INSTALL_FOUND=true
   fi
 fi

@@ -5,6 +5,11 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-07-11
+
+### Added
+- **JetBrains Junie (CLI) — 5th runtime, tier 1.** `jdi install junie` (also included in `install all`). Mapping: JDI commands ship as Junie **skills** (`.junie/skills/<n>/SKILL.md`, semantic discovery — Junie custom commands were rejected on purpose: their named template arguments are all-mandatory and would treat the `$VARS` inside command bodies as parameters); core agents ship as **subagents** (`.junie/agents/<n>.md`) with **enforced** tool allowlists derived from the claude override filtered to Junie's tool set (the reviewer is genuinely read-only on this runtime) and `reasoningLevel` mapped from `runtime_intent.reasoning`; guidelines in `.junie/AGENTS.md`. No model is ever emitted — Junie is LLM-agnostic and inherits the user's choice. Project installs copy bootstrap-generated specialists from `.jdi/agents/` into `.junie/agents/` (Junie delegates by description match); re-run the install after `/jdi-bootstrap`. `update`/`uninstall`/`doctor` cover the new runtime; Playwright MCP on Junie is manual (`mcp-locations` in `~/.junie/config.json` — path conventions not yet documented upstream).
+
 ## [0.8.0] - 2026-07-11
 
 ### Added

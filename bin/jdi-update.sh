@@ -85,6 +85,10 @@ if [[ -d "$PROJECT_DIR/.opencode" ]] || [[ -f "$USER_HOME/.config/opencode/agent
   detected+=("opencode")
 fi
 
+if [[ -f "$PROJECT_DIR/.junie/agents/jdi-architect.md" ]] || [[ -f "$USER_HOME/.junie/agents/jdi-architect.md" ]]; then
+  detected+=("junie")
+fi
+
 if [[ ${#detected[@]} -eq 0 ]]; then
   echo "Nenhum runtime JDI detectado. Tem .jdi/ mas nao .claude/, .github/, .gemini/, .opencode/."
   echo "Use 'npx jdi-cli install <runtime>' pra instalar."
@@ -122,6 +126,10 @@ for runtime in "${detected[@]}"; do
     opencode)
       USER_MARKER="$USER_HOME/.config/opencode/agents/jdi-architect.md"
       PROJ_MARKER="$PROJECT_DIR/.opencode/agents/jdi-architect.md"
+      ;;
+    junie)
+      USER_MARKER="$USER_HOME/.junie/agents/jdi-architect.md"
+      PROJ_MARKER="$PROJECT_DIR/.junie/agents/jdi-architect.md"
       ;;
     *)
       USER_MARKER=""

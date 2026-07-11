@@ -6,7 +6,7 @@
   Equivalente PowerShell de bin/jdi-install.sh. Funciona em Windows nativo.
 
 .PARAMETER Runtime
-  claude | copilot | antigravity | opencode | all
+  claude | copilot | antigravity | opencode | junie | all
 
 .PARAMETER Scope
   user | project (default: project)
@@ -23,7 +23,7 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory=$true, Position=0)]
-  [ValidateSet('claude','copilot','antigravity','opencode','all')]
+  [ValidateSet('claude','copilot','antigravity','opencode','junie','all')]
   [string]$Runtime,
 
   [ValidateSet('user','project')]
@@ -151,16 +151,44 @@ function Install-GitHooks {
   Write-Output "           Sem Git for Windows, hooks sao silenciosamente ignorados."
 }
 
+function Install-Junie {
+  # Junie CLI (JetBrains, beta 2026): commands sao SKILLS (semantic discovery,
+  # .junie/skills/<n>/SKILL.md) e agents sao SUBAGENTS (.junie/agents/<n>.md,
+  # tools allowlist enforced). Custom commands do Junie exigem args nomeados
+  # obrigatorios — incompativel com os corpos JDI; skills nao tem o problema.
+  $dest = if ($Scope -eq 'user') { Join-Path $UserHome '.junie' } else { Join-Path $ProjectDir '.junie' }
+  New-Item -ItemType Directory -Force -Path "$dest\agents" | Out-Null
+  New-Item -ItemType Directory -Force -Path "$dest\skills" | Out-Null
+  Copy-Tree -From "$Root\runtimes\junie\agents" -To "$dest\agents"
+  Copy-Tree -From "$Root\runtimes\junie\skills" -To "$dest\skills"
+
+  if ($Scope -eq 'project') {
+    Copy-Item -Path "$Root\runtimes\junie\AGENTS.md" -Destination "$dest\AGENTS.md" -Force
+    # Specialists gerados pelo bootstrap: Junie delega por .junie/agents/
+    $specs = Get-ChildItem -Path (Join-Path $ProjectDir '.jdi\agents') -Filter 'jdi-*.md' -ErrorAction SilentlyContinue
+    if ($specs) {
+      $specs | Copy-Item -Destination "$dest\agents\" -Force
+      Write-Output "  -> specialists de .jdi/agents/ copiados pra .junie/agents/ (delegacao Junie)"
+    } else {
+      Write-Output "  -> apos /jdi-bootstrap, rode 'jdi install junie' de novo pra copiar os specialists"
+    }
+  }
+
+  Write-Output "Junie instalado em: $dest (scope=$Scope)"
+}
+
 switch ($Runtime) {
   'claude'      { Install-Claude }
   'copilot'     { Install-Copilot }
   'antigravity' { Install-Antigravity }
   'opencode'    { Install-Opencode }
+  'junie'       { Install-Junie }
   'all' {
     Install-Claude
     Install-Copilot
     Install-Antigravity
     Install-Opencode
+    Install-Junie
   }
 }
 

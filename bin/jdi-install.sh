@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # jdi-install: copia runtimes/<runtime>/ pra destino do runtime.
 # Uso: ./bin/jdi-install.sh <runtime> [--scope user|project] [--githooks]
-#   runtime:    claude | copilot | antigravity | all
+#   runtime:    claude | copilot | antigravity | opencode | junie | all
 #   scope:      user (global) | project (default)
 #   --githooks: opt-in — copia hooks no-op pra .githooks/ (shell no repo do
 #               consumidor; desligado por padrao pela invariante
@@ -10,7 +10,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-RUNTIME="${1:?runtime obrigatorio: claude | copilot | antigravity | opencode | all}"
+RUNTIME="${1:?runtime obrigatorio: claude | copilot | antigravity | opencode | junie | all}"
 SCOPE_ARG="${2:---scope project}"
 
 case "$SCOPE_ARG" in
@@ -138,12 +138,42 @@ install_githooks() {
   echo "  git config core.hooksPath .githooks"
 }
 
+install_junie() {
+  # Junie CLI (JetBrains, beta 2026): commands sao SKILLS (semantic discovery,
+  # .junie/skills/<n>/SKILL.md) e agents sao SUBAGENTS (.junie/agents/<n>.md,
+  # tools allowlist enforced). Custom commands do Junie exigem args nomeados
+  # obrigatorios — incompativel com os corpos JDI; skills nao tem o problema.
+  local dest
+  if [[ "$SCOPE" == "user" ]]; then
+    dest="$HOME/.junie"
+  else
+    dest="$PWD/.junie"
+  fi
+  mkdir -p "$dest/agents" "$dest/skills"
+  cp -R "$ROOT/runtimes/junie/agents/." "$dest/agents/"
+  cp -R "$ROOT/runtimes/junie/skills/." "$dest/skills/"
+
+  if [[ "$SCOPE" == "project" ]]; then
+    cp "$ROOT/runtimes/junie/AGENTS.md" "$dest/AGENTS.md"
+    # Specialists gerados pelo bootstrap: Junie delega por .junie/agents/
+    if ls "$PWD/.jdi/agents/"jdi-*.md >/dev/null 2>&1; then
+      cp "$PWD/.jdi/agents/"jdi-*.md "$dest/agents/"
+      echo "  -> specialists de .jdi/agents/ copiados pra .junie/agents/ (delegacao Junie)"
+    else
+      echo "  -> apos /jdi-bootstrap, rode 'jdi install junie' de novo pra copiar os specialists"
+    fi
+  fi
+
+  echo "Junie instalado em: $dest (scope=$SCOPE)"
+}
+
 case "$RUNTIME" in
   claude)      install_claude ;;
   copilot)     install_copilot ;;
   antigravity) install_antigravity ;;
   opencode)    install_opencode ;;
-  all)         install_claude && install_copilot && install_antigravity && install_opencode ;;
+  junie)       install_junie ;;
+  all)         install_claude && install_copilot && install_antigravity && install_opencode && install_junie ;;
   *)           echo "runtime invalido: $RUNTIME"; exit 1 ;;
 esac
 
