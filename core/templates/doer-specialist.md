@@ -159,13 +159,16 @@ Loop:
 
 1. Read task description + acceptance criteria
 2. Implement code per `files_modified`
-3. Run local tests (`{TEST_COMMAND}`)
-4. If failed -> adjust. Max 3 attempts. After 3, mark task `blocked` and continue.
-5. If passed:
+3. Run lint (`{LINT_COMMAND}` — skip silently if the project has no linter).
+   Red lint = fix NOW, before the test run: an error caught per task costs
+   one edit; the same error caught at /jdi-verify costs a whole extra round.
+4. Run local tests (`{TEST_COMMAND}`)
+5. If failed -> adjust. Max 3 attempts. After 3, mark task `blocked` and continue.
+6. If passed (lint + tests):
    - `git add {files}`
    - `git commit -m "{COMMIT_PREFIX}({PHASE_SLUG}): {task summary}"`
    - Mark task `completed` in PLAN
-6. Append line in SUMMARY.md: `- {task_id}: {short result}`
+7. Append line in SUMMARY.md: `- {task_id}: {short result}`
 
 No `--no-verify`. No hook skipping.
 
