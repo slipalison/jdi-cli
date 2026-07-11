@@ -272,6 +272,16 @@ if [[ -d "$PROJECT_DIR/.github/agents" ]]; then
   fi
 fi
 
+if [[ -d "$PROJECT_DIR/.github/skills" ]]; then
+  count=$(find "$PROJECT_DIR/.github/skills" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ')
+  if [[ "$count" -gt 0 ]]; then
+    ok ".github/skills/ com $count skills JDI (Copilot CLI + coding agent)"
+    INSTALL_FOUND=true
+  fi
+elif [[ -d "$PROJECT_DIR/.github/prompts" ]] && ls "$PROJECT_DIR/.github/prompts"/jdi-*.prompt.md >/dev/null 2>&1; then
+  warn ".github/prompts/ presente mas .github/skills/ ausente — Copilot CLI nao le prompts; rode 'jdi install copilot' de novo (>=0.10.0)"
+fi
+
 if [[ -d "$PROJECT_DIR/.agents/skills" ]]; then
   count=$(find "$PROJECT_DIR/.agents/skills" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ')
   if [[ "$count" -gt 0 ]]; then

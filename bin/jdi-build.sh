@@ -21,7 +21,7 @@ readonly K_DESC="description"
 
 ensure_dirs() {
   mkdir -p "${OUT}/claude/agents" "${OUT}/claude/commands" "${OUT}/claude/skills"
-  mkdir -p "${OUT}/copilot/agents" "${OUT}/copilot/prompts"
+  mkdir -p "${OUT}/copilot/agents" "${OUT}/copilot/prompts" "${OUT}/copilot/skills"
   mkdir -p "${OUT}/antigravity/skills"
   mkdir -p "${OUT}/opencode/agents" "${OUT}/opencode/commands" "${OUT}/opencode/skills"
   mkdir -p "${OUT}/junie/agents" "${OUT}/junie/skills"
@@ -254,8 +254,13 @@ build_command() {
   # claude: commands/<name>.md (mesmo formato + frontmatter ajustado)
   cp "$src" "${OUT}/claude/commands/${name}.md"
 
-  # copilot: prompts/<name>.prompt.md (mode: agent + ajustes)
+  # copilot: prompts/<name>.prompt.md (VS Code slash) + skills/<name>/SKILL.md
+  # (Copilot CLI + cloud agent: Agent Skills GA Apr/2026 — the CLI does NOT
+  # read .github/prompts/, so skills are the CLI's discovery path)
   cp "$src" "${OUT}/copilot/prompts/${name}.prompt.md"
+  local copilot_skill_dir="${OUT}/copilot/skills/${name}"
+  mkdir -p "$copilot_skill_dir"
+  cp "$src" "${copilot_skill_dir}/SKILL.md"
 
   # antigravity: skills/<name>/SKILL.md
   local skill_dir="${OUT}/antigravity/skills/${name}"
@@ -412,7 +417,9 @@ main() {
       if [[ "$TARGET" == "$RT_JUNIE" || "$TARGET" == "all" ]]; then
         build_standalone_skill "$skill_dir" "$RT_JUNIE" "${OUT}/junie/skills/${skill_name}"
       fi
-      # Copilot: nao tem conceito nativo de skill - skip
+      if [[ "$TARGET" == "copilot" || "$TARGET" == "all" ]]; then
+        build_standalone_skill "$skill_dir" "copilot" "${OUT}/copilot/skills/${skill_name}"
+      fi
     done
   fi
 

@@ -74,15 +74,20 @@ function Install-Copilot {
   $dest = Join-Path $ProjectDir '.github'
   New-Item -ItemType Directory -Force -Path "$dest\agents" | Out-Null
   New-Item -ItemType Directory -Force -Path "$dest\prompts" | Out-Null
+  New-Item -ItemType Directory -Force -Path "$dest\skills" | Out-Null
 
   Copy-Tree -From "$Root\runtimes\copilot\agents" -To "$dest\agents"
   Copy-Tree -From "$Root\runtimes\copilot\prompts" -To "$dest\prompts"
+  # Skills servem as 3 superficies: Copilot CLI (que NAO le .github/prompts/),
+  # VS Code agent mode e o coding agent do github.com
+  Copy-Tree -From "$Root\runtimes\copilot\skills" -To "$dest\skills"
 
   if (Test-Path "$Root\runtimes\copilot\copilot-instructions.md") {
     Copy-Item -Path "$Root\runtimes\copilot\copilot-instructions.md" -Destination "$dest\copilot-instructions.md" -Force
   }
   Write-Output "Copilot instalado em: $dest"
   Write-Output "  -> Copilot e sempre project-scoped via .github/"
+  Write-Output "  -> CLI: comandos JDI aparecem como skills ('/skills reload' na sessao; digite '/jdi-status' na mensagem)"
 }
 
 function Install-Antigravity {
