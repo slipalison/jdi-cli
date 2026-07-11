@@ -1,7 +1,7 @@
 ---
 name: jdi-next
-description: The one command to remember. Derives where the current phase is from its artifacts and runs the correct next step — discuss, plan, do, verify, confirm-dod, ship, or fix after a BLOCKED review. Zero arguments needed.
-argument_hint: "[slug|position]"
+description: The one command to remember. Derives where the current phase is from its artifacts and runs the correct next step — discuss, plan, do, verify, confirm-dod, ship, or fix after a BLOCKED review. Zero arguments needed. --loop (or orchestration.next_execution "loop" in config.json) makes the execute/verify states run the bounded ralph loop instead of single steps.
+argument_hint: "[slug|position] [--loop]"
 runtime_intent:
   invokes_agent: dynamic
 runtime_overrides:
@@ -30,6 +30,13 @@ head.
 <arguments>
 - `phase_id` (optional): canonical slug, legacy slug, or integer position.
   Omitted → the current phase is derived: first ROADMAP phase without SHIPPED.md.
+- `--loop` (optional): on the execute/verify states (`planned`, `executed`,
+  `verified+BLOCKED`) route to `/jdi-loop` (bounded ralph: do ↔ verify with
+  caps + audit) instead of a single `do`/`verify` step. Same effect
+  per-project via `config.json` → `orchestration.next_execution: "loop"`.
+  Default is `step`: a next that silently starts up to 15 iterations would
+  betray its one-predictable-step contract, and ralph presumes a trustworthy
+  test suite — making loop primary is a per-project decision.
 </arguments>
 
 <process>
@@ -71,6 +78,13 @@ PHASE_SLUG="$JDI_PHASE_SLUG"; PHASE_DIR="$JDI_PHASE_DIR"
 Artifact ladder (first match wins), then verdict routing:
 
 ```bash
+# Loop mode: --loop flag OR config.json orchestration.next_execution == "loop"
+LOOP_MODE=false
+for a in "$@"; do [ "$a" = "--loop" ] && LOOP_MODE=true; done
+if [ "$LOOP_MODE" = false ] && [ -f .jdi/config.json ] && command -v jq >/dev/null 2>&1; then
+  [ "$(jq -r '.orchestration.next_execution // "step"' .jdi/config.json)" = "loop" ] && LOOP_MODE=true
+fi
+
 if [ -z "${TARGET:-}" ]; then
   if   [ -f "$PHASE_DIR/SHIPPED.md" ]; then TARGET=""; echo "Phase $PHASE_SLUG already shipped."; exit 0
   elif [ -f "$PHASE_DIR/REVIEW.md"  ]; then
@@ -83,6 +97,12 @@ if [ -z "${TARGET:-}" ]; then
   elif [ -f "$PHASE_DIR/PLAN.md"    ]; then TARGET=jdi-do
   elif [ -f "$PHASE_DIR/CONTEXT.md" ]; then TARGET=jdi-plan
   else                                      TARGET=jdi-discuss
+  fi
+
+  # Loop mode upgrades the execute/verify states to the bounded ralph loop
+  # (do ↔ verify with caps + LOOP.md audit). Other states are untouched.
+  if [ "$LOOP_MODE" = true ]; then
+    case "$TARGET" in jdi-do|jdi-verify) TARGET=jdi-loop ;; esac
   fi
 fi
 

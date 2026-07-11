@@ -55,6 +55,24 @@ Do not implement. Do not plan. Do not review. Only ask, classify, and capture.
 Legacy: if invoked with only `phase_number`, resolve via `bin/lib/jdi-resolve-phase.sh` to obtain slug + dir.
 </inputs>
 
+<brief_mode>
+Optional dispatch params (set by orchestrators like `/jdi-issue`):
+
+- `brief=<text>`: an external card/issue is the PRIMARY source for this phase.
+  Card constraints → locked decisions (D-XX); card acceptance criteria
+  (`- [ ]` checklists, "done when" sections) → DoD candidates. The ROADMAP
+  goal stays the frame; the brief fills it. Record the card url/id under
+  `## Canonical refs`.
+- `dod=auto_only`: every DoD item MUST carry an executable `Verify:` (command,
+  grep, or file assertion). Criteria that are inherently human (visual
+  approval, stakeholder sign-off) are NOT dropped and NOT converted to Manual
+  rows — record them under a `## Deferred to PR review` section in CONTEXT.md
+  (the autonomous chain surfaces them in the PR body). Zero MANUAL_REQUIRED
+  rows leave this mode.
+
+Both compose with `mode=auto` (no questions).
+</brief_mode>
+
 <research_tools>
 Web research available when user mentions lib/API/framework whose behavior affects a locked decision. Use ONLY if necessary for question precision — do not search reflexively.
 

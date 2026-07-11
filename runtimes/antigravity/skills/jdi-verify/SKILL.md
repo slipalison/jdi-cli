@@ -106,7 +106,7 @@ Reviewers are read-only. Wait for completion before next.
 
 ### Step 4.5: Enhanced DoD critic (opt-in, capability-gated)
 
-Read `.jdi/config.json`. Run this step ONLY if **`orchestration.mode == "enhanced"`** AND this runtime can spawn read-only sub-agents (`Agent`/`Task` available). Otherwise SKIP entirely — go to Step 5 with `REVIEW.md` untouched. The off-path is byte-identical; this is the "use the resource only when available" contract.
+Read `.jdi/config.json`. Run this step if this runtime can spawn read-only sub-agents (`Agent`/`Task` available) AND either **`orchestration.mode == "enhanced"`** OR the invoking orchestrator requested it (`critic=on` — `/jdi-issue` forces this: with no human watching, the critic is the skeptic in the room). Otherwise SKIP entirely — go to Step 5 with `REVIEW.md` untouched. The off-path is byte-identical; this is the "use the resource only when available" contract.
 
 Why: Gate 8 (Definition of Done) maps `exit 0 → PASS` for `Type=Auto` rows with no semantic scrutiny. A command can exit 0 without proving its criterion (a grep on a heading that still exists, a test asserting nothing). This critic re-examines those rows and can only ever make the verdict **stricter** — it can never raise a blocked verdict to approved.
 
