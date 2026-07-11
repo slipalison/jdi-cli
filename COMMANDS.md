@@ -30,13 +30,16 @@ Does:
 
 ## Main loop
 
-### `/jdi-new "<description>"`
+### `/jdi-new "<description>" [--auto]`
 
 **Greenfield entry point.** Creates a JDI project from scratch. (Directory already has code? It suggests `/jdi-adopt` instead.)
 
 ```
 /jdi-new "TODO app .NET 10 + React 19"
+/jdi-new "Kanban board in .NET, The Method" --auto   # zero questions
 ```
+
+`--auto` (alias `--yolo`): fully autonomous — whatever the description does not answer, the researcher decides itself (context7/web research when available, else stack heuristics) and records a 1-line rationale (D-1 becomes `auto-locked: <why>`; DoD keeps the 5 derived candidates). Explicit choices in the description are never overridden — dense prompt + `--auto` = best of both. The `--reset` confirmation is never bypassed. Same artifacts and gates as interactive mode; only WHO answers changes.
 
 Does:
 1. Validation: `.jdi/` does not exist (or `--reset`); if the directory has ≥3 code files, asks whether you meant `/jdi-adopt`

@@ -97,7 +97,7 @@ Anytime: `/jdi-next` (auto-route to the next step), `/jdi-status` (read-only sna
 ```
 /jdi-next                                  <- or run each step yourself:
 
-/jdi-new "<short description>"             <- research + PROJECT.md + ROADMAP.md (schema v2)
+/jdi-new "<short description>" [--auto]    <- research + PROJECT.md + ROADMAP.md (--auto: zero questions, researcher decides + records rationale)
 /jdi-bootstrap                             <- doer + reviewer per project
 /jdi-discuss <slug|position>               <- capture locked decisions (CONTEXT.md)
 /jdi-plan    <slug|position>               <- decompose into tasks + waves (PLAN.md)
@@ -314,6 +314,7 @@ The cycle: what a phase LEARNS (warnings, blockers, waivers) survives as ≤5 di
 - **DECISIONS v2 IDs are collision-free.** `D-{YYYY-MM-DD}-{slug}-{seq}` — two devs locking decisions on different phases the same day never collide. Registry entries follow the same scheme: `R-{YYYY-MM-DD}-{slug}`.
 - **Learnings travel between phases.** `/jdi-ship` distills the review's warnings/blockers into ≤5 bullets in `SHIPPED.md § Learnings`; the planner and doer of later phases read the last 3 and turn recurring items into acceptance criteria — recurring failures stop recurring.
 - **Recommended: one phase per branch/dev.** Each phase's files live under its own `phases/<slug>/` folder, so merging `.jdi/` is trivial — per-phase files are disjoint by construction. Same-slug collisions surface as an explicit git conflict, not a silent overwrite.
+- **The ONE file that can still conflict — on purpose: ROADMAP.md under simultaneous `/jdi-add-phase`/`/jdi-remove-phase` on parallel branches.** Normal work (discuss → ship) never touches it. It deliberately has NO `merge=union`: a union merge could silently resurrect a phase someone removed. Resolution is trivial: keep both `### Phase` blocks, fix the display numbering, done — slugs (the real IDs) never collide. Roadmap mutation is a planning event; do it on an up-to-date branch (`git pull` → add-phase → push).
 - **Recommended: put your `test_command` in CI.** JDI's gates are agent-run; a CI job running the PROJECT.md test command (+ coverage) is the deterministic backstop no agent can skip.
 
 ### Multi-developer concurrency (schema v2)
@@ -696,7 +697,7 @@ After that, `jdi` works without `npx`.
 
 | Command | Args | Flags | Purpose |
 |---|---|---|---|
-| `/jdi-new <description>` | description (optional) | `--reset` (wipes `.jdi/` first, asks confirm) | Greenfield entry: researcher + PROJECT.md + ROADMAP.md + config.json |
+| `/jdi-new <description>` | description (optional) | `--reset` (wipes `.jdi/` first, asks confirm) · `--auto` / `--yolo` (zero questions: researcher decides everything the description doesn't answer, via context7/web research, recording rationale; D-1 auto-locked; `--reset` confirmation NOT bypassed) | Greenfield entry: researcher + PROJECT.md + ROADMAP.md + config.json |
 | `/jdi-bootstrap` | — | — (idempotent: prompts Recreate/Keep/Cancel if specialists exist) | Generate doer + reviewer per project. Multi-stack opt-in via interactive question |
 | `/jdi-discuss <slug\|position>` | phase id (slug or int) | `--auto` (asker decides everything, no questions) | Adaptive question loop → CONTEXT.md. Gate: specialists must exist |
 | `/jdi-plan <slug\|position>` | phase id | `--review` (preview PLAN.md before save) | Decompose phase into tasks + waves → PLAN.md |
