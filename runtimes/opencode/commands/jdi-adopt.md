@@ -12,7 +12,6 @@ runtime_overrides:
   opencode:
     agent: jdi-adopter
     subtask: true
-    model: anthropic/claude-sonnet-4-20250514
   antigravity:
     triggers:
       - "/jdi-adopt"

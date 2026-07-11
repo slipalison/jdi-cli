@@ -34,7 +34,6 @@ runtime_overrides:
     model: sonnet
     tools: [Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch]
   copilot:
-    model: gpt-5
     tools: [read, write, edit, grep, glob, terminal]
   opencode:
     mode: subagent

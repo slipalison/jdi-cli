@@ -1,12 +1,32 @@
 # JDI — Commands
 
-15 commands. 7 in the main loop + DoD confirmation (1) + brownfield entry (1) + ralph mode (1) + continuity (1) + roadmap mutation (2) + migration (1) + meta (1).
+16 commands. Auto-router (1) + 7 in the main loop + DoD confirmation (1) + brownfield entry (1) + ralph mode (1) + continuity (1) + roadmap mutation (2) + migration (1) + meta (1).
 
 Every command that takes a phase accepts a **slug** (`auth-flow`, canonical) OR an **integer position** (`2`, display). Slugs are stable across branches; positions renumber on insert/remove. Schema v2 uses slug-as-ID; legacy v1 (numeric) projects keep working until you run `/jdi-migrate-phases`.
 
 Phase status is never stored — it is **derived from the artifacts** in the phase folder: `SHIPPED.md` → done, `REVIEW.md` → verified, `SUMMARY.md` → executed, `PLAN.md` → planned, `CONTEXT.md` → discussed, nothing → pending. `STATE.md` is an advisory next-step cache for the local clone — untracked (gitignored) since 0.3.0 and regenerated from artifacts when absent; gates check artifacts, not STATE.
 
 Phase helpers (resolver, slug validator, truncate, monitor) ship in the npm package and are invoked by the commands as CLI subcommands — `npx -y jdi-cli resolve-phase|validate-slug|truncate|monitor` (with `resolve-phase --json` for PowerShell). No helper code is copied into your repo.
+
+## Auto-router
+
+### `/jdi-next [slug|position]`
+
+**The one command to remember.** Derives the phase status from artifacts and EXECUTES the correct next command. Run it repeatedly instead of memorizing the sequence.
+
+```
+/jdi-next            # current phase = first ROADMAP phase without SHIPPED.md
+/jdi-next auth-flow  # explicit phase
+```
+
+Does:
+1. Pre-flight: no `.jdi/` → points to `/jdi-new` / `/jdi-adopt` (cannot auto-run — they need your input); no specialists → routes to `/jdi-bootstrap`
+2. Resolves the target phase (arg or first unshipped)
+3. Derives status from the artifact ladder, then routes: pending → discuss · discussed → plan · planned → do · executed → verify · verified+BLOCKED → do (fix mode) · verified+PENDING_MANUAL → confirm-dod · verified+APPROVED → ship · shipped → next phase
+4. Reads the INSTALLED command file for the target (`.claude/commands/`, `.github/prompts/`, `.opencode/commands/`, or the Antigravity skill) and follows its `<process>` faithfully — the target command's gates still apply; `/jdi-next` only routes
+5. One step per invocation ("Done. Run /jdi-next again."). For unattended iteration use `/jdi-loop`
+
+**Next:** `/jdi-next` again — or any specific command for fine control.
 
 ## Main loop
 
@@ -159,8 +179,8 @@ Interactive loop to confirm the `MANUAL_REQUIRED` DoD items left over from `/jdi
 Does:
 1. Validation: REVIEW.md exists + verdict ∈ `{APPROVED_PENDING_MANUAL, APPROVED, APPROVED_WITH_WARNINGS with leftover MANUAL_REQUIRED}` (BLOCKED aborts — fix gates first)
 2. Extracts rows still `MANUAL_REQUIRED` from the `## DoD Checklist` table — **the table is the single source of truth**; rows already flipped by a previous run are not re-asked
-3. Per-item AskUserQuestion:
-   - `Confirm` (evidence text mandatory — URL/sha/path/description) → flips the row's Status cell `MANUAL_REQUIRED` → `CONFIRMED`
+3. Per-item AskUserQuestion — when the reviewer pre-collected evidence (Evidence cell `suggested: …`), it is shown and a one-click "Confirm — the reviewer's finding is correct evidence" option appears (judgment call, not a scavenger hunt):
+   - `Confirm` (reviewer's finding, or own evidence text — URL/sha/path/description) → flips the row's Status cell `MANUAL_REQUIRED` → `CONFIRMED`
    - `Skip` (row stays `MANUAL_REQUIRED` — does not block this command, but still blocks ship)
    - `Reject DoD item` (justification mandatory — audited waiver) → flips the Status cell to `REJECTED` and records the reason under `## DoD Rejected (post-hoc)`. **A REJECTED row does NOT block ship**
 4. Appends to `## DoD Manual Confirmations` and/or `## DoD Rejected` in REVIEW.md (idempotent)
@@ -179,9 +199,9 @@ Does:
 
 **Next:** `/jdi-ship <slug>` (once everything is resolved)
 
-### `/jdi-ship <slug|position>`
+### `/jdi-ship <slug|position> [--pr]`
 
-Finalizes the phase, advances to the next.
+Finalizes the phase, advances to the next. `--pr` opens a pull request via `gh` after the final commit (best-effort: skips silently without gh/remote, or when on the default branch — never fails the ship).
 
 Does:
 1. Idempotency: if `SHIPPED.md` already exists for the phase → already shipped, exit 0
@@ -193,6 +213,7 @@ Does:
 6. Updates STATE.md (untracked advisory cache: next phase position + slug, `phase_status: ready`, next step — or `all_phases_complete: true` on the last phase)
 7. Archives old phases per `config.json compaction.archive_after` (default 5) into `.jdi/archive/` (+ index)
 8. Commit: `feat(<slug>): ship phase ({VERDICT})`
+8b. With `--pr`: pushes the branch and opens a PR titled `feat(<slug>): ship phase (<VERDICT>)` with verdict + artifact paths + `§ Learnings` in the body (gh CLI; best-effort)
 9. Optional tag: `phase-<slug>` (if PROJECT.md has `tag_phases: true`)
 
 **Next:** `/jdi-discuss <next-slug>` (or done)
@@ -328,7 +349,7 @@ Slugs of the remaining phases **never change**.
 
 ## Continuity
 
-### `/jdi-status`
+### `/jdi-status [--stats]`
 
 Read-only snapshot. No agent invoked. Safe anytime.
 
@@ -342,7 +363,9 @@ Prints:
 - Last commit + commits today
 - Next step (the exact command to run)
 
-Useful for resuming a session after a break.
+With `--stats`, appends **outcome metrics** — measures what changed, not how much the agent ran (all derived from artifacts + git history, zero telemetry, zero new files): first-pass rate (phases approved on verify round 1), average verify rounds, ralph iterations, blocked tasks, median lead time discuss → ship, learnings carried forward. Includes an interpretation guide (e.g. falling first-pass rate → tighten `/jdi-discuss`; same learning in 3+ phases → promote it into the specialist manually).
+
+Useful for resuming a session after a break — and for asking "is JDI actually helping?" with numbers.
 
 ## Migration
 

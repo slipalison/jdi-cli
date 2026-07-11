@@ -23,11 +23,9 @@ runtime_overrides:
     model: sonnet
     tools: [Read, Write, Edit, Bash, Grep, Glob, AskUserQuestion, Agent, WebSearch, WebFetch]
   copilot:
-    model: gpt-5
     tools: [read, write, edit, grep, glob, terminal]
   opencode:
     mode: subagent
-    model: anthropic/claude-sonnet-4-20250514
     temperature: 0.2
     permission:
       edit: allow

@@ -5,6 +5,22 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-11
+
+Adoption + outcomes release, driven by a review against Sierra's enterprise
+agent lessons ("AI-pilling our company"): absorb complexity in the tool, not
+the user; never pin models the user didn't choose; hand humans judgment calls,
+not scavenger hunts; measure outcomes, not activity.
+
+### Added
+- **`/jdi-next` — the one command to remember (16th command).** Derives the phase status from artifacts and EXECUTES the correct next step: pending → discuss, discussed → plan, planned → do, executed → verify, verified+BLOCKED → do (fix mode), verified+PENDING_MANUAL → confirm-dod, verified+APPROVED → ship, shipped → next phase. It reads the installed target command file and follows its process — every gate still applies; `/jdi-next` only routes. One step per invocation (unattended iteration remains `/jdi-loop`).
+- **`/jdi-status --stats` — outcome metrics, zero telemetry.** First-pass approval rate, average verify rounds, ralph iterations, blocked tasks, median lead time discuss → ship, learnings carried forward — all derived read-only from artifacts + git history, plus an interpretation guide. Activity is not outcome; this answers "is JDI actually helping?".
+- **`/jdi-ship --pr`** — after the final commit, push the branch and open a pull request via `gh` with verdict + artifact paths + `§ Learnings` in the body. Best-effort: skips without gh/remote or on the default branch; never fails the ship. (Also fixes `doctor`, which promised PR-opening that ship never did.)
+- **DoD suggested evidence.** For each Manual DoD item the reviewer now pre-collects what it FOUND in the repo (read-only, from the item's `Evidence:` hint) into the checklist as `suggested: …`; `/jdi-confirm-dod` surfaces it with a one-click "the reviewer's finding is correct" option. Status never auto-flips — the human always decides; it just stops being a scavenger hunt.
+
+### Changed
+- **JDI no longer pins models the user did not choose.** Removed 21 hardcoded `model:` pins from command/agent frontmatter — 13× `anthropic/claude-sonnet-4-20250514` (a dated May-2025 snapshot forced on every OpenCode user) and 8× `gpt-5` (Copilot) — commands and agents now inherit the runtime's configured default. The architect's `{LLM_OPENCODE_MODEL}` fallback no longer hardcodes a snapshot either: with no `llm_config` in PROJECT.md the `model:` line is deleted (runtime default). Claude-runtime tier aliases (`sonnet`/`opus`) are kept — they float with releases and encode intentional cost routing, not a snapshot.
+
 ## [0.3.1] - 2026-07-09
 
 ### Added

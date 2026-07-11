@@ -1,7 +1,6 @@
 ---
 name: jdi-bootstrap
 description: Fires jdi-architect in specialist mode to generate doer + reviewer per-project. Reads PROJECT.md, drives architect, validates outputs, updates routing.
-model: gpt-5
 tools: [read, write, edit, grep, glob, terminal]
 ---
 

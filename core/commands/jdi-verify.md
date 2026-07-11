@@ -11,7 +11,6 @@ runtime_overrides:
     tools: [read, grep, glob, terminal]
   opencode:
     subtask: true
-    model: anthropic/claude-sonnet-4-20250514
   antigravity:
     triggers:
       - "/jdi-verify"

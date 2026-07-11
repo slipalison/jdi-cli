@@ -31,13 +31,15 @@ Em `.github/prompts/`. Invoque via `/` no chat.
 
 Em `.github/agents/`:
 
-| Agent | Modelo | Funcao |
-|---|---|---|
-| `@jdi-researcher` | gpt-5 | Research pre-roadmap |
-| `@jdi-bootstrap` | gpt-5 | Cria per-project specialists |
-| `@jdi-asker` | gpt-5 | Loop de perguntas |
-| `@jdi-planner` | gpt-5 | Gera PLAN.md com waves |
-| `@jdi-architect` | gpt-5 | Meta-agent |
+| Agent | Funcao |
+|---|---|
+| `@jdi-researcher` | Research pre-roadmap |
+| `@jdi-bootstrap` | Cria per-project specialists |
+| `@jdi-asker` | Loop de perguntas |
+| `@jdi-planner` | Gera PLAN.md com waves |
+| `@jdi-architect` | Meta-agent |
+
+Agentes usam o modelo configurado no seu Copilot (JDI nao pina modelo).
 
 ## Specialists per-project
 

@@ -32,7 +32,6 @@ runtime_overrides:
     model: sonnet
     tools: [Read, Bash, Grep, Glob, WebSearch, WebFetch]
   copilot:
-    model: gpt-5
     tools: [read, grep, glob, terminal]
   opencode:
     mode: subagent
@@ -353,9 +352,18 @@ if ($LASTEXITCODE -eq 0) { Write-Host "PASS: {item_text}" } else { Write-Host "F
 
 **Manual items**: never executed. Recorded as `MANUAL_REQUIRED` for downstream confirmation via `/jdi-confirm-dod`.
 
+**Suggested evidence (pre-collection):** for each Manual item, use its
+`Evidence:` hint to LOOK for the artifact read-only (grep a heading, ls a
+file, read a config key) and record what you found in the Evidence column as
+`suggested: {1-line finding}` — or keep `—` when nothing was found. Example:
+criterion "CHANGELOG.md updated" → `suggested: found heading ## [0.4.0]`.
+This does NOT confirm the item (status stays `MANUAL_REQUIRED`); it hands the
+human the evidence so `/jdi-confirm-dod` becomes a judgment call, not a
+scavenger hunt. Cost ≈ zero — you already have the repo open.
+
 **Hard rules:**
 - Reviewer NEVER modifies DoD blocks (read-only).
-- Reviewer NEVER auto-confirms Manual items (only `/jdi-confirm-dod` does, with user input).
+- Reviewer NEVER auto-confirms Manual items (only `/jdi-confirm-dod` does, with user input). Suggested evidence is advisory text, never a status change.
 - Inherited PROJECT § DoD applies to EVERY phase — no filtering by reviewer.
 
 </gates>
@@ -450,7 +458,7 @@ Path: `{PHASE_DIR}/REVIEW.md`
 | # | Criterion | Source | Type | Status | Evidence |
 |---|---|---|---|---|---|
 | 1 | {criterion text} | PROJECT | Auto | PASS/FAIL | {command output or "exit 0"} |
-| 2 | {criterion text} | PROJECT | Manual | MANUAL_REQUIRED | — |
+| 2 | {criterion text} | PROJECT | Manual | MANUAL_REQUIRED | suggested: {1-line finding, or "—"} |
 | 3 | {criterion text} | CONTEXT | Auto | PASS/FAIL | {evidence} |
 | 4 | {criterion text} | CONTEXT | Manual | MANUAL_REQUIRED | — |
 

@@ -120,9 +120,9 @@ else
 fi
 
 if command -v gh &>/dev/null; then
-  ok "gh CLI disponivel (necessario pra /jdi-ship abrir PR)"
+  ok "gh CLI disponivel (usado por /jdi-ship --pr)"
 else
-  warn "gh CLI ausente. /jdi-ship nao consegue criar PR. Install: cli.github.com"
+  warn "gh CLI ausente. /jdi-ship --pr nao consegue abrir PR (ship normal funciona). Install: cli.github.com"
 fi
 
 if command -v jq &>/dev/null; then

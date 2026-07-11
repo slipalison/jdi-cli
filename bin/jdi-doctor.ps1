@@ -129,9 +129,9 @@ if (Test-Cmd 'ctx7') {
 }
 
 if (Test-Cmd 'gh') {
-  Write-OK 'gh CLI disponivel (necessario pra /jdi-ship abrir PR)'
+  Write-OK 'gh CLI disponivel (usado por /jdi-ship --pr)'
 } else {
-  Write-WARN 'gh CLI ausente. /jdi-ship nao consegue criar PR. Install: cli.github.com'
+  Write-WARN 'gh CLI ausente. /jdi-ship --pr nao consegue abrir PR (ship normal funciona). Install: cli.github.com'
 }
 
 # ---------------------------------------------------------------------------
