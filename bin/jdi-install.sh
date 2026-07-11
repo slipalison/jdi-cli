@@ -64,20 +64,33 @@ install_copilot() {
 }
 
 install_antigravity() {
+  # Antigravity 2.0 (May 2026) canonical skill paths:
+  #   user scope    -> ~/.gemini/config/skills/   (whole suite: IDE + agy CLI)
+  #   project scope -> <root>/.agents/skills/     (tool-agnostic workspace dir)
+  # The 1.x path (~/.gemini/antigravity/) is no longer read by 2.0.
   local dest
   if [[ "$SCOPE" == "user" ]]; then
-    dest="$HOME/.gemini/antigravity"
+    dest="$HOME/.gemini/config"
   else
-    dest="$PWD/.gemini/antigravity"
+    dest="$PWD/.agents"
   fi
   mkdir -p "$dest/skills"
   cp -R "$ROOT/runtimes/antigravity/skills/." "$dest/skills/"
 
   if [[ "$SCOPE" == "project" ]]; then
-    cp "$ROOT/runtimes/antigravity/agents.md" "$PWD/agents.md"
+    cp "$ROOT/runtimes/antigravity/agents.md" "$dest/agents.md"
   fi
 
-  echo "Antigravity instalado em: $dest (scope=$SCOPE)"
+  echo "Antigravity 2.0 instalado em: $dest/skills (scope=$SCOPE)"
+
+  # Legacy 1.x install detected? Point the user to the migration.
+  local legacy=""
+  [[ -d "$HOME/.gemini/antigravity/skills" ]] && legacy="$HOME/.gemini/antigravity"
+  [[ -d "$PWD/.gemini/antigravity/skills" ]] && legacy="${legacy:+$legacy, }$PWD/.gemini/antigravity"
+  if [[ -n "$legacy" ]]; then
+    echo "  aviso: instalacao Antigravity 1.x detectada em: $legacy"
+    echo "         o 2.0 nao le esse diretorio. 'jdi update' migra; 'jdi uninstall antigravity' limpa."
+  fi
 }
 
 install_opencode() {

@@ -83,11 +83,17 @@ else
 fi
 
 ANTIGRAVITY_OK=false
-if command -v antigravity &>/dev/null; then
-  ok "antigravity CLI: $(command -v antigravity)"
+if command -v agy &>/dev/null; then
+  ok "Antigravity CLI 2.0 (agy): $(command -v agy)"
+  ANTIGRAVITY_OK=true
+elif [[ -d "$HOME/.gemini/config" ]]; then
+  ok "~/.gemini/config/ existe (Antigravity 2.0)"
+  ANTIGRAVITY_OK=true
+elif command -v antigravity &>/dev/null; then
+  ok "antigravity CLI (1.x): $(command -v antigravity)"
   ANTIGRAVITY_OK=true
 elif [[ -d "$HOME/.gemini/antigravity" ]]; then
-  ok "~/.gemini/antigravity/ existe"
+  warn "~/.gemini/antigravity/ existe (Antigravity 1.x legado — o 2.0 nao le esse dir; 'jdi update' migra)"
   ANTIGRAVITY_OK=true
 else
   warn "Antigravity nao detectado"
@@ -255,10 +261,18 @@ if [[ -d "$PROJECT_DIR/.github/agents" ]]; then
   fi
 fi
 
+if [[ -d "$PROJECT_DIR/.agents/skills" ]]; then
+  count=$(find "$PROJECT_DIR/.agents/skills" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ')
+  if [[ "$count" -gt 0 ]]; then
+    ok ".agents/skills/ com $count skills JDI (Antigravity 2.0)"
+    INSTALL_FOUND=true
+  fi
+fi
+
 if [[ -d "$PROJECT_DIR/.gemini/antigravity/skills" ]]; then
   count=$(find "$PROJECT_DIR/.gemini/antigravity/skills" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ')
   if [[ "$count" -gt 0 ]]; then
-    ok ".gemini/antigravity/skills/ com $count skills JDI"
+    warn ".gemini/antigravity/skills/ com $count skills JDI (1.x legado — o 2.0 nao le; 'jdi update' migra)"
     INSTALL_FOUND=true
   fi
 fi
@@ -351,8 +365,10 @@ if [[ -f "$PROJECT_DIR/.vscode/mcp.json" ]]; then
   fi
 fi
 
-if [[ -f "$HOME/.gemini/settings.json" ]] && grep -q "$PLAYWRIGHT_KEY" "$HOME/.gemini/settings.json" 2>/dev/null; then
-  ok "Antigravity MCP playwright configured (user scope)"
+if [[ -f "$HOME/.gemini/config/mcp_config.json" ]] && grep -q "$PLAYWRIGHT_KEY" "$HOME/.gemini/config/mcp_config.json" 2>/dev/null; then
+  ok "Antigravity 2.0 MCP playwright configured (~/.gemini/config/mcp_config.json)"
+elif [[ -f "$HOME/.gemini/settings.json" ]] && grep -q "$PLAYWRIGHT_KEY" "$HOME/.gemini/settings.json" 2>/dev/null; then
+  ok "Antigravity 1.x MCP playwright configured (user scope settings.json)"
 elif [[ -f "$PROJECT_DIR/.gemini/settings.json" ]] && grep -q "$PLAYWRIGHT_KEY" "$PROJECT_DIR/.gemini/settings.json" 2>/dev/null; then
   ok "Antigravity MCP playwright configured (project scope)"
 fi

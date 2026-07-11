@@ -92,11 +92,17 @@ if (Test-Cmd 'code') {
 }
 
 $AntigravityOK = $false
-if (Test-Cmd 'antigravity') {
-  Write-OK "antigravity CLI: $((Get-Command antigravity).Source)"
+if (Test-Cmd 'agy') {
+  Write-OK "Antigravity CLI 2.0 (agy): $((Get-Command agy).Source)"
+  $AntigravityOK = $true
+} elseif (Test-Path "$UserHome\.gemini\config") {
+  Write-OK '~/.gemini/config/ existe (Antigravity 2.0)'
+  $AntigravityOK = $true
+} elseif (Test-Cmd 'antigravity') {
+  Write-OK "antigravity CLI (1.x): $((Get-Command antigravity).Source)"
   $AntigravityOK = $true
 } elseif (Test-Path "$UserHome\.gemini\antigravity") {
-  Write-OK '~/.gemini/antigravity/ existe'
+  Write-WARN '~/.gemini/antigravity/ existe (Antigravity 1.x legado — o 2.0 nao le esse dir; jdi update migra)'
   $AntigravityOK = $true
 } else {
   Write-WARN 'Antigravity nao detectado'
@@ -247,7 +253,8 @@ function Check-Install {
 
 Check-Install -Path "$ProjectDir\.claude\agents" -Filter 'jdi-*.md' -Label '.claude/agents/'
 Check-Install -Path "$ProjectDir\.github\agents" -Filter 'jdi-*.agent.md' -Label '.github/agents/'
-Check-Install -Path "$ProjectDir\.gemini\antigravity\skills" -Filter 'SKILL.md' -Label '.gemini/antigravity/skills/'
+Check-Install -Path "$ProjectDir\.agents\skills" -Filter 'SKILL.md' -Label '.agents/skills/ (Antigravity 2.0)'
+Check-Install -Path "$ProjectDir\.gemini\antigravity\skills" -Filter 'SKILL.md' -Label '.gemini/antigravity/skills/ (1.x legado — jdi update migra)'
 Check-Install -Path "$ProjectDir\.opencode\agents" -Filter 'jdi-*.md' -Label '.opencode/agents/'
 Check-Install -Path "$UserHome\.claude\agents" -Filter 'jdi-*.md' -Label '~/.claude/agents/ (scope user)'
 Check-Install -Path "$UserHome\.config\opencode\agents" -Filter 'jdi-*.md' -Label '~/.config/opencode/agents/ (scope user)'
@@ -338,10 +345,13 @@ if (Test-Path $copilotMcp) {
   }
 }
 
+$agMcp2    = Join-Path $UserHome '.gemini\config\mcp_config.json'
 $agUser    = Join-Path $UserHome '.gemini\settings.json'
 $agProject = Join-Path $ProjectDir '.gemini\settings.json'
-if ((Test-Path $agUser) -and ((Get-Content $agUser -Raw) -match '"playwright"\s*:')) {
-  Write-OK 'Antigravity MCP playwright configured (user scope)'
+if ((Test-Path $agMcp2) -and ((Get-Content $agMcp2 -Raw) -match '"playwright"\s*:')) {
+  Write-OK 'Antigravity 2.0 MCP playwright configured (~/.gemini/config/mcp_config.json)'
+} elseif ((Test-Path $agUser) -and ((Get-Content $agUser -Raw) -match '"playwright"\s*:')) {
+  Write-OK 'Antigravity 1.x MCP playwright configured (user scope settings.json)'
 } elseif ((Test-Path $agProject) -and ((Get-Content $agProject -Raw) -match '"playwright"\s*:')) {
   Write-OK 'Antigravity MCP playwright configured (project scope)'
 }

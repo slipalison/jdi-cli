@@ -204,7 +204,7 @@ your-project/
 └── {your code}
 ```
 
-For other runtimes, swap `.claude/` for `.github/`, `.gemini/antigravity/`, or `.opencode/`. See [PORTABILITY.md](PORTABILITY.md).
+For other runtimes, swap `.claude/` for `.github/`, `.agents/` (Antigravity 2.0), or `.opencode/`. See [PORTABILITY.md](PORTABILITY.md).
 
 ### Memory layers — who writes what, and for how long
 
@@ -477,7 +477,7 @@ Gate 7 returns `SKIPPED`. Skill does not load.
 | Claude Code | `.claude/settings.local.json` (`mcpServers.playwright`) |
 | OpenCode | `.opencode/opencode.jsonc` (`mcp.playwright`) |
 | GitHub Copilot (VS Code) | `.vscode/mcp.json` (`servers.playwright`) |
-| Antigravity (Google) | `~/.gemini/settings.json` user-scope OR `.gemini/settings.json` project-scope (`mcpServers.playwright`) |
+| Antigravity (Google) | 2.0: `~/.gemini/config/mcp_config.json` user-scope (auto-detected via `~/.gemini/config/` or the `agy` binary; 1.x falls back to `~/.gemini/settings.json`) OR `.gemini/settings.json` project-scope (`mcpServers.playwright`) |
 
 Idempotent: skips dep if already in `package.json`, skips MCP entry if already present.
 
@@ -537,7 +537,7 @@ npx jdi-cli@latest update            # flags: --dry-run, --force-specialists, --
 **What update does NOT touch:**
 - `@playwright/test` (run `jdi install-playwright` to refresh)
 - Chromium browser
-- MCP configs in `.claude/settings.local.json` / `.opencode/opencode.jsonc` / `.vscode/mcp.json` / `~/.gemini/settings.json`
+- MCP configs in `.claude/settings.local.json` / `.opencode/opencode.jsonc` / `.vscode/mcp.json` / `~/.gemini/config/mcp_config.json` (2.0) / `~/.gemini/settings.json` (1.x)
 - Caveman plugin (run `jdi install-caveman --force` to refresh)
 
 ## Uninstall
@@ -553,7 +553,7 @@ Uninstall also cleans up orphaned update-notifier hook files left by installs �
 
 Manual fallback:
 ```bash
-rm -rf .claude/ .github/ .gemini/antigravity/ .opencode/ .githooks/ CLAUDE.md AGENTS.md
+rm -rf .claude/ .github/ .agents/ .gemini/antigravity/ .opencode/ .githooks/ CLAUDE.md AGENTS.md
 # .jdi/ separate — destructive
 rm -rf .jdi/
 ```
@@ -574,7 +574,7 @@ Quick reference of every flag per subcommand:
 
 | Flag | Values | Default | Purpose |
 |---|---|---|---|
-| `--scope` / `-s` | `user` \| `project` | `project` | `project` writes `.claude/`/`.opencode/`/etc into the project; `user` writes to `~/.claude/`, `~/.config/opencode/`, `~/.gemini/antigravity/` |
+| `--scope` / `-s` | `user` \| `project` | `project` | `project` writes `.claude/`/`.opencode/`/`.agents/` (Antigravity 2.0) into the project; `user` writes to `~/.claude/`, `~/.config/opencode/`, `~/.gemini/config/skills/` |
 | `--githooks` | flag | false | **Opt-in:** copy no-op git hooks to `.githooks/`. Default installs NO shell scripts into your repo (no-code-in-consumer-repo invariant) |
 | `--no-color` | flag | false | Disable ANSI colors |
 
@@ -593,7 +593,7 @@ npx jdi-cli@latest install all                       # all 4 runtimes at once
 | `--skip-browser` | flag | false | Skip `npx playwright install chromium` (~170MB) |
 | `--skip-mcp` | flag | false | Only install dep + browser, skip injecting MCP configs |
 | `--runtime` | `claude` \| `opencode` \| `copilot` \| `antigravity` \| `all` | `all` | Limit MCP injection to one runtime |
-| `--antigravity-scope` | `user` \| `project` | `user` | `~/.gemini/settings.json` vs `.gemini/settings.json` |
+| `--antigravity-scope` | `user` \| `project` | `user` | user: `~/.gemini/config/mcp_config.json` on 2.0, else `~/.gemini/settings.json` (1.x) · project: `.gemini/settings.json` |
 
 ```bash
 npx jdi-cli@latest install-playwright

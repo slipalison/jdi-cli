@@ -132,31 +132,37 @@ uninstall_copilot() {
 
 uninstall_antigravity() {
   local scope="$1"
+  # Cobre AMBAS as geracoes: 2.0 (.agents/skills, ~/.gemini/config/skills)
+  # e legado 1.x (.gemini/antigravity) — limpa o que existir.
   local targets=()
-  [[ "$scope" == "$SCOPE_PROJECT" || "$scope" == "both" ]] && targets+=("$PROJECT_DIR/.gemini/antigravity:project")
-  [[ "$scope" == "user" || "$scope" == "both" ]] && targets+=("$USER_HOME/.gemini/antigravity:user")
+  [[ "$scope" == "$SCOPE_PROJECT" || "$scope" == "both" ]] && targets+=("$PROJECT_DIR/.agents:project" "$PROJECT_DIR/.gemini/antigravity:project")
+  [[ "$scope" == "user" || "$scope" == "both" ]] && targets+=("$USER_HOME/.gemini/config:user" "$USER_HOME/.gemini/antigravity:user")
 
   for t in "${targets[@]}"; do
     local dir="${t%:*}"
     local sc="${t#*:}"
-    [[ ! -d "$dir" ]] && continue
+    [[ ! -d "$dir/skills" ]] && continue
 
     echo
     echo "Antigravity ($sc scope) em: $dir"
 
-    if [[ -d "$dir/skills" ]]; then
-      # jdi-* skills (cada uma eh dir)
-      for sd in "$dir/skills"/jdi-*; do
-        [[ -d "$sd" ]] && remove_safe "$sd" "skills/$(basename "$sd")/"
-      done
-      # universais
-      for skill in "${UNIVERSAL_SKILLS[@]}"; do
-        remove_safe "$dir/skills/$skill" "skills/$skill/"
-      done
-    fi
+    # jdi-* skills (cada uma eh dir)
+    for sd in "$dir/skills"/jdi-*; do
+      [[ -d "$sd" ]] && remove_safe "$sd" "skills/$(basename "$sd")/"
+    done
+    # universais
+    for skill in "${UNIVERSAL_SKILLS[@]}"; do
+      remove_safe "$dir/skills/$skill" "skills/$skill/"
+    done
 
-    if [[ "$sc" == "$SCOPE_PROJECT" && -f "$PROJECT_DIR/agents.md" ]] && confirm_action "Remover agents.md (Antigravity)? (pode ter sido editado)"; then
-      remove_safe "$PROJECT_DIR/agents.md" "agents.md"
+    # agents.md do JDI (2.0: dentro de .agents/; 1.x: root do projeto)
+    if [[ "$sc" == "$SCOPE_PROJECT" ]]; then
+      if [[ -f "$dir/agents.md" ]] && confirm_action "Remover $dir/agents.md (Antigravity)? (pode ter sido editado)"; then
+        remove_safe "$dir/agents.md" "agents.md"
+      fi
+      if [[ -f "$PROJECT_DIR/agents.md" ]] && confirm_action "Remover agents.md legado do root (Antigravity 1.x)? (pode ter sido editado)"; then
+        remove_safe "$PROJECT_DIR/agents.md" "agents.md (root, 1.x)"
+      fi
     fi
   done
 }

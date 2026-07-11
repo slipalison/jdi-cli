@@ -86,14 +86,27 @@ function Install-Copilot {
 }
 
 function Install-Antigravity {
-  $dest = if ($Scope -eq 'user') { Join-Path $UserHome '.gemini\antigravity' } else { Join-Path $ProjectDir '.gemini\antigravity' }
+  # Antigravity 2.0 (May 2026) canonical skill paths:
+  #   user scope    -> ~/.gemini/config/skills/   (whole suite: IDE + agy CLI)
+  #   project scope -> <root>/.agents/skills/     (tool-agnostic workspace dir)
+  # The 1.x path (~/.gemini/antigravity/) is no longer read by 2.0.
+  $dest = if ($Scope -eq 'user') { Join-Path $UserHome '.gemini\config' } else { Join-Path $ProjectDir '.agents' }
   New-Item -ItemType Directory -Force -Path "$dest\skills" | Out-Null
   Copy-Tree -From "$Root\runtimes\antigravity\skills" -To "$dest\skills"
 
   if ($Scope -eq 'project' -and (Test-Path "$Root\runtimes\antigravity\agents.md")) {
-    Copy-Item -Path "$Root\runtimes\antigravity\agents.md" -Destination "$ProjectDir\agents.md" -Force
+    Copy-Item -Path "$Root\runtimes\antigravity\agents.md" -Destination "$dest\agents.md" -Force
   }
-  Write-Output "Antigravity instalado em: $dest (scope=$Scope)"
+  Write-Output "Antigravity 2.0 instalado em: $dest\skills (scope=$Scope)"
+
+  # Legacy 1.x install detected? Point the user to the migration.
+  $legacy = @()
+  if (Test-Path (Join-Path $UserHome '.gemini\antigravity\skills')) { $legacy += (Join-Path $UserHome '.gemini\antigravity') }
+  if (Test-Path (Join-Path $ProjectDir '.gemini\antigravity\skills')) { $legacy += (Join-Path $ProjectDir '.gemini\antigravity') }
+  if ($legacy.Count -gt 0) {
+    Write-Output "  aviso: instalacao Antigravity 1.x detectada em: $($legacy -join ', ')"
+    Write-Output "         o 2.0 nao le esse diretorio. 'jdi update' migra; 'jdi uninstall antigravity' limpa."
+  }
 }
 
 function Install-Opencode {

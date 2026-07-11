@@ -8,9 +8,9 @@ Strategy: 1 source of truth (`core/`) + adapters per runtime (`runtimes/<name>/`
 
 | JDI concept | Claude Code | GitHub Copilot | Antigravity | OpenCode |
 |---|---|---|---|---|
-| Command | `.claude/commands/<n>.md` | `.github/prompts/<n>.prompt.md` | `skills/<n>/SKILL.md` | `.opencode/commands/<n>.md` |
-| Agent | `.claude/agents/<n>.md` | `.github/agents/<n>.agent.md` | `skills/<n>/SKILL.md` | `.opencode/agents/<n>.md` |
-| Skill | `.claude/skills/<n>/SKILL.md` | n/a | `skills/<n>/` | `.opencode/skills/<n>/SKILL.md` (also reads `.claude/skills/`) |
+| Command | `.claude/commands/<n>.md` | `.github/prompts/<n>.prompt.md` | `.agents/skills/<n>/SKILL.md` | `.opencode/commands/<n>.md` |
+| Agent | `.claude/agents/<n>.md` | `.github/agents/<n>.agent.md` | `.agents/skills/<n>/SKILL.md` | `.opencode/agents/<n>.md` |
+| Skill | `.claude/skills/<n>/SKILL.md` | n/a | `.agents/skills/<n>/` (2.0; user scope: `~/.gemini/config/skills/`) | `.opencode/skills/<n>/SKILL.md` (also reads `.claude/skills/`) |
 | Global instructions | `CLAUDE.md` | `.github/copilot-instructions.md` | `agents.md` | `AGENTS.md` |
 | Hook | `settings.json` `hooks` | none | none | `opencode.jsonc` `permission` |
 | Invocation | `/jdi-discuss` | `/jdi-discuss` or `@jdi-asker` | discovery by trigger | `/jdi-discuss` or `@jdi-asker` |
@@ -83,7 +83,7 @@ JDI core declares intent (`reasoning: medium`) — the adapter translates it int
 
 **Copilot:** prompts in `.github/prompts/` listed via `/`. Agents auto-discovered when referenced via `@`.
 
-**Antigravity:** discovery by **description + triggers**. SKILL.md frontmatter needs clear `triggers:`. The agent picks the skill automatically on match.
+**Antigravity:** discovery by **semantic match on the `description` field** (2.0 — the 1.x `triggers:` list is ignored but harmless). Descriptions must be specific; the agent picks the skill automatically on match. Project skills live in `.agents/skills/`, user skills in `~/.gemini/config/skills/` (the 1.x `~/.gemini/antigravity/` dir is no longer read).
 
 **OpenCode:** commands in `.opencode/commands/` listed via `/`. Agents in `.opencode/agents/` invoked via `@<name>` or by a command's `agent:` field. Skills discovered by walking up from cwd to the git worktree, reading `.opencode/skills/`, `.claude/skills/`, `.agents/skills/`.
 
@@ -322,10 +322,12 @@ install_copilot() {
 }
 
 install_antigravity() {
-  DEST="$PWD/.gemini/antigravity"           # or $HOME/... with --scope user
+  # Antigravity 2.0 (May 2026) canonical paths — the 1.x
+  # .gemini/antigravity/ dir is no longer read by the 2.0 suite.
+  DEST="$PWD/.agents"                       # or $HOME/.gemini/config with --scope user
   mkdir -p "$DEST/skills"
   cp -r runtimes/antigravity/skills/* "$DEST/skills/"
-  cp runtimes/antigravity/agents.md "$PWD/agents.md"
+  cp runtimes/antigravity/agents.md "$DEST/agents.md"   # project scope only
 }
 
 install_opencode() {

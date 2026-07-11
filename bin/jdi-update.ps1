@@ -79,7 +79,9 @@ if (Test-Path (Join-Path $ProjectDir '.github/agents')) {
     $detected += 'copilot'
   }
 }
-if ((Test-Path (Join-Path $ProjectDir '.gemini/antigravity')) -or (Test-Path (Join-Path $UserHome '.gemini/antigravity/skills/jdi-architect'))) {
+# Antigravity 2.0 paths (+ legacy 1.x for migration)
+if ((Test-Path (Join-Path $ProjectDir '.agents/skills/jdi-architect')) -or (Test-Path (Join-Path $UserHome '.gemini/config/skills/jdi-architect')) -or
+    (Test-Path (Join-Path $ProjectDir '.gemini/antigravity')) -or (Test-Path (Join-Path $UserHome '.gemini/antigravity/skills/jdi-architect'))) {
   $detected += 'antigravity'
 }
 if ((Test-Path (Join-Path $ProjectDir '.opencode')) -or (Test-Path (Join-Path $UserHome '.config/opencode/agents/jdi-architect.md'))) {
@@ -105,26 +107,37 @@ foreach ($runtime in $detected) {
   # Detecta scope - se tem em user dir tbm, atualiza user; se so projeto, project
   $userScopeMarker = switch ($runtime) {
     'claude'      { Join-Path $UserHome '.claude/agents/jdi-architect.md' }
-    'antigravity' { Join-Path $UserHome '.gemini/antigravity/skills/jdi-architect' }
+    'antigravity' { Join-Path $UserHome '.gemini/config/skills/jdi-architect' }
     'opencode'    { Join-Path $UserHome '.config/opencode/agents/jdi-architect.md' }
     default       { $null }
   }
 
-  $hasUserScope = $userScopeMarker -and (Test-Path $userScopeMarker)
+  # Antigravity 1.x legado -> migracao (instala no path 2.0 + remove o velho)
+  $userLegacy = if ($runtime -eq 'antigravity') { Join-Path $UserHome '.gemini/antigravity' } else { $null }
+  $projLegacy = if ($runtime -eq 'antigravity') { Join-Path $ProjectDir '.gemini/antigravity' } else { $null }
+  $hasUserLegacy = $userLegacy -and (Test-Path (Join-Path $userLegacy 'skills'))
+  $hasProjLegacy = $projLegacy -and (Test-Path (Join-Path $projLegacy 'skills'))
+
+  $hasUserScope = ($userScopeMarker -and (Test-Path $userScopeMarker)) -or $hasUserLegacy
   $projectMarker = switch ($runtime) {
     'claude'      { Join-Path $ProjectDir '.claude/agents/jdi-architect.md' }
     'copilot'     { Join-Path $ProjectDir '.github/agents/jdi-architect.agent.md' }
-    'antigravity' { Join-Path $ProjectDir '.gemini/antigravity/skills/jdi-architect' }
+    'antigravity' { Join-Path $ProjectDir '.agents/skills/jdi-architect' }
     'opencode'    { Join-Path $ProjectDir '.opencode/agents/jdi-architect.md' }
   }
-  $hasProjectScope = Test-Path $projectMarker
+  $hasProjectScope = (Test-Path $projectMarker) -or $hasProjLegacy
 
   if ($hasProjectScope) {
     Write-Output "Atualizando $runtime (project scope)..."
     if (-not $DryRun) {
       & pwsh -NoProfile -ExecutionPolicy Bypass -File $installScript -Runtime $runtime -Scope project | Out-Null
+      if ($hasProjLegacy) {
+        Remove-Item -Recurse -Force $projLegacy -Confirm:$false
+        Write-Output "  migrado: skills 1.x removidas de $projLegacy (2.0 usa .agents/skills/)"
+      }
     } else {
       Write-Output "  [dry-run] copia runtimes/$runtime/* pra escopo project"
+      if ($hasProjLegacy) { Write-Output "  [dry-run] migra 1.x: remove $projLegacy" }
     }
   }
 
@@ -132,8 +145,13 @@ foreach ($runtime in $detected) {
     Write-Output "Atualizando $runtime (user scope)..."
     if (-not $DryRun) {
       & pwsh -NoProfile -ExecutionPolicy Bypass -File $installScript -Runtime $runtime -Scope user | Out-Null
+      if ($hasUserLegacy) {
+        Remove-Item -Recurse -Force $userLegacy -Confirm:$false
+        Write-Output "  migrado: skills 1.x removidas de $userLegacy (2.0 usa ~/.gemini/config/skills/)"
+      }
     } else {
       Write-Output "  [dry-run] copia runtimes/$runtime/* pra escopo user"
+      if ($hasUserLegacy) { Write-Output "  [dry-run] migra 1.x: remove $userLegacy" }
     }
   }
 }
