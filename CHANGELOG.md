@@ -5,6 +5,23 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-07-11
+
+Backpressure release — three small changes from a spec-anchored-development
+review, filtered hard for fit ("the first no comes from the machine", but only
+where JDI already promised it). Explicitly rejected in the same review:
+git hooks with teeth (per-clone, bypassable, cross-shell fragility — CI is the
+real enforcement), automatic learning promotion (a manual path shipped in
+0.4.0 `--stats` and there is no evidence of pain yet), capability specs and
+autonomy milestones (enterprise ceremony against JDI's lean thesis).
+
+### Changed
+- **Gate 6 now enforces locked decisions (BREAKING for reviewer behavior).** "Locked decisions never reverse" was declared but never verified: the reviewer carried DECISIONS.md in context and checked only plan consistency. Gate 6 now selects the decisions relevant to the phase's changed files and BLOCKS when the diff contradicts one (citing the D-XX and file/line). Suspected-but-unsure contradictions warn. Existing projects pick this up on the next `/jdi-bootstrap` (specialists are generated from templates).
+- **Doer runs lint per task.** The task loop is now implement → lint (`{LINT_COMMAND}`, silently skipped when the project has no linter) → test → commit. Lint errors were previously caught only at `/jdi-verify` — a whole extra round for something one edit fixes at the point of writing. The architect fills `{LINT_COMMAND}` in the doer from the same answer used for the reviewer.
+
+### Added
+- **"When NOT to use JDI"** section in the README: throwaway prototypes, pure exploration, and drive-by fixes are cheaper without the ceremony — rule of thumb: cost of an error × how long the code will live. Plus a Team-usage note: put the PROJECT.md `test_command` in CI as the deterministic backstop no agent can skip.
+
 ## [0.4.0] - 2026-07-11
 
 Adoption + outcomes release, driven by a review against Sierra's enterprise

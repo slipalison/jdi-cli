@@ -364,6 +364,7 @@ Read `core/templates/doer-specialist.md`. Replace placeholders:
 - `{TEST_FRAMEWORK}` -> SQ1
 - `{TEST_COMMAND}` -> SQ3
 - `{LINTER}` -> derived from SQ5
+- `{LINT_COMMAND}` -> SQ5 (same value used in the reviewer; if the project has no linter, replace with `true` — the doer's per-task lint step becomes a no-op)
 - `{COMMIT_PREFIX}` -> derived from convention (default: `feat`)
 - `{PROJECT_CONVENTIONS}` -> SQ6 (or stack defaults)
 - `{ADOPTED}` -> "true" or "false" (S2)

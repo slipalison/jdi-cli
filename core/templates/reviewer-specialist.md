@@ -236,7 +236,7 @@ Examples with 2 implementations:
 
 - {STACK_SPECIFIC_CHECKS}
 
-### Gate 6: Plan consistency
+### Gate 6: Plan consistency + locked-decision conformance
 
 **bash:**
 ```bash
@@ -248,11 +248,23 @@ git log --name-only --pretty=format: HEAD~10..HEAD -- src/ tests/ | sort -u
 git log --name-only --pretty=format: HEAD~10..HEAD -- src/ tests/ | Sort-Object -Unique
 ```
 
-Check:
+Check (plan consistency):
 - Do all PLAN files_modified appear in phase commit log?
 - Does every task with `status: completed` have a corresponding test?
 
 Inconsistency = warn.
+
+Check (locked-decision conformance — "locked decisions never reverse" is only
+true if someone verifies it):
+- You already have `.jdi/DECISIONS.md` in context (cache breakpoint). Select
+  ONLY the decisions relevant to the files changed this phase — do not
+  evaluate the whole history against the diff (attention dilution).
+- For each relevant D-XX: does the changed code contradict it? (e.g. D-XX
+  locks "payments are idempotent" and the diff removes the idempotency key).
+
+Violation of a locked decision = **BLOCK** (cite the D-XX id and the
+contradicting file/line in the blocker). Not sure whether it contradicts =
+warn with the D-XX id — never silently pass over a suspected violation.
 
 ### Gate 7: UI/UX Live Validation (conditional)
 
@@ -428,7 +440,7 @@ Path: `{PHASE_DIR}/REVIEW.md`
 | Coverage | PASS/BLOCK | {%}, threshold {COVERAGE_MIN}% |
 | Lint | PASS/WARN | ... |
 | Security | PASS/WARN/BLOCK | ... |
-| Consistency | PASS/WARN | ... |
+| Consistency | PASS/WARN/BLOCK | plan consistency (warn) + locked-decision conformance (violation = BLOCK, cites D-XX) |
 | UI Validation | PASS/WARN/BLOCK/SKIPPED | {if SKIPPED:} has_frontend=false {else:} {N} routes x {M} viewports, {findings_count} findings |
 | DoD | PASS/PASS_PENDING_MANUAL/BLOCK/INCONCLUSIVE | {N_auto_pass}/{N_auto_total} auto, {N_manual} manual pending |
 
@@ -478,7 +490,7 @@ Print REVIEW.md path + final verdict.
 
 <rules>
 - Read-only — never edits code, never fixes (skill `jdi-frontend-validator` creates files ONLY in `.jdi/cache/` — gitignored, does not count as edit)
-- Verdict BLOCKED if any gate 1-3 fails OR gate 5 with critical check OR gate 7 with BLOCK OR gate 8 with any Auto FAIL
+- Verdict BLOCKED if any gate 1-3 fails OR gate 5 with critical check OR gate 6 with a locked-decision violation OR gate 7 with BLOCK OR gate 8 with any Auto FAIL
 - Verdict APPROVED_PENDING_MANUAL if gates 1-7 OK AND gate 8 has Manual items pending (no Auto FAIL)
 - Verdict APPROVED_WITH_WARNINGS if warnings without blockers AND no DoD Manual pending
 - Verdict APPROVED only if everything PASS AND no DoD Manual pending

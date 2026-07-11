@@ -469,7 +469,7 @@ Registry of reusable skills that agents load on-demand. A skill = a reusable pro
 | 3. Coverage | PASS/BLOCK | {%}, threshold {COVERAGE_MIN}% |
 | 4. Lint | PASS/WARN | ... |
 | 5. Security | PASS/WARN/BLOCK | ... |
-| 6. Consistency | PASS/WARN | ... |
+| 6. Consistency | PASS/WARN/BLOCK | plan consistency (warn) + locked-decision conformance (violation = BLOCK) |
 | 7. UI Validation | PASS/WARN/BLOCK/SKIPPED | (only if has_frontend=true) |
 | 8. DoD | PASS/PASS_PENDING_MANUAL/BLOCK/INCONCLUSIVE | {N_auto_pass}/{N_auto_total} auto, {N_manual} manual pending |
 

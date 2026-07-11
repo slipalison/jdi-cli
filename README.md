@@ -628,6 +628,7 @@ Schema detection is automatic via `STATE.md`'s `schema_version` field (`1` or ab
 - **DECISIONS v2 IDs are collision-free.** `D-{YYYY-MM-DD}-{slug}-{seq}` — two devs locking decisions on different phases the same day never collide. Registry entries follow the same scheme: `R-{YYYY-MM-DD}-{slug}`.
 - **Learnings travel between phases.** `/jdi-ship` distills the review's warnings/blockers into ≤5 bullets in `SHIPPED.md § Learnings`; the planner and doer of later phases read the last 3 and turn recurring items into acceptance criteria — recurring failures stop recurring.
 - **Recommended: one phase per branch/dev.** Each phase's files live under its own `phases/<slug>/` folder, so merging `.jdi/` is trivial — per-phase files are disjoint by construction. Same-slug collisions surface as an explicit git conflict, not a silent overwrite.
+- **Recommended: put your `test_command` in CI.** JDI's gates are agent-run; a CI job running the PROJECT.md test command (+ coverage) is the deterministic backstop no agent can skip.
 
 ## Doctor — 12 sections
 
@@ -941,11 +942,21 @@ pwsh -ExecutionPolicy Bypass -File .\bin\jdi-build.ps1
 1. **Fresh context per agent** — each spawn has a clean window
 2. **Thin orchestrator** — commands load context, spawn agent, route
 3. **File-based state** — `.jdi/` in md/json, no DB
-4. **Locked decision = immutable** — D-XX never reverses
+4. **Locked decision = immutable** — D-XX never reverses (and the reviewer verifies it: Gate 6 blocks a diff that contradicts a locked decision)
 5. **1 task = 1 atomic commit**
 6. **Per-project specialists** — doer/reviewer customized, not generic
 7. **Wave-based parallelism** — parallel within wave, sequential between
 8. **Security > Performance > Best Practices** (declared invariant)
+
+## When NOT to use JDI
+
+Honest scope. JDI pays off when the project lives long enough for structure to compound — phases, locked decisions, learnings, a reviewer that blocks. It does NOT pay off for:
+
+- **Throwaway prototypes / weekend scripts** — the ceremony (discuss → plan → do → verify → ship) costs more than the error it prevents. Talk to your agent directly; that is the honest tool there.
+- **Pure exploration** — when you don't know what you're building yet, specs and DoD are guesses. Explore first, `/jdi-adopt` later if it survives.
+- **Single-file fixes in repos you don't own** — a drive-by PR doesn't need a roadmap.
+
+Rule of thumb: **cost of an error × how long the code will live**. Low on both → skip JDI. High on either → the gates earn their keep.
 
 ## Conventions
 
