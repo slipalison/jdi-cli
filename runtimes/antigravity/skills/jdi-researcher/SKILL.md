@@ -299,9 +299,6 @@ Each MVP feature (Q4) becomes 1 phase. Short name + slug.
 ```markdown
 # {project_name} — Roadmap
 
-## Status
-total_phases: {N}
-
 ## Phases
 
 ### Phase 1: {feature 1 name}
@@ -366,9 +363,15 @@ Create `.gitattributes` at root — line-ending normalization (avoids CRLF warni
 .jdi/reviewers.md merge=union
 .jdi/skills-registry.md merge=union
 .jdi/archive/index.md merge=union
+.jdi/ROADMAP.md merge=union
 ```
 
-Do NOT put `merge=union` on ROADMAP.md (remove-phase deletions could silently resurrect on merge), PROJECT.md, or config.json — conflicts there must stay visible.
+ROADMAP.md carries `merge=union` (0.11.0+): `/jdi-issue` made phase appends a
+per-card operation, so parallel appends must auto-merge. The union trade-off
+(a racing `remove-phase` can resurrect a removed block) is rare, visible in
+`/jdi-status`, audited by the `D-{date}-{slug}-rm` decision, and fixed by
+re-running the remove. Do NOT put `merge=union` on PROJECT.md or config.json —
+conflicts there must stay visible.
 
 STATE.md is a per-clone advisory cache — keep it out of git so it can never
 be a merge conflict (every command rewrites it; commands regenerate it from

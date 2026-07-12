@@ -5,6 +5,21 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-07-11
+
+Team hotfix: user-reported (correctly) that ROADMAP.md changes on every new
+phase and conflicts under parallel developers. The 0.7.0 assessment ("roadmap
+mutation is a rare planning event, visible conflict acceptable") was
+invalidated by 0.8.0's `/jdi-issue`, which made phase appends a per-card
+operation.
+
+### Fixed
+- **`total_phases` is no longer stored in ROADMAP.md** (new projects). A stored counter conflicts on EVERY parallel add and — worse — union-merges to a stale number. The count is derived from `### Phase ` headings everywhere (`/jdi-status` now counts headings directly, never trusting a possibly-stale legacy line). Legacy ROADMAPs keep their line, updated best-effort by add/remove-phase.
+- **ROADMAP.md now carries `merge=union`** in the generated `.gitattributes` (researcher + adopter, with a separate idempotent guard so existing projects pick it up on re-adopt/update). Parallel `/jdi-issue`/`add-phase` appends auto-merge. Documented trade-off (rare, recoverable, audited): a `remove-phase` racing a merge can resurrect the removed block — `/jdi-status` shows it, `D-{date}-{slug}-rm` in DECISIONS.md audits it, re-running the remove fixes it; remove-phase now documents this post-merge hygiene.
+- Mid-roadmap inserts (`--before`/`--after`) at the same spot on two branches may still conflict — deliberate (planning events belong on an up-to-date branch).
+
+Migration for existing projects: `echo '.jdi/ROADMAP.md merge=union' >> .gitattributes` (and optionally delete the `total_phases:` line from ROADMAP.md).
+
 ## [0.10.1] - 2026-07-11
 
 ### Fixed

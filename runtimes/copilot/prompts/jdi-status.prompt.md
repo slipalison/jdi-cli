@@ -95,7 +95,9 @@ PHASE_STATUS=$(grep -oE 'phase_status:\s*[a-z_-]+' .jdi/STATE.md | awk '{print $
 VERDICT=$(grep -oE 'phase_verdict:\s*[A-Z_]+' .jdi/STATE.md | awk '{print $2}')
 NEXT_STEP=$(grep -E '^next_step:' .jdi/STATE.md | sed -E 's/^next_step:[[:space:]]*//')
 
-TOTAL=$(grep -oE 'total_phases:\s*[0-9]+' .jdi/ROADMAP.md | grep -oE '[0-9]+' || grep -cE '^### Phase ' .jdi/ROADMAP.md)
+# Derived, never read from a stored field: a legacy total_phases line can be
+# STALE after a union merge — the heading count is always the truth.
+TOTAL=$(grep -cE '^### Phase ' .jdi/ROADMAP.md)
 
 # Resolve phase (handles slug OR int)
 PHASE_DIR=""; PHASE_NAME=""; PHASE_POSITION=""

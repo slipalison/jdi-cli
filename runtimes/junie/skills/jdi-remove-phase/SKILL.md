@@ -193,12 +193,22 @@ Remove the entire `### Phase $PHASE_POSITION: ...` block (header + bullets) up t
 
 Renumber subsequent `### Phase K` headings to `K-1` (display order). **Slug values are NOT changed** — they remain canonical.
 
-Recompute `total_phases`:
+Recompute `total_phases` (legacy only — 0.11.0+ ROADMAPs do not store the
+counter; it is derived from heading count):
 ```bash
 NEW_TOTAL=$(grep -cE '^### Phase ' .jdi/ROADMAP.md)
-sed -i.bak -E "s/^total_phases:.*$/total_phases: $NEW_TOTAL/" .jdi/ROADMAP.md
-rm -f .jdi/ROADMAP.md.bak
+if grep -qE '^total_phases:' .jdi/ROADMAP.md; then
+  sed -i.bak -E "s/^total_phases:.*$/total_phases: $NEW_TOTAL/" .jdi/ROADMAP.md
+  rm -f .jdi/ROADMAP.md.bak
+fi
 ```
+
+**Post-merge hygiene note (merge=union):** ROADMAP.md carries `merge=union`
+since 0.11.0 so parallel `add-phase`/`/jdi-issue` appends auto-merge. Side
+effect: if THIS remove races a merge from another branch, the removed block
+can reappear. The removal is audited (`D-{date}-{slug}-rm` in DECISIONS.md,
+which never conflicts) — if the block resurfaces after a merge, re-run
+`/jdi-remove-phase {slug}` (idempotent; artifacts already archived).
 
 ### Step 8: Audit trail in DECISIONS.md
 
@@ -221,7 +231,7 @@ git commit -m "chore(jdi): remove phase $PHASE_SLUG"
 ```
 Phase '{slug}' removed.
 {if artifacts:} Artifacts archived: .jdi/archive/removed-{slug}/
-total_phases: {NEW_TOTAL}
+Phases remaining: {NEW_TOTAL}
 
 Note: slugs of remaining phases are not changed. Display positions renumbered.
 ```

@@ -186,7 +186,9 @@ For v1 schema, write `Slug: {NN}-{slug}` instead (preserves legacy folder conven
 ### Step 6: Update derived counter
 
 ```bash
-# total_phases is a display field, not an ID. Always recompute from line count.
+# total_phases is DERIVED (count of '### Phase ' headings). ROADMAPs created
+# on 0.11.0+ do not store it — a stored counter conflicts on every parallel
+# add and merges to the WRONG number. Update only if a legacy line exists:
 NEW_TOTAL=$(grep -cE '^### Phase ' .jdi/ROADMAP.md)
 if grep -qE '^total_phases:' .jdi/ROADMAP.md; then
   sed -i.bak -E "s/^total_phases:.*$/total_phases: $NEW_TOTAL/" .jdi/ROADMAP.md

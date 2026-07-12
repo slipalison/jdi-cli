@@ -353,7 +353,6 @@ Existing tests: {framework}, ~{N} files, current coverage {pct or unknown}
 
 ## Status
 adopted: true
-total_phases: {N from Q4}
 
 ## Context
 Project adopted on {date}. Pre-existing code is not in this roadmap — only NEW features added via JDI.
@@ -428,12 +427,18 @@ grep -q '\.jdi/DECISIONS\.md merge=union' .gitattributes 2>/dev/null || cat >> .
 .jdi/archive/index.md merge=union
 EOF
 
+# ROADMAP.md union (0.11.0+, separate guard so pre-existing installs get it):
+# /jdi-issue made phase appends per-card — parallel appends must auto-merge.
+# Trade-off (racing remove-phase can resurrect a block) is rare, visible in
+# /jdi-status, audited by D-{date}-{slug}-rm, fixed by re-running the remove.
+grep -q '\.jdi/ROADMAP\.md merge=union' .gitattributes 2>/dev/null || echo '.jdi/ROADMAP.md merge=union' >> .gitattributes
+
 # STATE.md is a per-clone advisory cache — never versioned, never a merge
 # conflict (commands regenerate it from phase artifacts when absent)
 grep -qxF '.jdi/STATE.md' .gitignore 2>/dev/null || echo '.jdi/STATE.md' >> .gitignore
 ```
 
-Do NOT put `merge=union` on ROADMAP.md (remove-phase deletions could silently resurrect on merge), PROJECT.md, or config.json — conflicts there must stay visible.
+Do NOT put `merge=union` on PROJECT.md or config.json — conflicts there must stay visible.
 
 ### Step 9: Commit
 
