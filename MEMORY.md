@@ -72,7 +72,7 @@ Three mechanisms keep `.jdi/` conflict-free across parallel branches:
 
 1. **Derived status** — no shared file records phase progress; artifacts in the phase folder do (see above). ROADMAP.md has no status lines; ship never edits it.
 2. **STATE.md untracked** — it is a per-clone advisory cache in `.gitignore` (every command rewrites it, so versioning it guaranteed a conflict on every merge). Commands regenerate it from artifacts when absent (fresh clone): current phase = first ROADMAP phase without SHIPPED.md.
-3. **`merge=union`** on the append-only files (`DECISIONS.md`, `todos.md`, `registry.md`, `specialists.md`, `reviewers.md`, `skills-registry.md`, `archive/index.md`) via the generated `.gitattributes` — simultaneous appends on two branches auto-merge (both sides kept; safe because these files are append-only by contract and v2 IDs are deterministic). NOT applied to ROADMAP.md (deletions by remove-phase could silently resurrect), PROJECT.md, or config.json — conflicts there must stay visible.
+3. **`merge=union`** on the append-only files (`DECISIONS.md`, `todos.md`, `registry.md`, `specialists.md`, `reviewers.md`, `skills-registry.md`, `archive/index.md`) AND, since 0.11.0, **`ROADMAP.md`** — `/jdi-issue` made phase appends a per-card operation, so parallel appends must auto-merge. The ROADMAP trade-off (a racing `remove-phase` can resurrect a removed block) is rare, visible in `/jdi-status`, audited by `D-{date}-{slug}-rm`, and fixed by re-running the remove. NOT applied to PROJECT.md or config.json — conflicts there must stay visible. Also since 0.11.0 the ROADMAP stores no `total_phases` counter (derived from heading count — a stored aggregate conflicts on every parallel add and union-merges stale).
 
 Migration for pre-0.3.0 projects: `git rm --cached .jdi/STATE.md && echo '.jdi/STATE.md' >> .gitignore`, and append the union block to `.gitattributes` (or re-run the adopter Step 8 snippet — it is idempotent).
 
@@ -141,15 +141,17 @@ Decided in /jdi-new (D-1). Do not change.
 ```markdown
 # {project_name} — Roadmap
 
-## Status
-total_phases: {N}
-
 ## Phases
 
 ### Phase 1: {name}
 - **Slug:** {slug}
 - **Goal:** 1 line
 ```
+
+No stored `total_phases` (0.11.0+): the phase count is DERIVED from the
+`### Phase ` heading count — a stored counter conflicts on every parallel
+add and union-merges to a stale number. Legacy ROADMAPs keep their line
+(updated best-effort by add/remove-phase); readers always count headings.
 
 No per-phase `Status:` lines and no current-phase pointer — phase status is derived from artifacts (see above), which keeps ROADMAP.md append/insert-only and conflict-free across parallel branches. The numeric `### Phase N` heading is display-only; the slug is the canonical ID (no `NN-` prefix in v2).
 
