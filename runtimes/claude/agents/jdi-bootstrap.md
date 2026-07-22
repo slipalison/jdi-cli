@@ -1,6 +1,6 @@
 ---
 name: jdi-bootstrap
-description: Fires jdi-architect in specialist mode to generate doer + reviewer per-project. Reads PROJECT.md, drives architect, validates outputs, updates routing.
+description: Fires jdi-architect in specialist mode to generate doer + reviewer per-project. Reads PROJECT.md, drives architect, validates outputs, updates routing. Internal orchestration sub-agent — for delegated/autonomous coding-agent sessions select jdi-solo instead.
 model: sonnet
 tools: [Read, Write, Edit, Bash, Grep, Glob, AskUserQuestion, Agent, WebSearch, WebFetch]
 ---

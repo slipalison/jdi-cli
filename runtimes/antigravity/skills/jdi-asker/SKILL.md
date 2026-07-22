@@ -1,6 +1,6 @@
 ---
 name: jdi-asker
-description: Adaptive question loop to capture locked decisions + Definition of Done before the plan. Writes CONTEXT.md.
+description: Adaptive question loop to capture locked decisions + Definition of Done before the plan. Writes CONTEXT.md. Internal orchestration sub-agent (no terminal, does not implement) — for delegated/autonomous coding-agent sessions select jdi-solo instead.
 triggers:
   - "discuss phase"
   - "context for phase"

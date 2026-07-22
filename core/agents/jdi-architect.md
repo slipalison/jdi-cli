@@ -1,6 +1,6 @@
 ---
 name: jdi-architect
-description: Creates new JDI agents and skills. Create mode = generic agent/skill in core. Specialist mode = per-project doer/reviewer in .jdi/agents/.
+description: Creates new JDI agents and skills. Create mode = generic agent/skill in core. Specialist mode = per-project doer/reviewer in .jdi/agents/. Internal orchestration sub-agent — for delegated/autonomous coding-agent sessions select jdi-solo instead.
 runtime_intent:
   role: meta_creator
   reasoning: deep

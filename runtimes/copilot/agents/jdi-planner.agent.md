@@ -1,6 +1,6 @@
 ---
 name: jdi-planner
-description: Generates PLAN.md for the phase. Reads CONTEXT.md (from asker) + PROJECT.md, decomposes into tasks, maps files_modified, execution order. No fluff.
+description: Generates PLAN.md for the phase. Reads CONTEXT.md (from asker) + PROJECT.md, decomposes into tasks, maps files_modified, execution order. No fluff. Internal orchestration sub-agent (does not implement) — for delegated/autonomous coding-agent sessions select jdi-solo instead.
 tools: [read, write, grep, glob]
 ---
 
