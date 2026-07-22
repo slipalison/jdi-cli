@@ -444,6 +444,7 @@ async function cmdHelp() {
   console.log(`${c.bold}Helpers (plumbing usado pelos slash commands):${c.reset}`);
   console.log(`  ${c.cyan}resolve-phase${c.reset} ${c.gray}<slug|pos> [--json]${c.reset}  Resolve phase id -> slug/dir/position`);
   console.log(`  ${c.cyan}validate-slug${c.reset} ${c.gray}<slug> [--check-unique]${c.reset}  Valida shape de slug`);
+  console.log(`  ${c.cyan}validate-phase${c.reset} ${c.gray}<slug|pos> [--for-pr]${c.reset}  Valida artefatos da phase (gate mecanico p/ CI e agents)`);
   console.log(`  ${c.cyan}truncate${c.reset} ${c.gray}<file> <max>${c.reset}      Trunca arquivo preservando estrutura`);
   console.log(`  ${c.cyan}monitor${c.reset} ${c.gray}<file...>${c.reset}          Estima context budget dos arquivos`);
   console.log('');
@@ -546,6 +547,9 @@ async function main() {
       break;
     case 'validate-slug':
       cmdLibPassthrough('jdi-validate-slug', 'validate-slug <slug> [--check-unique]', process.argv.slice(3));
+      break;
+    case 'validate-phase':
+      cmdLibPassthrough('jdi-validate-phase', 'validate-phase <slug|position> [--for-pr] [--quiet]', process.argv.slice(3));
       break;
     case 'truncate':
       cmdLibPassthrough('jdi-truncate', 'truncate <file> <max_chars>', process.argv.slice(3));

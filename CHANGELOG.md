@@ -5,6 +5,72 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-07-22
+
+Delegated-agent hardening. Field report (Linear → GitHub Copilot coding agent
+→ `/jdi-issue`): the delegated session auto-selected the WRONG persona
+(`jdi-asker` — no terminal, "do not implement"), ran zero gates, and the
+harness silently dropped the one artifact it did create (`report_progress`
+only auto-commits tracked files). Root cause is structural: a delegated
+coding-agent session is a distinct runtime surface (single semantic-selected
+persona, headless, no sub-agents, CI silent until approved) that JDI did not
+model — and every JDI requirement was prose, which agents optimize away.
+Answer in three layers: a correct persona to select, a red light inside the
+session, a red light at the merge point.
+
+### Added
+- **`jdi-solo` — 7th core agent**: end-to-end solo executor for delegated and
+  headless sessions. Plays every JDI role inline in sequence (asker → planner
+  → doer → reviewer → shipper) following the INSTALLED command processes with
+  declared solo deviations: loop caps intact with AUTO-RESET, self-critic
+  replacing the spawned DoD critic (tighten-only), checkpoint commit per
+  artifact, explicit `git add` + index verification per `.jdi/` file
+  (harness-drop defense), budget-squeeze protocol (artifacts are never the
+  thing you skip), hard preflight (no terminal → STOP and report). Built for
+  all 5 runtimes; on Copilot it ships with no `tools:` restriction (full
+  toolset, terminal included).
+- **`validate-phase` CLI subcommand** (`bin/lib/jdi-validate-phase.{sh,ps1}`,
+  byte-mirrored): the derived-status contract made executable. Validates
+  presence AND minimal structure of CONTEXT/PLAN/SUMMARY/REVIEW/SHIPPED
+  (DoD with `Verify:`, tasks with Files modified/Acceptance/Dependencies/Test,
+  verdict line, ship marker). `--for-pr` = full-chain gate (all 5 + verdict
+  APPROVED/APPROVED_WITH_WARNINGS). One implementation consumed by CI, agents
+  and humans.
+- **Coding-agent workflows** shipped by `install copilot` (never overwriting
+  existing files): `copilot-setup-steps.yml` (Node 20 + activates
+  `.githooks/` inside the agent's environment; must live on the default
+  branch) and `jdi-artifacts-gate.yml` (PRs from `copilot/*` touching code
+  fail without the complete artifact chain — runs `validate-phase --for-pr`
+  per touched phase; code paths configurable via `gate.code_globs` in
+  `.jdi/config.json`, default `src/**`).
+- **doctor section 13 — coding-agent readiness**: jdi-solo present, both
+  workflows present, pre-commit gate active in `.githooks/`.
+- **README § "Delegated issues"**: setup, delegation from Linear/GitHub/CLI,
+  what a compliant PR looks like, troubleshooting (wrong persona, dropped
+  artifacts, firewall), headless-runner alternative.
+
+### Changed
+- **`bin/git-hooks/pre-commit` is no longer a no-op**: it is the JDI
+  phase-artifact gate. A commit touching code globs without an ACTIVE phase
+  (CONTEXT.md + PLAN.md staged/tracked, no SHIPPED.md) in the git INDEX fails
+  with the exact fix (including the `git add .jdi/phases/<slug>/` case when
+  artifacts exist only on disk). Still opt-in via `--githooks`; humans can
+  bypass with `JDI_GATE_DISABLE=1` or `--no-verify`; delegated agents must
+  not.
+- **Anti-selection disclaimers** on the six orchestration agents
+  (researcher, adopter, bootstrap, asker, planner, architect): their
+  descriptions now state they are internal sub-agents and point delegated
+  sessions to `jdi-solo` — descriptions are the selection surface for
+  Copilot's engine (and Junie/Antigravity semantic discovery).
+- **`/jdi-issue` runtime notes** split Copilot into interactive vs coding
+  agent (delegated), documenting the jdi-solo path, the two mechanical gates,
+  the "Approve and run workflows" requirement, and the headless-runner
+  fallback for maximum fidelity.
+- **PORTABILITY.md**: new "Copilot is THREE surfaces" section + capability
+  degradation matrix (no spawn → solo protocol; no terminal → hard stop; no
+  human → auto mode with caps; unreliable persistence → index-validated
+  artifacts; no CI visibility → in-session hook).
+
 ## [0.11.0] - 2026-07-11
 
 Team hotfix: user-reported (correctly) that ROADMAP.md changes on every new

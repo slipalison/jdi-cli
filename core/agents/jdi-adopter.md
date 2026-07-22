@@ -1,6 +1,6 @@
 ---
 name: jdi-adopter
-description: Adopt mode for brownfield projects. Scans existing repo (manifests, layout, git, docs), infers stack/code-design, confirms with user, generates PROJECT.md + ROADMAP.md with adopted=true flag. Replaces /jdi-new for projects with code already written.
+description: Adopt mode for brownfield projects. Scans existing repo (manifests, layout, git, docs), infers stack/code-design, confirms with user, generates PROJECT.md + ROADMAP.md with adopted=true flag. Replaces /jdi-new for projects with code already written. Internal orchestration sub-agent — for delegated/autonomous coding-agent sessions select jdi-solo instead.
 runtime_intent:
   role: discover_existing_project
   reasoning: deep

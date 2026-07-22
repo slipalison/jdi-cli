@@ -445,6 +445,38 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+section "13. Coding agent (issues delegadas — Copilot)"
+
+GH_DIR="$PROJECT_DIR/.github"
+if [[ -d "$GH_DIR/agents" || -d "$GH_DIR/prompts" ]]; then
+  if [[ -f "$GH_DIR/agents/jdi-solo.agent.md" ]]; then
+    ok "persona jdi-solo presente (.github/agents/jdi-solo.agent.md)"
+  else
+    warn "jdi-solo ausente — sessao delegada seleciona persona errada (rode: npx jdi-cli update ou install copilot)"
+  fi
+
+  if [[ -f "$GH_DIR/workflows/copilot-setup-steps.yml" ]]; then
+    ok "copilot-setup-steps.yml presente (hooks + node na sessao do agente)"
+  else
+    note "copilot-setup-steps.yml ausente (install copilot copia; precisa estar na default branch)"
+  fi
+
+  if [[ -f "$GH_DIR/workflows/jdi-artifacts-gate.yml" ]]; then
+    ok "jdi-artifacts-gate.yml presente (gate de PR copilot/*)"
+  else
+    note "jdi-artifacts-gate.yml ausente — PR de agente sem artefatos passa despercebido"
+  fi
+
+  if [[ -f "$PROJECT_DIR/.githooks/pre-commit" ]] && grep -q "JDI GATE" "$PROJECT_DIR/.githooks/pre-commit" 2>/dev/null; then
+    ok "pre-commit com gate de artefatos em .githooks/"
+  else
+    note "gate pre-commit ausente em .githooks/ (install copilot --githooks)"
+  fi
+else
+  note "runtime copilot nao instalado no projeto — secao pulada"
+fi
+
+# ---------------------------------------------------------------------------
 section "Resumo"
 
 if [[ "$FAILS" -gt 0 ]]; then

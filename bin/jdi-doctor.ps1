@@ -413,6 +413,39 @@ if (Test-Path $cavemanUser) {
 }
 
 # ---------------------------------------------------------------------------
+Write-Section '13. Coding agent (issues delegadas — Copilot)'
+
+$ghDir = Join-Path $ProjectDir '.github'
+if ((Test-Path (Join-Path $ghDir 'agents')) -or (Test-Path (Join-Path $ghDir 'prompts'))) {
+  if (Test-Path (Join-Path $ghDir 'agents\jdi-solo.agent.md')) {
+    Write-OK 'persona jdi-solo presente (.github/agents/jdi-solo.agent.md)'
+  } else {
+    Write-Warn 'jdi-solo ausente — sessao delegada seleciona persona errada (rode: npx jdi-cli update ou install copilot)'
+  }
+
+  if (Test-Path (Join-Path $ghDir 'workflows\copilot-setup-steps.yml')) {
+    Write-OK 'copilot-setup-steps.yml presente (hooks + node na sessao do agente)'
+  } else {
+    Write-Note 'copilot-setup-steps.yml ausente (install copilot copia; precisa estar na default branch)'
+  }
+
+  if (Test-Path (Join-Path $ghDir 'workflows\jdi-artifacts-gate.yml')) {
+    Write-OK 'jdi-artifacts-gate.yml presente (gate de PR copilot/*)'
+  } else {
+    Write-Note 'jdi-artifacts-gate.yml ausente — PR de agente sem artefatos passa despercebido'
+  }
+
+  $hookPath = Join-Path $ProjectDir '.githooks\pre-commit'
+  if ((Test-Path $hookPath) -and (Select-String -Path $hookPath -Pattern 'JDI GATE' -Quiet)) {
+    Write-OK 'pre-commit com gate de artefatos em .githooks/'
+  } else {
+    Write-Note 'gate pre-commit ausente em .githooks/ (install copilot --githooks)'
+  }
+} else {
+  Write-Note 'runtime copilot nao instalado no projeto — secao pulada'
+}
+
+# ---------------------------------------------------------------------------
 Write-Section 'Resumo'
 
 if ($script:Fails -gt 0) {

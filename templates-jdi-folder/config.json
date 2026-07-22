@@ -17,5 +17,8 @@
     "mode": "standard",
     "source": "default"
   },
+  "gate": {
+    "code_globs": ["src/**"]
+  },
   "coverage_min": 80
 }

@@ -1,21 +1,103 @@
 #!/usr/bin/env bash
-# JDI pre-commit hook — no-op por padrao.
+# JDI pre-commit — phase-artifact gate.
 #
-# O doer specialist eh responsavel por gerar/atualizar docs durante a
-# execucao da phase. Este hook fica aqui pra compatibilidade e como
-# ponto de extensao.
+# Blocks a commit that touches production code while no ACTIVE JDI phase
+# (CONTEXT.md + PLAN.md in the git INDEX, no SHIPPED.md) exists. This is the
+# shortest feedback loop for autonomous/delegated agents (GitHub Copilot
+# coding agent & friends): the red happens inside their own session, with
+# the exact fix printed — independent of CI approval clicks.
 #
-# Se voce quiser adicionar verificacoes pre-commit (lint rapido, secrets check
-# basico, etc), edite este file ou desative com:
-#   git config --unset core.hooksPath
+# The gate validates the INDEX, not the worktree: delegated harnesses are
+# known to silently drop untracked files from their auto-commits, so an
+# artifact that exists on disk but is not staged does not count.
+#
+# Code paths default to `src/**`; override in .jdi/config.json:
+#   { "gate": { "code_globs": ["src/**", "app/**"] } }
+#
+# Escape hatches (humans): JDI_GATE_DISABLE=1 git commit ...   or --no-verify.
+# Delegated agents must NEVER use either — the reviewer covers them anyway.
 
 set -euo pipefail
 
-# nada staged? sai
+[ "${JDI_GATE_DISABLE:-0}" = "1" ] && exit 0
+
+# nothing staged? out
 if git diff --cached --quiet; then
   exit 0
 fi
 
-# Hook sem acao por padrao.
-# Reviewer specialist (`/jdi-verify`) cobre validacao de qualidade.
-exit 0
+# not a JDI project? out
+[ -d .jdi ] || exit 0
+
+# --- code globs (config or default) ------------------------------------------
+GLOBS=""
+if [ -f .jdi/config.json ]; then
+  GLOBS=$(tr -d '\n' < .jdi/config.json \
+    | sed -n 's/.*"code_globs"[[:space:]]*:[[:space:]]*\[\([^]]*\)\].*/\1/p' \
+    | tr ',' '\n' | sed 's/[" ]//g' | tr '\n' ' ')
+fi
+[ -n "${GLOBS// /}" ] || GLOBS="src/**"
+
+# --- does this commit touch code? --------------------------------------------
+CODE_TOUCHED=""
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  for g in $GLOBS; do
+    pat=$(printf '%s' "$g" | sed 's/\*\*/\*/g')   # case(1): * already crosses /
+    # shellcheck disable=SC2254
+    case "$f" in
+      $pat) CODE_TOUCHED="$f"; break 2 ;;
+    esac
+  done
+done <<EOF
+$(git diff --cached --name-only)
+EOF
+
+[ -n "$CODE_TOUCHED" ] || exit 0
+
+# --- active phase in the INDEX? ----------------------------------------------
+# active = CONTEXT.md AND PLAN.md staged/tracked, and no SHIPPED.md staged/tracked
+INDEXED=$(git ls-files --cached -- '.jdi/phases/*/CONTEXT.md' '.jdi/phases/*/PLAN.md' '.jdi/phases/*/SHIPPED.md')
+
+slugs_with() {
+  printf '%s\n' "$INDEXED" | sed -n "s#^\.jdi/phases/\([^/]*\)/$1\$#\1#p" | sort -u
+}
+
+ACTIVE=""
+for slug in $(slugs_with 'CONTEXT\.md'); do
+  echo "$INDEXED" | grep -qx ".jdi/phases/$slug/PLAN.md"    || continue
+  echo "$INDEXED" | grep -qx ".jdi/phases/$slug/SHIPPED.md" && continue
+  ACTIVE="$slug"
+  break
+done
+
+[ -n "$ACTIVE" ] && exit 0
+
+# --- red: explain exactly what is missing ------------------------------------
+echo "" >&2
+echo "JDI GATE: commit touches code ($CODE_TOUCHED) but no active phase artifacts are in the git index." >&2
+echo "" >&2
+
+# artifacts on disk but not staged? (the harness-drop case) -> tell them to add.
+# SHIPPED.md on disk is irrelevant here: what matters is that a plan exists in
+# the worktree and never reached the index.
+UNSTAGED=""
+for d in .jdi/phases/*/; do
+  [ -d "$d" ] || continue
+  slug=$(basename "$d")
+  [ -f "${d}CONTEXT.md" ] && [ -f "${d}PLAN.md" ] || continue
+  echo "$INDEXED" | grep -qx ".jdi/phases/$slug/PLAN.md" || UNSTAGED="$slug"
+done
+
+if [ -n "$UNSTAGED" ]; then
+  echo "  Phase '$UNSTAGED' has artifacts on disk that are NOT staged. Fix:" >&2
+  echo "    git add .jdi/phases/$UNSTAGED/" >&2
+else
+  echo "  Artifacts before code — create and stage them first:" >&2
+  echo "    /jdi-discuss <slug>   -> CONTEXT.md" >&2
+  echo "    /jdi-plan <slug>      -> PLAN.md" >&2
+  echo "    git add .jdi/phases/<slug>/" >&2
+fi
+echo "" >&2
+echo "  (humans only: JDI_GATE_DISABLE=1 to bypass; delegated agents must comply)" >&2
+exit 1

@@ -1,0 +1,45 @@
+# JDI — environment setup for the GitHub Copilot coding agent.
+#
+# GitHub runs the single `copilot-setup-steps` job BEFORE the coding agent
+# starts working on a delegated issue. JDI uses it to guarantee the two
+# things its mechanical gates depend on inside the agent session:
+#   1. Node available -> `npx -y jdi-cli ...` helpers (resolve/validate) work
+#   2. .githooks/ active -> the pre-commit phase-artifact gate fires on the
+#      agent's own commits (red inside the session, with the fix printed)
+#
+# Must live on the DEFAULT branch to take effect. Docs:
+# https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/customize-the-agent-environment
+name: "Copilot Setup Steps"
+
+on:
+  workflow_dispatch:
+  push:
+    paths: [".github/workflows/copilot-setup-steps.yml"]
+  pull_request:
+    paths: [".github/workflows/copilot-setup-steps.yml"]
+
+jobs:
+  # The job MUST be named `copilot-setup-steps` or it will not be picked up.
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Enable JDI git hooks (phase-artifact gate)
+        run: |
+          if [ -d .githooks ]; then
+            git config core.hooksPath .githooks
+            chmod +x .githooks/* 2>/dev/null || true
+            echo "JDI hooks active (core.hooksPath=.githooks)"
+          else
+            echo "no .githooks/ in repo — install with: npx -y jdi-cli install copilot --githooks"
+          fi
+
+      - name: Warm jdi-cli (fail fast if the firewall blocks npm)
+        run: npx -y jdi-cli --version

@@ -1,6 +1,6 @@
 ---
 name: jdi-researcher
-description: Upfront pre-roadmap research. Reads user idea, asks key questions, captures project-wide Definition of Done baseline, researches stack/domain, generates initial PROJECT.md + ROADMAP.md. Single agent instead of multiple parallel researchers to save tokens.
+description: Upfront pre-roadmap research. Reads user idea, asks key questions, captures project-wide Definition of Done baseline, researches stack/domain, generates initial PROJECT.md + ROADMAP.md. Single agent instead of multiple parallel researchers to save tokens. Internal orchestration sub-agent — for delegated/autonomous coding-agent sessions select jdi-solo instead.
 runtime_intent:
   role: discover_project
   reasoning: deep

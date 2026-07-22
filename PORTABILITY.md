@@ -29,14 +29,50 @@ Refs:
 - [OpenCode skills](https://opencode.ai/docs/skills/)
 - [Junie CLI docs](https://junie.jetbrains.com/docs/junie-cli.html) · [subagents](https://junie.jetbrains.com/docs/junie-cli-subagents.html) · [skills](https://junie.jetbrains.com/docs/agent-skills.html)
 
+## Copilot is THREE surfaces, not one
+
+"GitHub Copilot" hides three execution contracts. JDI targets each one explicitly:
+
+| Surface | Who orchestrates | Human? | Sub-agents? | JDI entry point |
+|---|---|---|---|---|
+| VS Code chat | human types `/jdi-*` | yes | via `@` (manual) | `.github/prompts/` |
+| Copilot CLI | human types commands | yes | no | `.github/skills/` (semantic) |
+| **Coding agent** (issue delegated on github.com / Linear / etc.) | ONE persona auto-selected by the engine from `.github/agents/` | **no** | **no** | `.github/agents/jdi-solo.agent.md` |
+
+The delegated surface is the dangerous one: no human watching, semantic persona
+selection, a harness that auto-commits (and silently drops untracked files), CI
+that stays silent until someone clicks "Approve and run workflows". JDI's answer
+has three layers:
+
+1. **A correct attractor** — `jdi-solo`, the 7th core agent: end-to-end solo
+   executor (terminal required, artifacts before code, gates executed, explicit
+   `git add` per artifact). All other jdi-* agents carry an anti-selection
+   disclaimer in their description.
+2. **In-session enforcement** — `.githooks/pre-commit` blocks code commits
+   without staged phase artifacts; `copilot-setup-steps.yml` activates it
+   inside the agent's environment.
+3. **Merge-point enforcement** — `jdi-artifacts-gate.yml` fails any `copilot/*`
+   PR that touches code without the full artifact chain
+   (`npx -y jdi-cli validate-phase <slug> --for-pr`).
+
+### Capability degradation matrix (any runtime)
+
+| Missing capability | Defined degradation |
+|---|---|
+| Sub-agent spawn | solo protocol: one persona plays every role IN SEQUENCE (jdi-solo) — never skip a role |
+| Terminal | HARD STOP: report "gates cannot run", produce no code |
+| Human (delegated/headless) | /jdi-issue semantics: `mode=auto`, `dod=auto_only`, AUTO-RESET at loop gates, caps intact |
+| Reliable file persistence (harness auto-commit) | explicit `git add` + `git ls-files --error-unmatch` after every artifact write; gates validate the INDEX/tree, never the worktree |
+| CI visibility (bot PRs) | pre-commit hook = in-session red; PR body warns about "Approve and run workflows" |
+
 ## Key differences
 
 ### Hooks
 **Limitation:** only Claude Code supports native runtime hooks (pre-commit, post-commit, etc).
 
 **Multi-runtime workaround:**
-- `pre-commit` and `post-commit` hooks shipped in `bin/git-hooks/` are **no-op by default** and are only copied to the project's `.githooks/` when the user opts in via `jdi install <runtime> --githooks`
-- The reviewer (`/jdi-verify`) covers quality validation — no need for a pre-commit doc-bot
+- Hooks ship in `bin/git-hooks/` and are only copied to the project's `.githooks/` when the user opts in via `jdi install <runtime> --githooks`. Since the delegated-agent work: `pre-commit` is the **phase-artifact gate** (blocks code commits without staged CONTEXT.md/PLAN.md of an active phase — the in-session red for coding agents; humans can bypass with `JDI_GATE_DISABLE=1`); `post-commit` stays no-op.
+- The reviewer (`/jdi-verify`) covers quality validation — the hook covers protocol presence, not quality
 - Users can customize `.githooks/` for:
   - Quick pre-commit lint
   - Post-commit Slack notification
@@ -132,13 +168,14 @@ v1 → v2 migration: `/jdi-migrate-phases` command (non-destructive). Per runtim
 ```
 jdi/
 +-- core/                          source of truth
-|   +-- agents/                    6 agents
+|   +-- agents/                    7 agents
 |   |   +-- jdi-researcher.md     Opus   - upfront discovery (greenfield)
 |   |   +-- jdi-adopter.md        Opus   - brownfield adoption (detect + confirm)
 |   |   +-- jdi-bootstrap.md      Sonnet - fires architect specialist mode
 |   |   +-- jdi-asker.md          Sonnet - question loop (decisions + DoD)
 |   |   +-- jdi-planner.md        Opus   - decompose phase
 |   |   +-- jdi-architect.md      Opus   - meta (create + specialist modes)
+|   |   +-- jdi-solo.md           Opus   - end-to-end solo executor (delegated/headless sessions)
 |   +-- commands/                  15 commands
 |   |   +-- jdi-new.md
 |   |   +-- jdi-adopt.md
@@ -465,6 +502,7 @@ The convention is **declarative**: the frontmatter declares what **does not chan
 | Copilot/Antigravity without runtime hooks | git hooks in `.githooks/` (opt-in via `--githooks`) |
 | Antigravity without tool restriction | convention via prose in SKILL.md |
 | Copilot prompt files invoked manually, not auto | user has to type `/jdi-discuss` — no auto-advance |
+| Copilot coding agent (delegated issues): single semantic-selected persona, no sub-agents, harness may drop untracked files | `jdi-solo` persona + anti-selection disclaimers + pre-commit artifact gate + `jdi-artifacts-gate.yml` CI check (see "Copilot is THREE surfaces") |
 | OpenCode verbose model id | `runtime_overrides.opencode.model` declares it explicitly |
 | OpenCode per-verb permission (edit/bash/write) | maps 1:1 — no granularity loss |
 | Antigravity trigger discovery -> false positives | specific triggers with the `jdi-` prefix |
