@@ -16,7 +16,7 @@
 
 ```
 core/                    <- shipped, generators (lives in the JDI repo)
-  agents/                <- 6 core agents
+  agents/                <- 7 core agents
     jdi-researcher.md    <- greenfield discovery (/jdi-new)
     jdi-adopter.md       <- brownfield discovery (/jdi-adopt)
     jdi-bootstrap.md

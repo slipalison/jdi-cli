@@ -1,6 +1,6 @@
 # JDI — Agents
 
-6 core agents (shipped) + 2 per-project specialists per stack (generated).
+7 core agents (shipped) + 2 per-project specialists per stack (generated).
 
 ## Core (in `core/agents/`)
 
@@ -170,6 +170,25 @@
 
 **Permissions:** Read, Write, Edit, Bash, Grep, Glob, AskUserQuestion, WebSearch/WebFetch.
 
+### `jdi-solo` (Opus)
+
+**Role:** End-to-end SOLO executor for **delegated and headless sessions** — GitHub Copilot coding agent working a delegated issue, headless CI runners, any single-agent runtime. Plays every JDI role inline, in sequence (asker → planner → doer → reviewer → shipper), following the INSTALLED command processes.
+
+**Selected by:** the coding agent's engine when an issue is delegated (its description is the attractor; the other six agents carry anti-selection disclaimers), or explicitly via the custom-agent dropdown / `/agent jdi-solo`.
+
+**Solo deviations (declared in the agent body):**
+- Every `Agent()` dispatch runs inline — doer/reviewer steps are executed THROUGH the per-project specialist files (`.jdi/agents/jdi-doer-{slug}.md` / `jdi-reviewer-{slug}.md`), re-read at every role switch (they carry the project's how-to-develop-and-test context)
+- `/jdi-loop` caps intact with AUTO-RESET at human gates (per `/jdi-issue`); killed loop = full stop, never shipped
+- DoD critic (verify Step 4.5) becomes a tighten-only self-critic pass
+- Checkpoint commit per artifact + explicit `git add` + `git ls-files --error-unmatch` verification (delegated harnesses drop untracked files from auto-commits)
+- Budget squeeze: never skip artifacts — reduce code scope, mark tasks blocked, report honestly
+
+**Hard preflight:** terminal + `.jdi/` + specialists + `npx jdi-cli` reachable; no terminal → STOP and report (never produce ungated code).
+
+**Definition of complete:** `npx -y jdi-cli validate-phase <slug> --for-pr` exits 0 — before opening the PR. Never merges.
+
+**Permissions:** full toolset on Copilot (no `tools:` restriction — terminal required); Claude: Read, Write, Edit, Bash, Grep, Glob (no Agent — solo by definition).
+
 ## Per-project (in `.jdi/agents/`)
 
 ### `jdi-doer-{slug}` (Sonnet)
@@ -241,7 +260,7 @@
 ## Visual summary
 
 ```
-core/agents/                  <- 6 agents shipped
+core/agents/                  <- 7 agents shipped
   jdi-researcher    Opus     pre-roadmap discovery (greenfield)
   jdi-adopter       Opus     brownfield adoption (detect + confirm)
   jdi-bootstrap     Sonnet   wrapper -> spawn architect specialist mode

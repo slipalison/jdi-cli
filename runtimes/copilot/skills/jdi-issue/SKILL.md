@@ -183,8 +183,13 @@ PR body additions in autonomous mode (on top of ship's standard body):
 **Claude Code:**
 - Reads each target command from `.claude/commands/` and executes its process inline. Provider MCPs (Linear/Jira/Azure DevOps/Trello) are discovered among available tools when connected.
 
-**Copilot:**
-- Same via `.github/prompts/`; sub-agent steps degrade to sequential; the forced critic is skipped if sub-agents are unavailable (deterministic gates still run).
+**Copilot (interactive — VS Code chat / Copilot CLI):**
+- Same via `.github/prompts/` (VS Code) or `.github/skills/` (CLI); sub-agent steps degrade to sequential; the forced critic is skipped if sub-agents are unavailable (deterministic gates still run).
+
+**Copilot (coding agent — issue DELEGATED via GitHub/Linear):**
+- A delegated session is a different surface: single auto-selected persona, headless, no sub-agents. The session MUST run as the `jdi-solo` agent (`.github/agents/jdi-solo.agent.md`), which executes this whole chain inline — artifacts before code, gates executed, explicit `git add` per artifact, `validate-phase --for-pr` green before the PR.
+- Mechanical enforcement (independent of persona choice): `.githooks/pre-commit` (enabled in-session by `copilot-setup-steps.yml`) blocks code commits without staged phase artifacts; `.github/workflows/jdi-artifacts-gate.yml` turns a non-compliant `copilot/*` PR red. Agent PRs need one human click on "Approve and run workflows" for CI to speak.
+- Fallback for maximum fidelity (real sub-agents + forced critic): run this command headless in a runner instead — e.g. a workflow that calls Claude Code/Copilot CLI with `/jdi-issue <url>` on issue-labeled events.
 
 **OpenCode/Antigravity:**
 - Same pattern via `.opencode/commands/` or the skill folder.
