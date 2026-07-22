@@ -1,0 +1,87 @@
+# JDI — artifact gate for pull requests opened by coding agents.
+#
+# The safety net behind the pre-commit hook: a PR from a delegated agent
+# (branch `copilot/*`) that touches production code MUST carry the complete
+# JDI phase chain — CONTEXT, PLAN, SUMMARY, REVIEW (verdict not BLOCKED /
+# not PENDING_MANUAL) and SHIPPED — validated by `jdi-cli validate-phase`.
+# Prose is optimized away by agents; a red check is not.
+#
+# Human branches are exempt by design (interactive JDI has its own gates).
+# Code paths default to `src/**`; override in .jdi/config.json:
+#   { "gate": { "code_globs": ["src/**", "app/**"] } }
+#
+# NOTE for PRs from agents: workflows only run after a maintainer clicks
+# "Approve and run workflows" on the PR — without that click no gate runs.
+name: JDI artifacts gate
+
+on:
+  pull_request:
+
+jobs:
+  jdi-artifacts-gate:
+    # Gate only delegated-agent PRs. Extend the condition if your agents
+    # push to other branch prefixes.
+    if: startsWith(github.head_ref, 'copilot/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Validate JDI phase artifacts
+        run: |
+          set -euo pipefail
+
+          # On pull_request the checkout is the merge commit: parent 1 = base.
+          CHANGED=$(git diff --name-only HEAD^1 HEAD)
+          echo "--- files in PR ---"; echo "$CHANGED"; echo "-------------------"
+
+          # code globs from .jdi/config.json (gate.code_globs) or default src/**
+          GLOBS=""
+          if [ -f .jdi/config.json ]; then
+            GLOBS=$(tr -d '\n' < .jdi/config.json \
+              | sed -n 's/.*"code_globs"[[:space:]]*:[[:space:]]*\[\([^]]*\)\].*/\1/p' \
+              | tr ',' '\n' | sed 's/[" ]//g' | tr '\n' ' ')
+          fi
+          [ -n "${GLOBS// /}" ] || GLOBS="src/**"
+
+          # glob -> ERE ( ** crosses /, * does not )
+          glob_to_re() {
+            printf '%s' "$1" | sed -e 's/[.[\%^$+()]/\\&/g' \
+              -e 's/\*\*/\x01/g' -e 's/\*/[^\/]*/g' -e 's/\x01/.*/g' \
+              -e 's/^/^/' -e 's/$/$/'
+          }
+
+          CODE_TOUCHED=""
+          for g in $GLOBS; do
+            RE=$(glob_to_re "$g")
+            HIT=$(echo "$CHANGED" | grep -E "$RE" | head -1 || true)
+            [ -n "$HIT" ] && { CODE_TOUCHED="$HIT"; break; }
+          done
+
+          SLUGS=$(echo "$CHANGED" | sed -n 's#^\.jdi/phases/\([^/]*\)/.*#\1#p' | sort -u)
+
+          if [ -z "$CODE_TOUCHED" ] && [ -z "$SLUGS" ]; then
+            echo "gate: no code and no phase artifacts touched — nothing to validate."
+            exit 0
+          fi
+
+          if [ -n "$CODE_TOUCHED" ] && [ -z "$SLUGS" ]; then
+            echo "::error::PR touches code ($CODE_TOUCHED) but contains NO .jdi/phases/<slug>/ artifacts."
+            echo "::error::The JDI flow is mandatory for delegated issues: CONTEXT -> PLAN -> code -> REVIEW -> SUMMARY -> SHIPPED."
+            echo "::error::Create the artifacts (see any existing .jdi/phases/ folder) and commit them in this PR."
+            exit 1
+          fi
+
+          FAIL=0
+          for slug in $SLUGS; do
+            echo ""
+            echo "=== validate-phase $slug (--for-pr) ==="
+            npx -y jdi-cli validate-phase "$slug" --for-pr || FAIL=1
+          done
+
+          exit $FAIL

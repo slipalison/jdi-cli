@@ -62,9 +62,27 @@ install_copilot() {
   # VS Code agent mode e o coding agent do github.com
   cp -R "$ROOT/runtimes/copilot/skills/." "$dest/skills/"
   cp "$ROOT/runtimes/copilot/copilot-instructions.md" "$dest/copilot-instructions.md"
+
+  # Coding agent (issues delegadas): setup do ambiente + gate de artefatos.
+  # Nunca sobrescreve workflows existentes do consumidor.
+  if [[ -d "$ROOT/runtimes/copilot/workflows" ]]; then
+    mkdir -p "$dest/workflows"
+    for wf in "$ROOT/runtimes/copilot/workflows/"*.yml; do
+      wf_name=$(basename "$wf")
+      if [[ -f "$dest/workflows/$wf_name" ]]; then
+        echo "  -> workflows/$wf_name ja existe — preservado (compare com runtimes/copilot/workflows/)"
+      else
+        cp "$wf" "$dest/workflows/$wf_name"
+        echo "  -> workflows/$wf_name instalado"
+      fi
+    done
+  fi
+
   echo "Copilot instalado em: $dest"
   echo "  -> Copilot e sempre project-scoped via .github/"
   echo "  -> CLI: comandos JDI aparecem como skills ('/skills reload' na sessao; digite '/jdi-status' na mensagem)"
+  echo "  -> coding agent (issues delegadas): persona jdi-solo + workflows copilot-setup-steps/jdi-artifacts-gate"
+  echo "     use --githooks pra ativar o gate pre-commit dentro da sessao do agente"
 }
 
 install_antigravity() {

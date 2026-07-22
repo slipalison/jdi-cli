@@ -85,9 +85,27 @@ function Install-Copilot {
   if (Test-Path "$Root\runtimes\copilot\copilot-instructions.md") {
     Copy-Item -Path "$Root\runtimes\copilot\copilot-instructions.md" -Destination "$dest\copilot-instructions.md" -Force
   }
+
+  # Coding agent (issues delegadas): setup do ambiente + gate de artefatos.
+  # Nunca sobrescreve workflows existentes do consumidor.
+  if (Test-Path "$Root\runtimes\copilot\workflows") {
+    New-Item -ItemType Directory -Force -Path "$dest\workflows" | Out-Null
+    foreach ($wf in (Get-ChildItem "$Root\runtimes\copilot\workflows" -Filter '*.yml')) {
+      $target = Join-Path "$dest\workflows" $wf.Name
+      if (Test-Path $target) {
+        Write-Output "  -> workflows/$($wf.Name) ja existe — preservado (compare com runtimes/copilot/workflows/)"
+      } else {
+        Copy-Item -Path $wf.FullName -Destination $target
+        Write-Output "  -> workflows/$($wf.Name) instalado"
+      }
+    }
+  }
+
   Write-Output "Copilot instalado em: $dest"
   Write-Output "  -> Copilot e sempre project-scoped via .github/"
   Write-Output "  -> CLI: comandos JDI aparecem como skills ('/skills reload' na sessao; digite '/jdi-status' na mensagem)"
+  Write-Output "  -> coding agent (issues delegadas): persona jdi-solo + workflows copilot-setup-steps/jdi-artifacts-gate"
+  Write-Output "     use --githooks pra ativar o gate pre-commit dentro da sessao do agente"
 }
 
 function Install-Antigravity {
