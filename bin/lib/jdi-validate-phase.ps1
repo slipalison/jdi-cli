@@ -39,8 +39,15 @@ function Say([string]$msg) { if (-not $Quiet) { Write-Output $msg } }
 # --- Resolve phase via sibling resolver (KEY='value' lines) ---
 $resolver = Join-Path $PSScriptRoot 'jdi-resolve-phase.ps1'
 $resolved = & $resolver $PhaseId 2>$null
-if ($LASTEXITCODE -ne 0 -or -not $resolved) {
-  Say "[fail] phase '$PhaseId' not found in ROADMAP.md"
+$resolveRc = $LASTEXITCODE
+if ($resolveRc -ne 0 -or -not $resolved) {
+  # Mirror the .sh: rc 2 = resolver's own "not found in ROADMAP"; anything
+  # else = it could not run (missing .jdi/ROADMAP.md, bad input, ...).
+  if ($resolveRc -eq 2) {
+    Say "[fail] phase '$PhaseId' not found in ROADMAP.md"
+  } else {
+    Say "[fail] could not run the phase resolver (rc=$resolveRc) — is this a JDI project with .jdi/ROADMAP.md?"
+  }
   exit 1
 }
 

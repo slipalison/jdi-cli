@@ -467,8 +467,14 @@ if [[ -d "$GH_DIR/agents" || -d "$GH_DIR/prompts" ]]; then
     note "jdi-artifacts-gate.yml ausente — PR de agente sem artefatos passa despercebido"
   fi
 
-  if [[ -f "$PROJECT_DIR/.githooks/pre-commit" ]] && grep -q "JDI GATE" "$PROJECT_DIR/.githooks/pre-commit" 2>/dev/null; then
-    ok "pre-commit com gate de artefatos em .githooks/"
+  HOOK="$PROJECT_DIR/.githooks/pre-commit"
+  if [[ -f "$HOOK" ]] && grep -q "JDI GATE" "$HOOK" 2>/dev/null; then
+    if [[ -x "$HOOK" ]]; then
+      ok "pre-commit com gate de artefatos em .githooks/ (executavel)"
+    else
+      # git ignora hook nao-executavel SILENCIOSAMENTE — o gate fica off sem erro
+      warn "pre-commit em .githooks/ NAO e executavel — git o ignora em silencio. Fix: chmod +x .githooks/*"
+    fi
   else
     note "gate pre-commit ausente em .githooks/ (install copilot --githooks)"
   fi
