@@ -39,15 +39,24 @@ fi
 [ -n "${GLOBS// /}" ] || GLOBS="src/**"
 
 # --- does this commit touch code? --------------------------------------------
+# Glob semantics MUST match runtimes/copilot/workflows/jdi-artifacts-gate.yml
+# byte-for-byte, or the in-session gate and the merge-point gate could
+# disagree about whether a change "touches code" (the two-red-lights design
+# depends on them agreeing). Shared rule: `**` crosses `/` (-> .*), a single
+# `*` does not (-> [^/]*). Keep this function identical in both files.
+glob_to_re() {
+  printf '%s' "$1" | sed -e 's/[.[\%^$+()]/\\&/g' \
+    -e 's/\*\*/\x01/g' -e 's/\*/[^\/]*/g' -e 's/\x01/.*/g' \
+    -e 's/^/^/' -e 's/$/$/'
+}
+
 CODE_TOUCHED=""
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   for g in $GLOBS; do
-    pat=$(printf '%s' "$g" | sed 's/\*\*/\*/g')   # case(1): * already crosses /
-    # shellcheck disable=SC2254
-    case "$f" in
-      $pat) CODE_TOUCHED="$f"; break 2 ;;
-    esac
+    if printf '%s' "$f" | grep -Eq "$(glob_to_re "$g")"; then
+      CODE_TOUCHED="$f"; break 2
+    fi
   done
 done <<EOF
 $(git diff --cached --name-only)

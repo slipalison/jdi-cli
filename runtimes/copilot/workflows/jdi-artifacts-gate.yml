@@ -27,6 +27,13 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          # pull_request checks out the test-merge commit; fetch-depth 2 brings
+          # its two parents' trees so `git diff HEAD^1 HEAD` resolves (default
+          # depth 1 leaves the parents as shallow grafts -> the diff fails on
+          # the very copilot/* PRs this gate is meant to pass). 2 is the
+          # minimal correct depth for a first-parent diff of a merge commit.
+          fetch-depth: 2
 
       - uses: actions/setup-node@v4
         with:

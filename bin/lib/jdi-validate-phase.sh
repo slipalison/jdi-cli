@@ -33,10 +33,27 @@ if [[ -z "$PHASE_ID" ]]; then
   exit 1
 fi
 
-RESOLVED="$("$SCRIPT_DIR/jdi-resolve-phase.sh" "$PHASE_ID")" || {
-  echo "[fail] phase '$PHASE_ID' not found in ROADMAP.md"
+# Invoke via `bash <path>` (not direct exec) so this works regardless of the
+# resolver's file mode — consistent with how bin/jdi.js spawns every script,
+# and immune to a lost exec bit in the published tarball.
+# `set +e` around the call: under `set -e` an assignment whose command
+# substitution fails aborts the script immediately, before we can inspect the
+# resolver's exit code.
+set +e
+RESOLVED="$(bash "$SCRIPT_DIR/jdi-resolve-phase.sh" "$PHASE_ID" 2>/dev/null)"
+RESOLVE_RC=$?
+set -e
+if [ "$RESOLVE_RC" -ne 0 ] || [ -z "$RESOLVED" ]; then
+  # Distinguish "resolver could not run" from "phase genuinely not found":
+  # rc 2 is the resolver's own "not found in ROADMAP" exit; anything else
+  # (missing file, non-exec, .jdi absent) is an execution failure.
+  if [ "$RESOLVE_RC" -eq 2 ]; then
+    echo "[fail] phase '$PHASE_ID' not found in ROADMAP.md"
+  else
+    echo "[fail] could not run the phase resolver (rc=$RESOLVE_RC) — is this a JDI project with .jdi/ROADMAP.md?"
+  fi
   exit 1
-}
+fi
 eval "$RESOLVED"
 SLUG="$JDI_PHASE_SLUG"
 DIR="$JDI_PHASE_DIR"

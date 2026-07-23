@@ -89,6 +89,23 @@ jobs:
           test -d runtimes/opencode/agents
           echo "runtimes/ presentes — usando o que esta commitado"
 
+      - name: Verify shell scripts carry the exec bit
+        shell: bash
+        run: |
+          # 0.12.0 shipped every .sh at mode 100644 -> validate-phase died with
+          # "Permission denied" and installed git hooks were silently ignored.
+          # A published tarball preserves git file modes, so guard the release:
+          # any tracked .sh or git-hook at 100644 fails the publish.
+          set -euo pipefail
+          BAD=$(git ls-files -s -- '*.sh' 'bin/git-hooks/pre-commit' 'bin/git-hooks/post-commit' \
+                | awk '$1 == "100644" { print $4 }')
+          if [ -n "$BAD" ]; then
+            echo "::error::These scripts lack the exec bit (100644). Fix: git update-index --chmod=+x <file>"
+            echo "$BAD"
+            exit 1
+          fi
+          echo "All shell scripts + git hooks are executable (100755)."
+
       - name: Verify package contents (dry-run)
         shell: bash
         run: npm publish --dry-run

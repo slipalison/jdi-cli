@@ -5,6 +5,51 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.1] - 2026-07-23
+
+Packaging hotfix for the 0.12.0 delegated-agent surface. First real adopter
+(`blip-ai/blip-solution-dashboard` PR #9) hit three defects that made the
+headline feature broken on any clean Linux environment. All three verified
+against the code before fixing (the reporting issue was AI-authored — each
+claim was reproduced, not trusted).
+
+### Fixed
+- **Every shell script shipped without the exec bit** (all 14 `.sh` + both git
+  hooks were git mode `100644`). npm preserves git file modes, so the 0.12.0
+  tarball was non-executable. Two load-bearing surfaces bypass the
+  `bash <script>` wrapper in `bin/jdi.js` and broke: (1) `validate-phase`, the
+  only script-to-script **direct exec**, died with `Permission denied` — then
+  the `||` swallowed it and misreported "phase not found in ROADMAP.md"; (2)
+  installed git hooks in a fresh consumer clone were **silently ignored** (git
+  skips non-executable hooks with only an invisible hint), so the in-session
+  artifact gate never fired. Fixed at the root with `git update-index
+  --chmod=+x` on all scripts + hooks (the publish runs on Linux CI, which
+  materializes the bit into the tarball), plus defense in depth: `validate-phase`
+  now invokes the resolver via `bash <path>` (mode-independent, consistent with
+  `bin/jdi.js`) and distinguishes "resolver could not run" from "phase not
+  found". A new **publish guard** fails the release if any tracked `.sh`/hook
+  regresses to `100644`.
+- **`jdi-artifacts-gate.yml` could not diff `HEAD^1`.** `actions/checkout@v4`
+  defaults to `fetch-depth: 1` (shallow); on a `pull_request` the checkout is
+  the merge commit, so `HEAD^1`'s tree is absent and `git diff HEAD^1 HEAD`
+  failed — the merge-point gate went red on the exact compliant `copilot/*`
+  PRs it should pass. Pinned to `fetch-depth: 2` (minimal correct depth for a
+  first-parent diff of a merge commit). *(Reported via Copilot's own review on
+  the adopter PR.)*
+- **The pre-commit hook and the CI gate used different glob semantics** for
+  `gate.code_globs`. The hook collapsed `**`→`*` into a bash `case` (single `*`
+  crosses `/`); the workflow's `glob_to_re` mapped `*`→`[^/]*` (does not cross).
+  They agreed on the default `src/**` but diverged on any single-`*` segment
+  (e.g. `src/*/*.cs`) — a hole in the two-red-lights design where the
+  in-session and merge-point gates could disagree about whether a change
+  "touches code". The hook now uses the **same `glob_to_re` + `grep -E`** as the
+  workflow (kept byte-identical, cross-referenced in comments). *(Reported via
+  Copilot's own review on the adopter PR.)*
+
+### Added
+- **doctor §13**: warns when `.githooks/pre-commit` exists but is **not
+  executable** (the silent-gate-off case).
+
 ## [0.12.0] - 2026-07-22
 
 Delegated-agent hardening. Field report (Linear → GitHub Copilot coding agent
