@@ -1,6 +1,6 @@
 {
   "name": "jdi-cli",
-  "version": "0.13.1",
+  "version": "0.13.2",
   "description": "JDI (Just Do It) — lean workflow toolkit for Claude Code, GitHub Copilot, Antigravity, OpenCode, and JetBrains Junie. 17 slash commands (/jdi-issue autonomous intake + /jdi-next auto-router + 7 loop + ralph + adopt + meta + roadmap mutation + DoD confirm), 7 core agents (incl. jdi-solo for delegated coding-agent sessions) + N per-project specialists with file-glob routing. Definition of Done as reviewer Gate 8. Mechanical artifact gates (validate-phase + pre-commit + CI workflow) for autonomous agents. Optional Playwright MCP + Caveman plugin install.",
   "bin": {
     "jdi": "bin/jdi.js"

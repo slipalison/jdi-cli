@@ -5,6 +5,30 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.2] - 2026-08-01
+
+0.13.1's PS 7.4 fix was necessary but not sufficient — the published package
+still aborted on this dev machine because BOTH remaining links were broken,
+and they masked each other. Now proven green through three separate
+interpreters (suite: 46 assertions).
+
+### Fixed
+- **`resolvePowerShell()` missed real-world pwsh installs.** 0.13.1 only
+  looked in `%ProgramFiles%\PowerShell\<major>` — but pwsh commonly arrives
+  via the Microsoft Store (`%LOCALAPPDATA%\Microsoft\WindowsApps`), winget
+  user scope (`%LOCALAPPDATA%\Programs\PowerShell`), or as a dotnet global
+  tool (`~\.dotnet\tools`). On such machines the dispatcher silently fell
+  back to 5.1. All four canonical locations are now checked (still no PATH
+  probing — S4036).
+- **`migrate-layout.ps1` died on PowerShell 5.1 by a second mechanism.**
+  5.1 promotes REDIRECTED native stderr to a terminating NativeCommandError
+  under `EAP=Stop` — different from (and unaffected by) the 7.4
+  `$PSNativeCommandUseErrorActionPreference` fix. Every git call now goes
+  through an `Invoke-Git` wrapper (local `EAP=Continue`, output swallowed,
+  exit code returned as data). Migration verified end-to-end through real
+  5.1, real pwsh 7.6, and the `jdi.js` dispatcher — all three producing
+  render-check-clean, byte-identical results.
+
 ## [0.13.1] - 2026-08-01
 
 Hotfix for two field defects in 0.13.0's Windows path, both caught by running

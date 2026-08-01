@@ -78,31 +78,47 @@ function getScriptPath(name) {
 // into parser garbage (issue #24). The scripts are additionally kept
 // ASCII-only (enforced by a publish guard) so the 5.1 fallback stays safe.
 //
-// Resolution uses fixed, admin-writable-only locations instead of probing the
-// PATH (S4036 — a writable dir earlier in PATH could shadow `pwsh`):
-// Program Files\PowerShell\<major>\pwsh.exe (MSI/winget default; highest
-// version wins), then System32 WindowsPowerShell 5.1 (always present).
+// Resolution uses fixed install locations instead of probing the PATH
+// (S4036 — a writable dir earlier in PATH could shadow `pwsh`). pwsh has
+// FOUR canonical installs, checked in order:
+//   1. %ProgramFiles%\PowerShell\<major>\pwsh.exe        (MSI / winget machine)
+//   2. %LOCALAPPDATA%\Programs\PowerShell\<major>\...    (winget user scope)
+//   3. %LOCALAPPDATA%\Microsoft\WindowsApps\pwsh.exe     (Microsoft Store alias)
+//   4. %USERPROFILE%\.dotnet\tools\pwsh.exe              (dotnet global tool)
+// Fallback: System32 WindowsPowerShell 5.1 (always present on Windows).
 let cachedPowerShell = null;
-function resolvePowerShell() {
-  if (cachedPowerShell) return cachedPowerShell;
 
-  const pwshRoot = path.join(process.env.ProgramFiles || 'C:\\Program Files', 'PowerShell');
+function newestPwshUnder(root) {
   let best = null;
   try {
-    for (const entry of fs.readdirSync(pwshRoot)) {
+    for (const entry of fs.readdirSync(root)) {
       if (!/^\d+$/.test(entry)) continue;
-      const candidate = path.join(pwshRoot, entry, 'pwsh.exe');
+      const candidate = path.join(root, entry, 'pwsh.exe');
       if (fs.existsSync(candidate) && (!best || Number(entry) > best.ver)) {
         best = { ver: Number(entry), path: candidate };
       }
     }
   } catch {
-    // Program Files\PowerShell absent — no PS7 installed system-wide
+    // dir absent — this install flavor is not present
   }
+  return best ? best.path : null;
+}
 
-  if (best) {
-    cachedPowerShell = best.path;
-    return cachedPowerShell;
+function resolvePowerShell() {
+  if (cachedPowerShell) return cachedPowerShell;
+
+  const localAppData = process.env.LOCALAPPDATA || '';
+  const candidates = [
+    newestPwshUnder(path.join(process.env.ProgramFiles || 'C:\\Program Files', 'PowerShell')),
+    localAppData && newestPwshUnder(path.join(localAppData, 'Programs', 'PowerShell')),
+    localAppData && path.join(localAppData, 'Microsoft', 'WindowsApps', 'pwsh.exe'),
+    process.env.USERPROFILE && path.join(process.env.USERPROFILE, '.dotnet', 'tools', 'pwsh.exe'),
+  ];
+  for (const c of candidates) {
+    if (c && fs.existsSync(c)) {
+      cachedPowerShell = c;
+      return cachedPowerShell;
+    }
   }
 
   const ps51 = path.join(

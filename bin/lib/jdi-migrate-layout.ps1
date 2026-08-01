@@ -22,6 +22,24 @@ $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
+# Every git call goes through this wrapper: PS 5.1 additionally promotes
+# REDIRECTED stderr of a native command to a terminating NativeCommandError
+# under EAP=Stop (a different mechanism than the 7.4 preference above), so
+# probes like `ls-files --error-unmatch` on a missing path would abort the
+# whole migration half-way. Run git under EAP=Continue, swallow its output,
+# and hand the exit code back as data.
+function Invoke-Git {
+  param([Parameter(ValueFromRemainingArguments = $true)][string[]]$GitArgs)
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    & git @GitArgs 2>&1 | Out-Null
+  } finally {
+    $ErrorActionPreference = $prev
+  }
+  return $LASTEXITCODE
+}
+
 function Fail([string]$msg) {
   [Console]::Error.WriteLine("ERROR: $msg")
   exit 1
@@ -31,8 +49,7 @@ function Act([string]$msg) { Write-Output "  $msg" }
 if (-not (Test-Path .jdi -PathType Container)) {
   Fail 'no .jdi/ here - run from the project root of a JDI project'
 }
-git rev-parse --git-dir *> $null
-if ($LASTEXITCODE -ne 0) { Fail 'not a git repository - v3 migration rewires git tracking' }
+if ((Invoke-Git rev-parse --git-dir) -ne 0) { Fail 'not a git repository - v3 migration rewires git tracking' }
 
 # Already v3? Re-running is a render refresh, not an error.
 if (Test-Path .jdi/roadmap -PathType Container) {
@@ -45,8 +62,7 @@ if (Test-Path .jdi/roadmap -PathType Container) {
 }
 
 if (-not $Force) {
-  git diff --quiet -- .jdi 2>$null
-  if ($LASTEXITCODE -ne 0) {
+  if ((Invoke-Git diff --quiet -- .jdi) -ne 0) {
     Fail 'uncommitted changes under .jdi/ - commit them first (or -Force)'
   }
 }
@@ -78,10 +94,8 @@ function Move-Frozen([string]$src, [string]$dst) {
   if ($DryRun) { return }
   $dir = Split-Path -Parent $dst
   if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force $dir | Out-Null }
-  git ls-files --error-unmatch $src *> $null
-  if ($LASTEXITCODE -eq 0) {
-    git mv -f $src $dst
-    if ($LASTEXITCODE -ne 0) { Fail "git mv $src failed" }
+  if ((Invoke-Git ls-files --error-unmatch $src) -eq 0) {
+    if ((Invoke-Git mv -f $src $dst) -ne 0) { Fail "git mv $src failed" }
   }
   else {
     Move-Item -Force $src $dst
@@ -165,7 +179,7 @@ if (-not $DryRun) {
 
 Act 'untrack .jdi/ROADMAP.md (becomes a rendered view)'
 if (-not $DryRun) {
-  git rm --cached --quiet .jdi/ROADMAP.md 2>$null | Out-Null
+  Invoke-Git rm --cached --quiet .jdi/ROADMAP.md | Out-Null
   Remove-Item -Force .jdi/ROADMAP.md -ErrorAction SilentlyContinue
 }
 Ignore-Add '.jdi/ROADMAP.md'
@@ -201,10 +215,9 @@ if (-not $DryRun) {
 
 # --- 5. STATE.md (fold in the 0.3.0 migration for old projects) -----------
 
-git ls-files --error-unmatch .jdi/STATE.md *> $null
-if ($LASTEXITCODE -eq 0) {
+if ((Invoke-Git ls-files --error-unmatch .jdi/STATE.md) -eq 0) {
   Act 'untrack .jdi/STATE.md (per-clone advisory cache)'
-  if (-not $DryRun) { git rm --cached --quiet .jdi/STATE.md | Out-Null }
+  if (-not $DryRun) { Invoke-Git rm --cached --quiet .jdi/STATE.md | Out-Null }
 }
 Ignore-Add '.jdi/STATE.md'
 
@@ -218,7 +231,7 @@ if (-not $DryRun) {
 # --- 8. stage -------------------------------------------------------------
 
 if (-not $DryRun) {
-  git add .jdi/ .gitignore
+  if ((Invoke-Git add .jdi/ .gitignore) -ne 0) { Fail 'git add failed' }
   Write-Output ''
   Write-Output 'migrate-layout: DONE (staged, not committed).'
   Write-Output 'Review with: git status .jdi/'
