@@ -43,6 +43,8 @@ head.
 
 ### Step 1: Pre-flight routing (project-level gaps first)
 
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+
 ```bash
 if [ ! -d .jdi/ ]; then
   echo "Not a JDI project yet. Run: /jdi-new \"<short description>\" (or /jdi-adopt for an existing repo)."

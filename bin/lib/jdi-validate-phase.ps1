@@ -1,5 +1,5 @@
 # jdi-validate-phase: mechanical gate over the phase artifact chain.
-# 1:1 mirror of jdi-validate-phase.sh — identical stdout, identical exit codes.
+# 1:1 mirror of jdi-validate-phase.sh - identical stdout, identical exit codes.
 #
 # Usage: .\jdi-validate-phase.ps1 <slug|position> [-ForPr] [-Quiet]
 #        (also accepts --for-pr / --quiet for parity with the .sh flags)
@@ -18,7 +18,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-foreach ($arg in ($Rest ?? @())) {
+# No `??` here: null-coalescing is PS 7+ and breaks the PS 5.1 parser
+# (5.1 is the fallback interpreter on stock Windows — see issue #24).
+if ($null -eq $Rest) { $Rest = @() }
+foreach ($arg in $Rest) {
   switch ($arg) {
     '--for-pr' { $ForPr = $true }
     '--quiet'  { $Quiet = $true }
@@ -46,7 +49,7 @@ if ($resolveRc -ne 0 -or -not $resolved) {
   if ($resolveRc -eq 2) {
     Say "[fail] phase '$PhaseId' not found in ROADMAP.md"
   } else {
-    Say "[fail] could not run the phase resolver (rc=$resolveRc) — is this a JDI project with .jdi/ROADMAP.md?"
+    Say "[fail] could not run the phase resolver (rc=$resolveRc) - is this a JDI project with .jdi/ROADMAP.md?"
   }
   exit 1
 }
@@ -68,10 +71,10 @@ function Check([string]$file, [string]$statusIfOk, [string]$fix, [string]$marker
 
   if (-not (Test-Path $path)) {
     if ($ForPr) {
-      Say "[missing] $file — required for PR. Fix: $fix"
+      Say "[missing] $file - required for PR. Fix: $fix"
       $script:FAILS++
     } else {
-      Say "[absent] $file — next: $fix"
+      Say "[absent] $file - next: $fix"
     }
     return
   }
@@ -79,13 +82,13 @@ function Check([string]$file, [string]$statusIfOk, [string]$fix, [string]$marker
   $content = Get-Content -Raw $path
   foreach ($m in $markers) {
     if ($content -notmatch "(?m)$m") {
-      Say "[invalid] $file — expected $markerDesc (missing: $m). Fix: $fix"
+      Say "[invalid] $file - expected $markerDesc (missing: $m). Fix: $fix"
       $script:FAILS++
       return
     }
   }
 
-  Say "[ok] $file — $markerDesc"
+  Say "[ok] $file - $markerDesc"
   $script:STATUS = $statusIfOk
 }
 
@@ -116,10 +119,10 @@ if ($ForPr -and (Test-Path $reviewPath)) {
   $verdicts = (Select-String -Path $reviewPath -Pattern '(Verdict|Veredicto):\*\* (APPROVED|APPROVED_WITH_WARNINGS|APPROVED_PENDING_MANUAL|BLOCKED)' -AllMatches).Matches |
     ForEach-Object { $_.Groups[2].Value }
   if ($verdicts -contains 'BLOCKED') {
-    Say '[fail] REVIEW.md verdict is BLOCKED — blocked work is never shipped'
+    Say '[fail] REVIEW.md verdict is BLOCKED - blocked work is never shipped'
     $script:FAILS++
   } elseif ($verdicts -contains 'APPROVED_PENDING_MANUAL') {
-    Say '[fail] REVIEW.md verdict is APPROVED_PENDING_MANUAL — autonomous chains require dod=auto_only (no human to confirm)'
+    Say '[fail] REVIEW.md verdict is APPROVED_PENDING_MANUAL - autonomous chains require dod=auto_only (no human to confirm)'
     $script:FAILS++
   }
 }

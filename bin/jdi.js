@@ -72,6 +72,47 @@ function getScriptPath(name) {
   return path.join(PKG_ROOT, 'bin', `${name}${ext}`);
 }
 
+// Prefer PowerShell 7 (pwsh) when available: it decodes BOM-less UTF-8 .ps1
+// correctly and is the actively developed PowerShell. Windows PowerShell 5.1
+// reads BOM-less scripts as ANSI (cp1252), which turns any non-ASCII byte
+// into parser garbage (issue #24). The scripts are additionally kept
+// ASCII-only (enforced by a publish guard) so the 5.1 fallback stays safe.
+//
+// Resolution uses fixed, admin-writable-only locations instead of probing the
+// PATH (S4036 — a writable dir earlier in PATH could shadow `pwsh`):
+// Program Files\PowerShell\<major>\pwsh.exe (MSI/winget default; highest
+// version wins), then System32 WindowsPowerShell 5.1 (always present).
+let cachedPowerShell = null;
+function resolvePowerShell() {
+  if (cachedPowerShell) return cachedPowerShell;
+
+  const pwshRoot = path.join(process.env.ProgramFiles || 'C:\\Program Files', 'PowerShell');
+  let best = null;
+  try {
+    for (const entry of fs.readdirSync(pwshRoot)) {
+      if (!/^\d+$/.test(entry)) continue;
+      const candidate = path.join(pwshRoot, entry, 'pwsh.exe');
+      if (fs.existsSync(candidate) && (!best || Number(entry) > best.ver)) {
+        best = { ver: Number(entry), path: candidate };
+      }
+    }
+  } catch {
+    // Program Files\PowerShell absent — no PS7 installed system-wide
+  }
+
+  if (best) {
+    cachedPowerShell = best.path;
+    return cachedPowerShell;
+  }
+
+  const ps51 = path.join(
+    process.env.SystemRoot || 'C:\\Windows',
+    'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'
+  );
+  cachedPowerShell = fs.existsSync(ps51) ? ps51 : 'powershell.exe';
+  return cachedPowerShell;
+}
+
 function runShellScript(scriptName, scriptArgs = []) {
   const scriptPath = getScriptPath(scriptName);
 
@@ -82,7 +123,7 @@ function runShellScript(scriptName, scriptArgs = []) {
 
   let cmd, args;
   if (isWindows) {
-    cmd = 'powershell.exe';
+    cmd = resolvePowerShell();
     args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, ...scriptArgs];
   } else {
     cmd = 'bash';
@@ -115,8 +156,13 @@ function runLibScript(baseName, scriptArgs = [], opts = {}) {
 
   let cmd, args;
   if (isWindows) {
-    cmd = 'powershell.exe';
-    args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, ...scriptArgs];
+    cmd = resolvePowerShell();
+    // The bash helpers parse GNU --flags themselves; the PowerShell ports
+    // declare idiomatic [switch]/PascalCase parameters. Translate at this
+    // single boundary so `--check-unique` binds to `-CheckUnique` etc.
+    // (issue #24 bug 2 — every lib helper invoked with a flag failed on
+    // Windows because the binder saw the literal `--flag`).
+    args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, ...toPsArgs(scriptArgs)];
   } else {
     cmd = 'bash';
     args = [scriptPath, ...scriptArgs];
@@ -172,6 +218,24 @@ function cmdLibPassthrough(baseName, usage, rawArgs) {
     console.error(`usage: jdi ${usage}`);
     process.exit(1);
   }
+  const { code } = runLibScript(baseName, rawArgs);
+  process.exit(code);
+}
+
+// GNU-style --kebab-flags -> PowerShell -PascalCase parameters, applied only
+// when dispatching to .ps1 (bash helpers parse --flags themselves). Values
+// keep following as separate args, which matches PS named-parameter binding.
+function toPsArgs(rawArgs) {
+  return rawArgs.map((a) =>
+    /^--[a-z][a-z-]*$/.test(a)
+      ? '-' + a.slice(2).split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('')
+      : a
+  );
+}
+
+// Like cmdLibPassthrough but zero-arg friendly (render / migrate-layout).
+// Flag mapping for the PowerShell side happens inside runLibScript.
+function cmdLibZeroArg(baseName, rawArgs) {
   const { code } = runLibScript(baseName, rawArgs);
   process.exit(code);
 }
@@ -447,6 +511,8 @@ async function cmdHelp() {
   console.log(`  ${c.cyan}validate-phase${c.reset} ${c.gray}<slug|pos> [--for-pr]${c.reset}  Valida artefatos da phase (gate mecanico p/ CI e agents)`);
   console.log(`  ${c.cyan}truncate${c.reset} ${c.gray}<file> <max>${c.reset}      Trunca arquivo preservando estrutura`);
   console.log(`  ${c.cyan}monitor${c.reset} ${c.gray}<file...>${c.reset}          Estima context budget dos arquivos`);
+  console.log(`  ${c.cyan}render${c.reset} ${c.gray}[--check]${c.reset}          Regenera as views de .jdi/ (layout conflict-free v3)`);
+  console.log(`  ${c.cyan}migrate-layout${c.reset} ${c.gray}[--dry-run]${c.reset}  Migra .jdi/ legado pro layout conflict-free (v3)`);
   console.log('');
 
   console.log(`${c.bold}Runtimes (install):${c.reset}`);
@@ -553,6 +619,12 @@ async function main() {
       break;
     case 'truncate':
       cmdLibPassthrough('jdi-truncate', 'truncate <file> <max_chars>', process.argv.slice(3));
+      break;
+    case 'render':
+      cmdLibZeroArg('jdi-render', process.argv.slice(3));
+      break;
+    case 'migrate-layout':
+      cmdLibZeroArg('jdi-migrate-layout', process.argv.slice(3));
       break;
     case 'monitor':
       cmdLibPassthrough('jdi-monitor', 'monitor <file...>', process.argv.slice(3));

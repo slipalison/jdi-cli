@@ -102,7 +102,7 @@ if (Test-Cmd 'agy') {
   Write-OK "antigravity CLI (1.x): $((Get-Command antigravity).Source)"
   $AntigravityOK = $true
 } elseif (Test-Path "$UserHome\.gemini\antigravity") {
-  Write-WARN '~/.gemini/antigravity/ existe (Antigravity 1.x legado — o 2.0 nao le esse dir; jdi update migra)'
+  Write-WARN '~/.gemini/antigravity/ existe (Antigravity 1.x legado - o 2.0 nao le esse dir; jdi update migra)'
   $AntigravityOK = $true
 } else {
   Write-WARN 'Antigravity nao detectado'
@@ -243,6 +243,33 @@ if (Test-Path "$ProjectDir\.jdi") {
       Write-WARN ".jdi/config.json present but not valid JSON"
     }
   }
+
+  # --- layout conflict-free (v3) -----------------------------------------
+  if (Test-Path (Join-Path $ProjectDir '.jdi\roadmap') -PathType Container) {
+    Write-OK "layout conflict-free v3 (.jdi/roadmap/ per-entry; views geradas)"
+    Push-Location $ProjectDir
+    try {
+      git rev-parse --git-dir *> $null
+      if ($LASTEXITCODE -eq 0) {
+        $trackedViews = git ls-files -- .jdi/ROADMAP.md .jdi/DECISIONS.md .jdi/todos.md .jdi/registry.md .jdi/specialists.md .jdi/reviewers.md .jdi/skills-registry.md 2>$null
+        if ($trackedViews) {
+          Write-WARN "views geradas ainda trackeadas no git: $($trackedViews -join ' ') - rode: npx -y jdi-cli migrate-layout"
+        } else {
+          Write-OK "views untracked (ROADMAP/DECISIONS/todos/registry ficam fora do git)"
+        }
+      }
+      & (Join-Path $JdiRoot 'bin\lib\jdi-render.ps1') -Check -Quiet
+      if ($LASTEXITCODE -eq 0) {
+        Write-OK "views em sincronia com os per-entry dirs (render --check)"
+      } else {
+        Write-WARN "views desatualizadas ou com warnings - rode: npx -y jdi-cli render"
+      }
+    } finally {
+      Pop-Location
+    }
+  } else {
+    Write-WARN "layout legado (arquivos compartilhados em .jdi/). Merges de PR no GitHub IGNORAM merge=union - dois devs em paralelo conflitam em ROADMAP/DECISIONS. Migre: npx -y jdi-cli migrate-layout"
+  }
 } else {
   Write-WARN '.jdi/ ausente. Rode /jdi-new ou esta fora de um projeto JDI.'
 }
@@ -266,7 +293,7 @@ Check-Install -Path "$ProjectDir\.claude\agents" -Filter 'jdi-*.md' -Label '.cla
 Check-Install -Path "$ProjectDir\.github\agents" -Filter 'jdi-*.agent.md' -Label '.github/agents/'
 Check-Install -Path "$ProjectDir\.github\skills" -Filter 'SKILL.md' -Label '.github/skills/ (Copilot CLI + coding agent)'
 Check-Install -Path "$ProjectDir\.agents\skills" -Filter 'SKILL.md' -Label '.agents/skills/ (Antigravity 2.0)'
-Check-Install -Path "$ProjectDir\.gemini\antigravity\skills" -Filter 'SKILL.md' -Label '.gemini/antigravity/skills/ (1.x legado — jdi update migra)'
+Check-Install -Path "$ProjectDir\.gemini\antigravity\skills" -Filter 'SKILL.md' -Label '.gemini/antigravity/skills/ (1.x legado - jdi update migra)'
 Check-Install -Path "$ProjectDir\.junie\skills" -Filter 'SKILL.md' -Label '.junie/skills/'
 Check-Install -Path "$ProjectDir\.opencode\agents" -Filter 'jdi-*.md' -Label '.opencode/agents/'
 Check-Install -Path "$UserHome\.claude\agents" -Filter 'jdi-*.md' -Label '~/.claude/agents/ (scope user)'
@@ -413,14 +440,14 @@ if (Test-Path $cavemanUser) {
 }
 
 # ---------------------------------------------------------------------------
-Write-Section '13. Coding agent (issues delegadas — Copilot)'
+Write-Section '13. Coding agent (issues delegadas - Copilot)'
 
 $ghDir = Join-Path $ProjectDir '.github'
 if ((Test-Path (Join-Path $ghDir 'agents')) -or (Test-Path (Join-Path $ghDir 'prompts'))) {
   if (Test-Path (Join-Path $ghDir 'agents\jdi-solo.agent.md')) {
     Write-OK 'persona jdi-solo presente (.github/agents/jdi-solo.agent.md)'
   } else {
-    Write-Warn 'jdi-solo ausente — sessao delegada seleciona persona errada (rode: npx jdi-cli update ou install copilot)'
+    Write-Warn 'jdi-solo ausente - sessao delegada seleciona persona errada (rode: npx jdi-cli update ou install copilot)'
   }
 
   if (Test-Path (Join-Path $ghDir 'workflows\copilot-setup-steps.yml')) {
@@ -432,7 +459,7 @@ if ((Test-Path (Join-Path $ghDir 'agents')) -or (Test-Path (Join-Path $ghDir 'pr
   if (Test-Path (Join-Path $ghDir 'workflows\jdi-artifacts-gate.yml')) {
     Write-OK 'jdi-artifacts-gate.yml presente (gate de PR copilot/*)'
   } else {
-    Write-Note 'jdi-artifacts-gate.yml ausente — PR de agente sem artefatos passa despercebido'
+    Write-Note 'jdi-artifacts-gate.yml ausente - PR de agente sem artefatos passa despercebido'
   }
 
   $hookPath = Join-Path $ProjectDir '.githooks\pre-commit'
@@ -442,7 +469,7 @@ if ((Test-Path (Join-Path $ghDir 'agents')) -or (Test-Path (Join-Path $ghDir 'pr
     Write-Note 'gate pre-commit ausente em .githooks/ (install copilot --githooks)'
   }
 } else {
-  Write-Note 'runtime copilot nao instalado no projeto — secao pulada'
+  Write-Note 'runtime copilot nao instalado no projeto - secao pulada'
 }
 
 # ---------------------------------------------------------------------------

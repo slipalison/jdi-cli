@@ -47,10 +47,29 @@ Examples:
 
 ### Step 1: Validation
 
+> **Scope note:** this command migrates the PHASE-ID schema (v1 numeric →
+> v2 slug-as-ID). The FILE-LAYOUT migration to the conflict-free per-entry
+> layout (v3) is a different, deterministic command:
+> `npx -y jdi-cli migrate-layout`. A project on layout v3 is already schema
+> v2+ — this command no-ops there.
+
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new first."; exit 1; }
-test -f .jdi/STATE.md || { echo "STATE.md missing — corrupt project."; exit 1; }
 test -f .jdi/ROADMAP.md || { echo "ROADMAP.md missing — corrupt project."; exit 1; }
+
+# STATE.md is an untracked advisory cache (gitignored 0.3.0+) — a fresh clone
+# legitimately lacks it. Regenerate the minimal fields instead of aborting
+# (same pattern as /jdi-add-phase and /jdi-remove-phase). A truly-v1 project
+# always tracks STATE.md, so a regenerated file correctly reads as v2 → no-op.
+if [ ! -f .jdi/STATE.md ]; then
+  POS=1
+  while RESOLVED="$(npx -y jdi-cli resolve-phase "$POS" 2>/dev/null)"; do
+    eval "$RESOLVED"
+    [ -f "$JDI_PHASE_DIR/SHIPPED.md" ] || break
+    POS=$((POS+1))
+  done
+  printf 'schema_version: 2\ncurrent_phase: %s\ncurrent_phase_slug: %s\n' "$POS" "${JDI_PHASE_SLUG:-}" > .jdi/STATE.md
+fi
 
 # Working tree must be clean (or --force) so the migration commit is auditable
 if [ "${1:-}" != "--force" ] && [ "${2:-}" != "--force" ]; then
@@ -64,8 +83,17 @@ fi
 PowerShell:
 ```powershell
 if (-not (Test-Path .jdi)) { Write-Error "Not a JDI project. /jdi-new first."; exit 1 }
-if (-not (Test-Path .jdi/STATE.md)) { Write-Error "STATE.md missing."; exit 1 }
 if (-not (Test-Path .jdi/ROADMAP.md)) { Write-Error "ROADMAP.md missing."; exit 1 }
+if (-not (Test-Path .jdi/STATE.md)) {
+  $pos = 1
+  while ($true) {
+    $r = npx -y jdi-cli resolve-phase $pos --json 2>$null | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0) { break }
+    if (-not (Test-Path (Join-Path $r.dir 'SHIPPED.md'))) { break }
+    $pos++
+  }
+  "schema_version: 2`ncurrent_phase: $pos`ncurrent_phase_slug: $($r.slug)" | Set-Content .jdi/STATE.md
+}
 
 if (-not ($args -contains '--force')) {
   $dirty = git diff --quiet HEAD -- .jdi/ 2>$null; if ($LASTEXITCODE -ne 0) {

@@ -5,6 +5,109 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-08-01
+
+Conflict-free layout v3. A real two-branch PR (TranslateReader #15) conflicted
+on `.jdi/DECISIONS.md`, `.jdi/ROADMAP.md` and `.jdi/todos.md` **despite every
+file carrying `merge=union`** — reproduced locally: the merge is clean with
+the attribute and conflicts without it, and GitHub/GitLab/ADO server-side PR
+merges IGNORE `.gitattributes` merge drivers (Kubernetes dropped union for
+the same reason, kubernetes/kubernetes#70576). The declared "zero merge
+conflicts by construction" invariant only ever held for local CLI merges.
+0.13.0 rebuilds the guarantee structurally: **one file = one writer** —
+38 assertions across 10 two-dev merge scenarios (plain 3-way, exactly GitHub
+semantics) pass with zero conflicts.
+
+### Added
+- **Per-entry state layout (v3).** Every multi-writer stream becomes a
+  directory of single-writer files: roadmap → `.jdi/roadmap/{slug}.md`
+  (`order:` frontmatter, fractional on insert-between — no sibling renumber),
+  decisions → `.jdi/decisions/D-{date}-{slug}-{seq}.md` (filename = ID),
+  todos → `.jdi/todos/{date}-{slug}.md`, bootstrap//jdi-create output →
+  `.jdi/registry/R-{date}-{slug}.md` (fenced `<!-- jdi:... -->` sections).
+  Different branches write different files — nothing to conflict on any
+  platform, no git configuration needed.
+- **`jdi-cli render`** — regenerates the old single-file paths (ROADMAP.md,
+  DECISIONS.md, todos.md, registry.md, specialists.md, reviewers.md,
+  skills-registry.md) as **untracked views** in the exact legacy format, so
+  every reader (agents, greps, humans, prompt-cache prefixes) keeps working
+  unchanged. Byte-deterministic across the `.sh` and `.ps1` renderers
+  (LF-normalized, ordinal sort, CRLF-tolerant parsing). `--check` reports
+  drift/warnings for doctor/CI. Every state-reading command refreshes the
+  views at Step 1.
+- **`jdi-cli migrate-layout`** — one-time, idempotent, deterministic migration
+  for existing projects: splits ROADMAP.md into `roadmap/` (header/footer
+  sections preserved; heals out-of-order phase numbering), freezes
+  DECISIONS.md/todos.md/registry tables as `LEGACY*` files via `git mv`
+  (history and every `D-N` reference stay valid), untracks + gitignores the
+  views, renders, stages (does not commit). Folds in the 0.3.0 STATE.md
+  untracking. Views concatenate LEGACY + new entries — readers see one
+  continuous file. Verified against a real 136K-decision brownfield repo:
+  phase/header/decision fidelity byte-checked, sh↔ps1 migrations
+  byte-identical.
+- **Gate: views/LEGACY are never committed.** The pre-commit hook and
+  `jdi-artifacts-gate.yml` fail any commit/PR that tracks a view or edits a
+  frozen LEGACY file, printing the per-entry fix. Doctor gains a layout
+  section: v3 → checks views untracked + in sync (`render --check`); legacy →
+  WARN with the migration command.
+- Concurrent `add-phase` picking the same `order` merges cleanly and renders
+  as a duplicate-order warning with a stable slug tie-break — a warning
+  instead of a conflict. Deliberate conflicts stay visible by design:
+  PROJECT.md/config.json edits and remove-phase racing someone's work
+  (modify/delete on the phase's own files).
+
+### Changed
+- `/jdi-new` and `/jdi-adopt` initialize the v3 layout natively and write a
+  `.gitattributes` with **no `merge=union` lines** (line-ending normalization
+  only) — v3 needs no merge driver. Init decisions keep literal `D-1`/`D-2`
+  filenames (written once, pre-branching), so the adopt verification and the
+  architect boundary grep work unchanged against the rendered view.
+- `/jdi-add-phase`, `/jdi-remove-phase`, `/jdi-discuss` (asker),
+  `/jdi-bootstrap` + `/jdi-create` (architect) branch on layout: v3 writes
+  per-entry files + render; legacy keeps the old appends. `/jdi-ship` and
+  `/jdi-remove-phase` stop writing `archive/index.md` on v3 (the archive dir
+  listing IS the index; the file stays as frozen history on legacy projects).
+- `resolve-phase` and `validate-slug` (`.sh` + `.ps1`) read `.jdi/roadmap/`
+  as the source of truth when present (position = rank by `order` asc, slug
+  asc; emitted `JDI_PHASE_SCHEMA=3`) and never parse the possibly-stale
+  rendered view; legacy single-file parsing is unchanged (full dual-read
+  back-compat — unmigrated projects keep working exactly as before).
+- `/jdi-migrate-phases` no longer aborts on a fresh clone (STATE.md is
+  gitignored — it now regenerates the minimal fields like add/remove-phase
+  do) and documents that the FILE-LAYOUT migration is `migrate-layout`, a
+  separate deterministic command.
+- `bin/jdi.js`: new `render` and `migrate-layout` subcommands; GNU-style
+  `--flags` for these are mapped to PowerShell `-PascalCase` parameters at
+  the dispatch boundary.
+
+### Fixed
+- **Windows PowerShell 5.1 could not run the CLI at all** (#24, two
+  independent bugs on stock Windows):
+  1. The `.ps1` scripts are BOM-less UTF-8 and `jdi.js` spawned
+     `powershell.exe` (5.1), which decodes BOM-less files as ANSI — an em
+     dash (`E2 80 94`) decoded as cp1252 ends in `0x94` (a smart quote the
+     parser accepts as a string delimiter), so `install`, `doctor`,
+     `uninstall`, `build` and the lib helpers failed to parse. Fixed at the
+     root: all 22 non-ASCII characters across 6 `.ps1` files replaced with
+     ASCII, `jdi.js` now **prefers `pwsh` (PowerShell 7)** when available
+     and falls back to 5.1, and a publish guard fails the release if any
+     tracked `.ps1` regresses to non-ASCII. Bonus found by parsing every
+     script with the real 5.1 parser: `validate-phase.ps1` used the PS 7-only
+     `??` operator — replaced with a 5.1-safe null check (all 16 `.ps1` now
+     parse clean on 5.1, verified).
+  2. GNU-style `--flags` were forwarded verbatim to `.ps1` helpers that
+     declare idiomatic `[switch]`/PascalCase parameters — the 5.1/7 binder
+     rejected `-check-unique` as an unknown parameter, breaking every lib
+     helper invoked with a flag (including `/jdi-add-phase`'s documented
+     `validate-slug --check-unique`). `jdi.js` now maps kebab `--foo-bar` →
+     `-FooBar` at the single dispatch boundary (`runLibScript`).
+- **`jdi-artifacts-gate.yml` now pins `validate-phase` to `.jdi/VERSION`**
+  (#23): unpinned `npx -y jdi-cli` meant `@latest`, so a new release could
+  flip a previously-valid `copilot/*` PR red with zero repo change (the
+  0.12.0→0.12.1 window did exactly that). The gate reads the version the
+  repo declares (written by `install`/`update`, self-maintaining) and falls
+  back to latest when absent.
+
 ## [0.12.1] - 2026-07-23
 
 Packaging hotfix for the 0.12.0 delegated-agent surface. First real adopter

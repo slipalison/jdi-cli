@@ -50,6 +50,8 @@ Examples:
 
 ### Step 1: Validation
 
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new first."; exit 1; }
 test -f .jdi/ROADMAP.md || { echo "ROADMAP.md missing."; exit 1; }
@@ -137,16 +139,94 @@ Validator runs **before** any pull/fetch. Multi-developer collision protection i
 1. Local pre-check (this step) — catches collisions visible at this moment
 2. Git merge — catches collisions that arose on the remote between local check and push
 
-### Step 4: Resolve insert position
+### Step 4: Write the phase — layout v3 (`.jdi/roadmap/` dir exists)
 
-Parse ROADMAP.md to count current phases and determine insert index.
+One NEW FILE per phase; no shared file is touched, so two developers adding
+phases on parallel branches can never conflict — even on server-side PR
+merges, which ignore `.gitattributes` merge drivers.
+
+`order` is a number, possibly fractional: append uses `max(order)+1`;
+`--before`/`--after` uses the midpoint between the two neighbors' orders
+(e.g. between 4 and 5 → 4.5). No sibling file is ever renumbered.
+
+```bash
+# current orders, sorted (strip \r for CRLF-tolerant parsing)
+ORDERS=$(for f in .jdi/roadmap/*.md; do
+  case "$(basename "$f")" in _*|LEGACY*) continue ;; esac
+  awk '{ sub(/\r$/, "") } NR==1 && $0=="---" {fm=1; next} fm && $0=="---" {exit} fm && index($0,"order:")==1 {sub(/^order:[[:space:]]*/,""); print; exit}' "$f"
+done | LC_ALL=C sort -g)
+
+if [ -n "$BEFORE_SLUG" ] || [ -n "$AFTER_SLUG" ]; then
+  ANCHOR="${BEFORE_SLUG:-$AFTER_SLUG}"
+  [ -f ".jdi/roadmap/$ANCHOR.md" ] || { echo "ERROR: anchor slug '$ANCHOR' not found"; exit 1; }
+  # Past/current phases are immutable history — refuse to slot a new phase
+  # at or before the current one (advisory check; skipped when STATE absent).
+  CURRENT_PHASE_INT=$(grep -oE 'current_phase:\s*[0-9]+' .jdi/STATE.md 2>/dev/null | grep -oE '[0-9]+' | head -1 || echo "0")
+  ANCHOR_POS=$(npx -y jdi-cli resolve-phase "$ANCHOR" 2>/dev/null | grep '^JDI_PHASE_POSITION=' | cut -d"'" -f2)
+  INSERT_POS=$([ -n "$BEFORE_SLUG" ] && echo "$ANCHOR_POS" || echo "$((ANCHOR_POS + 1))")
+  if [ -n "$ANCHOR_POS" ] && [ "$INSERT_POS" -le "$CURRENT_PHASE_INT" ]; then
+    echo "ERROR: cannot insert at position $INSERT_POS — current_phase is $CURRENT_PHASE_INT. Past/current phases are immutable history."
+    exit 1
+  fi
+  ANCHOR_ORDER=$(awk '{ sub(/\r$/, "") } NR==1 && $0=="---" {fm=1; next} fm && $0=="---" {exit} fm && index($0,"order:")==1 {sub(/^order:[[:space:]]*/,""); print; exit}' ".jdi/roadmap/$ANCHOR.md")
+  if [ -n "$BEFORE_SLUG" ]; then
+    PREV=$(printf '%s\n' "$ORDERS" | awk -v a="$ANCHOR_ORDER" '$1 < a { p = $1 } END { print p }')
+    [ -n "$PREV" ] && NEW_ORDER=$(awk -v x="$PREV" -v y="$ANCHOR_ORDER" 'BEGIN { printf "%g", (x + y) / 2 }') \
+                   || NEW_ORDER=$(awk -v y="$ANCHOR_ORDER" 'BEGIN { printf "%g", y - 1 }')
+  else
+    NEXT=$(printf '%s\n' "$ORDERS" | awk -v a="$ANCHOR_ORDER" '$1 > a && !n { n = $1 } END { print n }')
+    [ -n "$NEXT" ] && NEW_ORDER=$(awk -v x="$ANCHOR_ORDER" -v y="$NEXT" 'BEGIN { printf "%g", (x + y) / 2 }') \
+                   || NEW_ORDER=$(awk -v x="$ANCHOR_ORDER" 'BEGIN { printf "%g", x + 1 }')
+  fi
+else
+  MAX=$(printf '%s\n' "$ORDERS" | tail -1)
+  NEW_ORDER=$(awk -v m="${MAX:-0}" 'BEGIN { printf "%g", m + 1 }')
+fi
+```
+
+Write `.jdi/roadmap/$SLUG.md`:
+
+```markdown
+---
+order: {NEW_ORDER}
+name: {name}
+---
+- **Slug:** {slug}
+- **Goal:** {goal}
+```
+
+(No `Status:` line — phase status is derived from the phase folder's
+artifacts.)
+
+**Audit trail** (only if `--reason` provided) — one file per decision,
+`.jdi/decisions/D-{YYYY-MM-DD}-{slug}-1.md`:
+
+```
+D-{YYYY-MM-DD}-{slug}-1: Phase '{name}' (slug: {slug}) added. Reason: {reason}.
+```
+
+Refresh the views and commit (ROADMAP.md/DECISIONS.md are untracked views —
+never `git add` them):
+
+```bash
+npx -y jdi-cli render
+git add .jdi/roadmap/ .jdi/decisions/
+git commit -m "chore(jdi): add phase $SLUG"
+```
+
+### Step 4-alt: Write the phase — legacy layout (no `.jdi/roadmap/` dir)
+
+Recommend `npx -y jdi-cli migrate-layout` first (server-side PR merges ignore
+merge=union — parallel adds on the legacy layout conflict on GitHub). If the
+user declines, keep the old behavior:
+
+**Resolve insert position:**
 
 ```bash
 EXISTING=$(grep -cE '^### Phase ' .jdi/ROADMAP.md)
 CURRENT_PHASE_INT=$(grep -oE 'current_phase:\s*[0-9]+' .jdi/STATE.md | grep -oE '[0-9]+' | head -1 || echo "0")
 
 if [ -n "$BEFORE_SLUG" ]; then
-  # Find position of the anchor phase
   TARGET_POS=$(npx -y jdi-cli resolve-phase "$BEFORE_SLUG" 2>/dev/null | grep '^JDI_PHASE_POSITION=' | cut -d"'" -f2)
   [ -z "$TARGET_POS" ] && { echo "ERROR: anchor slug '$BEFORE_SLUG' not found"; exit 1; }
   INSERT_POS=$TARGET_POS
@@ -158,18 +238,15 @@ else
   INSERT_POS=$((EXISTING + 1))
 fi
 
-# Refuse to insert at or before current_phase
 if [ "$INSERT_POS" -le "$CURRENT_PHASE_INT" ]; then
   echo "ERROR: cannot insert at position $INSERT_POS — current_phase is $CURRENT_PHASE_INT. Past/current phases are immutable history."
   exit 1
 fi
 ```
 
-### Step 5: Write to ROADMAP.md
-
-**If appending** (`INSERT_POS == EXISTING + 1`): append a new `### Phase N` block at the end of the `## Phases` section.
-
-**If inserting** (`INSERT_POS <= EXISTING`): shift the heading numbers of all subsequent `### Phase K` entries to `### Phase K+1`. **Slug values are NOT changed** — they stay canonical. This is the key v2 invariant: position is display-only, slug is canonical ID.
+**Write to ROADMAP.md** — appending: new `### Phase N` block at the end of
+`## Phases`. Inserting: shift subsequent `### Phase K` headings to `K+1`
+(slug values NEVER change — position is display-only, slug is canonical ID):
 
 ```markdown
 ### Phase {INSERT_POS}: {name}
@@ -177,18 +254,10 @@ fi
 - **Goal:** {goal}
 ```
 
-(No `Status:` line — phase status is derived from the phase folder's
-artifacts. Legacy ROADMAPs keep the Status lines on their existing blocks;
-new blocks never add one.)
-
-For v1 schema, write `Slug: {NN}-{slug}` instead (preserves legacy folder convention).
-
-### Step 6: Update derived counter
+For v1 schema, write `Slug: {NN}-{slug}` instead. Update the derived counter
+only if a legacy line exists:
 
 ```bash
-# total_phases is DERIVED (count of '### Phase ' headings). ROADMAPs created
-# on 0.11.0+ do not store it — a stored counter conflicts on every parallel
-# add and merges to the WRONG number. Update only if a legacy line exists:
 NEW_TOTAL=$(grep -cE '^### Phase ' .jdi/ROADMAP.md)
 if grep -qE '^total_phases:' .jdi/ROADMAP.md; then
   sed -i.bak -E "s/^total_phases:.*$/total_phases: $NEW_TOTAL/" .jdi/ROADMAP.md
@@ -196,17 +265,11 @@ if grep -qE '^total_phases:' .jdi/ROADMAP.md; then
 fi
 ```
 
-### Step 7: Audit trail (only if `--reason` provided)
+**Audit trail** (only if `--reason`): append to `.jdi/DECISIONS.md`:
+`D-{YYYY-MM-DD}-{slug}-1: Phase '{name}' (slug: {slug}) added. Reason: {reason}.`
+(same date+slug amended same day → bump `-1` to `-2`).
 
-Append to `.jdi/DECISIONS.md` with deterministic ID format (collision-free across branches):
-
-```
-D-{YYYY-MM-DD}-{slug}-1: Phase '{name}' (slug: {slug}) added. Reason: {reason}.
-```
-
-If multiple decisions share the same date+slug+sequence (e.g. amended on same day), bump the trailing `-1` to `-2`, etc. Scope is per-day-per-slug, so two devs adding different phases on the same day produce non-colliding IDs.
-
-### Step 8: Commit
+**Commit:**
 
 ```bash
 git add .jdi/ROADMAP.md .jdi/DECISIONS.md

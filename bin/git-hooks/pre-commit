@@ -29,6 +29,38 @@ fi
 # not a JDI project? out
 [ -d .jdi ] || exit 0
 
+# --- conflict-free layout (v3): shared views are generated, never committed ---
+# With .jdi/roadmap/ present, the old single-file paths (ROADMAP.md,
+# DECISIONS.md, todos.md, registry tables) are untracked views rendered from
+# the per-entry dirs, and LEGACY* files are frozen history. Committing either
+# re-creates the multi-writer conflict class that v3 removes (server-side PR
+# merges ignore .gitattributes merge=union — layout is the only guarantee).
+if [ -d .jdi/roadmap ]; then
+  BAD_VIEWS=$(git diff --cached --name-only -- \
+    .jdi/ROADMAP.md .jdi/DECISIONS.md .jdi/todos.md .jdi/registry.md \
+    .jdi/specialists.md .jdi/reviewers.md .jdi/skills-registry.md \
+    '.jdi/roadmap/LEGACY*' '.jdi/decisions/LEGACY*' '.jdi/todos/LEGACY*' \
+    '.jdi/registry/LEGACY*')
+  if [ -n "$BAD_VIEWS" ]; then
+    echo "" >&2
+    echo "JDI GATE: commit touches generated views or frozen LEGACY files:" >&2
+    printf '  %s\n' $BAD_VIEWS >&2
+    echo "" >&2
+    echo "  These paths are single-file views of the per-entry dirs (conflict-free" >&2
+    echo "  layout v3). Write a per-entry file instead:" >&2
+    echo "    roadmap entry  -> .jdi/roadmap/<slug>.md" >&2
+    echo "    decision       -> .jdi/decisions/D-{YYYY-MM-DD}-{slug}-{seq}.md" >&2
+    echo "    todo batch     -> .jdi/todos/{YYYY-MM-DD}-{slug}.md" >&2
+    echo "    registry entry -> .jdi/registry/R-{YYYY-MM-DD}-{slug}.md" >&2
+    echo "  then refresh the views and unstage the old path:" >&2
+    echo "    npx -y jdi-cli render" >&2
+    printf '    git rm --cached %s\n' $BAD_VIEWS >&2
+    echo "" >&2
+    echo "  (humans only: JDI_GATE_DISABLE=1 to bypass; delegated agents must comply)" >&2
+    exit 1
+  fi
+fi
+
 # --- code globs (config or default) ------------------------------------------
 GLOBS=""
 if [ -f .jdi/config.json ]; then

@@ -47,6 +47,21 @@ jobs:
           CHANGED=$(git diff --name-only HEAD^1 HEAD)
           echo "--- files in PR ---"; echo "$CHANGED"; echo "-------------------"
 
+          # Conflict-free layout (v3): with .jdi/roadmap/ present, the old
+          # single-file paths are UNTRACKED views rendered from the per-entry
+          # dirs, and LEGACY* files are frozen history. A PR that commits any
+          # of them re-creates the multi-writer conflict class v3 removes
+          # (server-side PR merges ignore .gitattributes merge=union).
+          if [ -d .jdi/roadmap ]; then
+            BAD=$(echo "$CHANGED" | grep -E '^\.jdi/(ROADMAP\.md|DECISIONS\.md|todos\.md|registry\.md|specialists\.md|reviewers\.md|skills-registry\.md|(roadmap|decisions|todos|registry)/LEGACY[^/]*)$' || true)
+            if [ -n "$BAD" ]; then
+              echo "::error::PR commits generated views or frozen LEGACY files:"
+              echo "$BAD" | while IFS= read -r f; do echo "::error::  $f"; done
+              echo "::error::Write per-entry files instead (.jdi/roadmap/<slug>.md, .jdi/decisions/D-{date}-{slug}-{seq}.md, .jdi/todos/{date}-{slug}.md, .jdi/registry/R-{date}-{slug}.md), run 'npx -y jdi-cli render', and drop the old paths from the PR."
+              exit 1
+            fi
+          fi
+
           # code globs from .jdi/config.json (gate.code_globs) or default src/**
           GLOBS=""
           if [ -f .jdi/config.json ]; then
@@ -84,11 +99,20 @@ jobs:
             exit 1
           fi
 
+          # Pin the validator to the version this repo declares (.jdi/VERSION,
+          # written by `jdi-cli install`/`update`). Unpinned `npx -y jdi-cli`
+          # means @latest: a new release could flip a previously-valid PR red
+          # with zero repo change (0.12.0->0.12.1 did exactly that). The pin
+          # is self-maintaining — updating JDI moves it. Fallback: latest.
+          JDI_VER=$(tr -d '[:space:]' < .jdi/VERSION 2>/dev/null || true)
+          if [ -n "$JDI_VER" ]; then JDI_PIN="jdi-cli@$JDI_VER"; else JDI_PIN="jdi-cli"; fi
+          echo "validator: $JDI_PIN"
+
           FAIL=0
           for slug in $SLUGS; do
             echo ""
             echo "=== validate-phase $slug (--for-pr) ==="
-            npx -y jdi-cli validate-phase "$slug" --for-pr || FAIL=1
+            npx -y "$JDI_PIN" validate-phase "$slug" --for-pr || FAIL=1
           done
 
           exit $FAIL

@@ -46,6 +46,14 @@ if ($reserved -contains $Slug) {
 
 # --- Rule 3 + 4: uniqueness ---
 if ($CheckUnique) {
+  # Layout v3: one file per phase under .jdi/roadmap/ is the roadmap source
+  # of truth (ROADMAP.md is a rendered view of it, so checking the dir covers
+  # both). Filename = slug of record.
+  $layoutV3 = Test-Path .jdi/roadmap -PathType Container
+  if ($layoutV3 -and (Test-Path ".jdi/roadmap/$Slug.md")) {
+    Fail 3 "slug '$Slug' already listed in roadmap (.jdi/roadmap/$Slug.md)"
+  }
+
   if (Test-Path .jdi/phases) {
     $collisions = @()
     Get-ChildItem .jdi/phases -Directory -ErrorAction SilentlyContinue | ForEach-Object {
@@ -62,7 +70,9 @@ if ($CheckUnique) {
     }
   }
 
-  if (Test-Path .jdi/ROADMAP.md) {
+  # ROADMAP.md check skipped under layout v3 - there it is a rendered view of
+  # the dir already checked above (and may be stale on a fresh clone).
+  if (-not $layoutV3 -and (Test-Path .jdi/ROADMAP.md)) {
     $roadmap = Get-Content .jdi/ROADMAP.md
     foreach ($line in $roadmap) {
       if ($line -match '^- \*\*Slug:\*\*\s*(\S+)') {

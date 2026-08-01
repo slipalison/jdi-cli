@@ -30,6 +30,8 @@ None. Reads everything from `.jdi/PROJECT.md`.
 <process>
 
 ### Step 1: Validation
+
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 ```bash
 test -f .jdi/PROJECT.md || { echo "PROJECT.md missing. Run /jdi-new first."; exit 1; }
 test -f .jdi/ROADMAP.md || { echo "ROADMAP.md missing. Run /jdi-new first."; exit 1; }

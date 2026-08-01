@@ -280,7 +280,7 @@ function Build-JunieAgent {
   # allowlist (enforced by Junie) + reasoningLevel. Tools derive from the
   # claude override filtered to Junie's supported set; Agent/WebFetch/Skill
   # drop out (Junie delegates natively and has WebSearch only). Model is
-  # never emitted — Junie is LLM-agnostic and the user picks the model.
+  # never emitted - Junie is LLM-agnostic and the user picks the model.
   param([string]$SrcPath)
   $name = [System.IO.Path]::GetFileNameWithoutExtension($SrcPath)
   $dst  = Join-Path "$Out\junie\agents" "$name.md"
@@ -326,7 +326,7 @@ function Build-Command {
 
   Copy-Item -Path $SrcPath -Destination (Join-Path "$Out\claude\commands" "$name.md") -Force
   # copilot: prompts/<name>.prompt.md (VS Code slash) + skills/<name>/SKILL.md
-  # (Copilot CLI + cloud agent: Agent Skills GA Apr/2026 — the CLI does NOT
+  # (Copilot CLI + cloud agent: Agent Skills GA Apr/2026 - the CLI does NOT
   # read .github/prompts/, so skills are the CLI's discovery path)
   Copy-Item -Path $SrcPath -Destination (Join-Path "$Out\copilot\prompts" "$name.prompt.md") -Force
   $copilotSkillDir = Join-Path "$Out\copilot\skills" $name
@@ -339,7 +339,7 @@ function Build-Command {
 
   Copy-Item -Path $SrcPath -Destination (Join-Path "$Out\opencode\commands" "$name.md") -Force
 
-  # junie: skills/<name>/SKILL.md (semantic discovery — NOT a custom command:
+  # junie: skills/<name>/SKILL.md (semantic discovery - NOT a custom command:
   # Junie template args would treat the body's $VARS as required parameters)
   $junieSkillDir = Join-Path "$Out\junie\skills" $name
   New-Item -ItemType Directory -Force -Path $junieSkillDir | Out-Null
