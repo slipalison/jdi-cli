@@ -77,11 +77,39 @@ function getScriptPath(name) {
 // reads BOM-less scripts as ANSI (cp1252), which turns any non-ASCII byte
 // into parser garbage (issue #24). The scripts are additionally kept
 // ASCII-only (enforced by a publish guard) so the 5.1 fallback stays safe.
+//
+// Resolution uses fixed, admin-writable-only locations instead of probing the
+// PATH (S4036 — a writable dir earlier in PATH could shadow `pwsh`):
+// Program Files\PowerShell\<major>\pwsh.exe (MSI/winget default; highest
+// version wins), then System32 WindowsPowerShell 5.1 (always present).
 let cachedPowerShell = null;
 function resolvePowerShell() {
   if (cachedPowerShell) return cachedPowerShell;
-  const probe = spawnSync('pwsh', ['-NoProfile', '-Command', '$PSVersionTable.PSVersion.Major'], { stdio: 'ignore' });
-  cachedPowerShell = probe.status === 0 ? 'pwsh' : 'powershell.exe';
+
+  const pwshRoot = path.join(process.env.ProgramFiles || 'C:\\Program Files', 'PowerShell');
+  let best = null;
+  try {
+    for (const entry of fs.readdirSync(pwshRoot)) {
+      if (!/^\d+$/.test(entry)) continue;
+      const candidate = path.join(pwshRoot, entry, 'pwsh.exe');
+      if (fs.existsSync(candidate) && (!best || Number(entry) > best.ver)) {
+        best = { ver: Number(entry), path: candidate };
+      }
+    }
+  } catch {
+    // Program Files\PowerShell absent — no PS7 installed system-wide
+  }
+
+  if (best) {
+    cachedPowerShell = best.path;
+    return cachedPowerShell;
+  }
+
+  const ps51 = path.join(
+    process.env.SystemRoot || 'C:\\Windows',
+    'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'
+  );
+  cachedPowerShell = fs.existsSync(ps51) ? ps51 : 'powershell.exe';
   return cachedPowerShell;
 }
 
