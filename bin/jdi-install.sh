@@ -41,7 +41,7 @@ install_claude() {
     cp -R "$ROOT/runtimes/claude/skills/." "$dest/skills/"
   fi
 
-  if [[ "$SCOPE" == "project" ]]; then
+  if [[ "$SCOPE" == "$SCOPE_PROJECT" ]]; then
     cp "$ROOT/runtimes/claude/CLAUDE.md" "$PWD/CLAUDE.md"
     if [[ -f "$ROOT/runtimes/claude/settings.example.json" ]]; then
       mkdir -p "$dest"
@@ -99,7 +99,7 @@ install_antigravity() {
   mkdir -p "$dest/skills"
   cp -R "$ROOT/runtimes/antigravity/skills/." "$dest/skills/"
 
-  if [[ "$SCOPE" == "project" ]]; then
+  if [[ "$SCOPE" == "$SCOPE_PROJECT" ]]; then
     cp "$ROOT/runtimes/antigravity/agents.md" "$dest/agents.md"
   fi
 
@@ -132,7 +132,7 @@ install_opencode() {
     cp -R "$ROOT/runtimes/opencode/skills/." "$dest/skills/" 2>/dev/null || true
   fi
 
-  if [[ "$SCOPE" == "project" ]]; then
+  if [[ "$SCOPE" == "$SCOPE_PROJECT" ]]; then
     cp "$ROOT/runtimes/opencode/AGENTS.md" "$PWD/AGENTS.md"
     if [[ ! -f "$dest/opencode.jsonc" ]]; then
       cp "$ROOT/runtimes/opencode/opencode.example.jsonc" "$dest/opencode.jsonc"
@@ -175,7 +175,7 @@ install_junie() {
   cp -R "$ROOT/runtimes/junie/agents/." "$dest/agents/"
   cp -R "$ROOT/runtimes/junie/skills/." "$dest/skills/"
 
-  if [[ "$SCOPE" == "project" ]]; then
+  if [[ "$SCOPE" == "$SCOPE_PROJECT" ]]; then
     cp "$ROOT/runtimes/junie/AGENTS.md" "$dest/AGENTS.md"
     # Specialists gerados pelo bootstrap: Junie delega por .junie/agents/
     if ls "$PWD/.jdi/agents/"jdi-*.md >/dev/null 2>&1; then

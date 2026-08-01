@@ -43,11 +43,11 @@ set +e
 RESOLVED="$(bash "$SCRIPT_DIR/jdi-resolve-phase.sh" "$PHASE_ID" 2>/dev/null)"
 RESOLVE_RC=$?
 set -e
-if [ "$RESOLVE_RC" -ne 0 ] || [ -z "$RESOLVED" ]; then
+if [[ "$RESOLVE_RC" -ne 0 || -z "$RESOLVED" ]]; then
   # Distinguish "resolver could not run" from "phase genuinely not found":
   # rc 2 is the resolver's own "not found in ROADMAP" exit; anything else
   # (missing file, non-exec, .jdi absent) is an execution failure.
-  if [ "$RESOLVE_RC" -eq 2 ]; then
+  if [[ "$RESOLVE_RC" -eq 2 ]]; then
     echo "[fail] phase '$PHASE_ID' not found in ROADMAP.md"
   else
     echo "[fail] could not run the phase resolver (rc=$RESOLVE_RC) — is this a JDI project with .jdi/ROADMAP.md?"
@@ -61,7 +61,11 @@ DIR="$JDI_PHASE_DIR"
 FAILS=0
 STATUS="pending"
 
-say() { [[ "$QUIET" -eq 1 ]] || echo "$1"; }
+say() {
+  local msg="$1"
+  [[ "$QUIET" -eq 1 ]] || echo "$msg"
+  return 0
+}
 
 # check <file> <derived-status> <fix-hint> <marker-desc> <grep-args...>
 # Present + all markers found -> ok (updates STATUS).

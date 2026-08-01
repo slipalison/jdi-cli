@@ -95,7 +95,10 @@ if [[ "$LAYOUT_V3" == true ]]; then
     for f in .jdi/roadmap/*.md; do
       [[ -f "$f" ]] || continue
       base="$(basename "$f")"
-      case "$base" in _*|LEGACY*) continue ;; esac
+      case "$base" in
+        _*|LEGACY*) continue ;;
+        *) ;;
+      esac
       slug="${base%.md}"
       order=$(awk '
         { sub(/\r$/, "") }

@@ -109,7 +109,7 @@ function resolvePowerShell() {
 
   const localAppData = process.env.LOCALAPPDATA || '';
   const candidates = [
-    newestPwshUnder(path.join(process.env.ProgramFiles || 'C:\\Program Files', 'PowerShell')),
+    newestPwshUnder(path.join(process.env.ProgramFiles || String.raw`C:\Program Files`, 'PowerShell')),
     localAppData && newestPwshUnder(path.join(localAppData, 'Programs', 'PowerShell')),
     localAppData && path.join(localAppData, 'Microsoft', 'WindowsApps', 'pwsh.exe'),
     process.env.USERPROFILE && path.join(process.env.USERPROFILE, '.dotnet', 'tools', 'pwsh.exe'),
@@ -122,7 +122,7 @@ function resolvePowerShell() {
   }
 
   const ps51 = path.join(
-    process.env.SystemRoot || 'C:\\Windows',
+    process.env.SystemRoot || String.raw`C:\Windows`,
     'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'
   );
   cachedPowerShell = fs.existsSync(ps51) ? ps51 : 'powershell.exe';
