@@ -106,6 +106,28 @@ jobs:
           fi
           echo "All shell scripts + git hooks are executable (100755)."
 
+      - name: Verify .ps1 scripts are ASCII-only (PS 5.1 safety)
+        shell: bash
+        run: |
+          # Windows PowerShell 5.1 decodes BOM-less .ps1 as ANSI (cp1252):
+          # a single em dash decoded as cp1252 yields a smart quote that the
+          # parser treats as a string delimiter and the whole script fails to
+          # parse (issue #24). jdi.js prefers pwsh when present, but 5.1 is
+          # the fallback on stock Windows — so scripts must stay ASCII-only.
+          set -euo pipefail
+          BAD=""
+          while IFS= read -r f; do
+            if LC_ALL=C grep -qP '[^\x00-\x7F]' "$f"; then
+              BAD="$BAD$f"$'\n'
+            fi
+          done < <(git ls-files '*.ps1')
+          if [ -n "$BAD" ]; then
+            echo "::error::These .ps1 files contain non-ASCII bytes (PS 5.1 reads BOM-less files as ANSI and breaks). Replace with ASCII:"
+            printf '%s' "$BAD"
+            exit 1
+          fi
+          echo "All tracked .ps1 files are ASCII-only."
+
       - name: Verify package contents (dry-run)
         shell: bash
         run: npm publish --dry-run

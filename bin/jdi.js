@@ -72,6 +72,19 @@ function getScriptPath(name) {
   return path.join(PKG_ROOT, 'bin', `${name}${ext}`);
 }
 
+// Prefer PowerShell 7 (pwsh) when available: it decodes BOM-less UTF-8 .ps1
+// correctly and is the actively developed PowerShell. Windows PowerShell 5.1
+// reads BOM-less scripts as ANSI (cp1252), which turns any non-ASCII byte
+// into parser garbage (issue #24). The scripts are additionally kept
+// ASCII-only (enforced by a publish guard) so the 5.1 fallback stays safe.
+let cachedPowerShell = null;
+function resolvePowerShell() {
+  if (cachedPowerShell) return cachedPowerShell;
+  const probe = spawnSync('pwsh', ['-NoProfile', '-Command', '$PSVersionTable.PSVersion.Major'], { stdio: 'ignore' });
+  cachedPowerShell = probe.status === 0 ? 'pwsh' : 'powershell.exe';
+  return cachedPowerShell;
+}
+
 function runShellScript(scriptName, scriptArgs = []) {
   const scriptPath = getScriptPath(scriptName);
 
@@ -82,7 +95,7 @@ function runShellScript(scriptName, scriptArgs = []) {
 
   let cmd, args;
   if (isWindows) {
-    cmd = 'powershell.exe';
+    cmd = resolvePowerShell();
     args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, ...scriptArgs];
   } else {
     cmd = 'bash';
@@ -115,8 +128,13 @@ function runLibScript(baseName, scriptArgs = [], opts = {}) {
 
   let cmd, args;
   if (isWindows) {
-    cmd = 'powershell.exe';
-    args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, ...scriptArgs];
+    cmd = resolvePowerShell();
+    // The bash helpers parse GNU --flags themselves; the PowerShell ports
+    // declare idiomatic [switch]/PascalCase parameters. Translate at this
+    // single boundary so `--check-unique` binds to `-CheckUnique` etc.
+    // (issue #24 bug 2 — every lib helper invoked with a flag failed on
+    // Windows because the binder saw the literal `--flag`).
+    args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, ...toPsArgs(scriptArgs)];
   } else {
     cmd = 'bash';
     args = [scriptPath, ...scriptArgs];
@@ -187,11 +205,10 @@ function toPsArgs(rawArgs) {
   );
 }
 
-// Like cmdLibPassthrough but zero-arg friendly (render / migrate-layout) and
-// flag-mapped for the PowerShell side.
+// Like cmdLibPassthrough but zero-arg friendly (render / migrate-layout).
+// Flag mapping for the PowerShell side happens inside runLibScript.
 function cmdLibZeroArg(baseName, rawArgs) {
-  const args = isWindows ? toPsArgs(rawArgs) : rawArgs;
-  const { code } = runLibScript(baseName, args);
+  const { code } = runLibScript(baseName, rawArgs);
   process.exit(code);
 }
 

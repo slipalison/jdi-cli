@@ -93,7 +93,7 @@ function Install-Copilot {
     foreach ($wf in (Get-ChildItem "$Root\runtimes\copilot\workflows" -Filter '*.yml')) {
       $target = Join-Path "$dest\workflows" $wf.Name
       if (Test-Path $target) {
-        Write-Output "  -> workflows/$($wf.Name) ja existe — preservado (compare com runtimes/copilot/workflows/)"
+        Write-Output "  -> workflows/$($wf.Name) ja existe - preservado (compare com runtimes/copilot/workflows/)"
       } else {
         Copy-Item -Path $wf.FullName -Destination $target
         Write-Output "  -> workflows/$($wf.Name) instalado"
@@ -178,7 +178,7 @@ function Install-Junie {
   # Junie CLI (JetBrains, beta 2026): commands sao SKILLS (semantic discovery,
   # .junie/skills/<n>/SKILL.md) e agents sao SUBAGENTS (.junie/agents/<n>.md,
   # tools allowlist enforced). Custom commands do Junie exigem args nomeados
-  # obrigatorios — incompativel com os corpos JDI; skills nao tem o problema.
+  # obrigatorios - incompativel com os corpos JDI; skills nao tem o problema.
   $dest = if ($Scope -eq 'user') { Join-Path $UserHome '.junie' } else { Join-Path $ProjectDir '.junie' }
   New-Item -ItemType Directory -Force -Path "$dest\agents" | Out-Null
   New-Item -ItemType Directory -Force -Path "$dest\skills" | Out-Null

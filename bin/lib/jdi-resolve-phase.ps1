@@ -14,7 +14,7 @@
 #   0  resolved
 #   1  invalid input
 #   2  phase not found in ROADMAP
-#   3  .jdi/ROADMAP.md missing (STATE.md is optional — untracked advisory cache)
+#   3  .jdi/ROADMAP.md missing (STATE.md is optional - untracked advisory cache)
 #   4  multiple folder candidates (corrupt state)
 
 [CmdletBinding()]
@@ -56,7 +56,7 @@ if (-not $layoutV3 -and -not (Test-Path .jdi/ROADMAP.md)) {
 }
 
 # --- Schema detection ---
-# STATE.md is an untracked advisory cache (0.3.0+) — absence is normal on a
+# STATE.md is an untracked advisory cache (0.3.0+) - absence is normal on a
 # fresh clone and only schema_version is read from it. Missing file implies
 # v2: legacy v1 projects always track STATE.md in git.
 $schemaVersion = 2

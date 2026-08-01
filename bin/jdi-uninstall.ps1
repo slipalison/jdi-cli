@@ -199,7 +199,7 @@ function Uninstall-Copilot {
 function Uninstall-Antigravity {
   param([string]$ScopeChoice)
   # Cobre AMBAS as geracoes: 2.0 (.agents/skills, ~/.gemini/config/skills)
-  # e legado 1.x (.gemini/antigravity) — limpa o que existir.
+  # e legado 1.x (.gemini/antigravity) - limpa o que existir.
   $antigravityAction = {
     param($t)
     $skillsDir = Join-Path $t.Dir 'skills'

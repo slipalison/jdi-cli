@@ -80,6 +80,34 @@ semantics) pass with zero conflicts.
   `--flags` for these are mapped to PowerShell `-PascalCase` parameters at
   the dispatch boundary.
 
+### Fixed
+- **Windows PowerShell 5.1 could not run the CLI at all** (#24, two
+  independent bugs on stock Windows):
+  1. The `.ps1` scripts are BOM-less UTF-8 and `jdi.js` spawned
+     `powershell.exe` (5.1), which decodes BOM-less files as ANSI — an em
+     dash (`E2 80 94`) decoded as cp1252 ends in `0x94` (a smart quote the
+     parser accepts as a string delimiter), so `install`, `doctor`,
+     `uninstall`, `build` and the lib helpers failed to parse. Fixed at the
+     root: all 22 non-ASCII characters across 6 `.ps1` files replaced with
+     ASCII, `jdi.js` now **prefers `pwsh` (PowerShell 7)** when available
+     and falls back to 5.1, and a publish guard fails the release if any
+     tracked `.ps1` regresses to non-ASCII. Bonus found by parsing every
+     script with the real 5.1 parser: `validate-phase.ps1` used the PS 7-only
+     `??` operator — replaced with a 5.1-safe null check (all 16 `.ps1` now
+     parse clean on 5.1, verified).
+  2. GNU-style `--flags` were forwarded verbatim to `.ps1` helpers that
+     declare idiomatic `[switch]`/PascalCase parameters — the 5.1/7 binder
+     rejected `-check-unique` as an unknown parameter, breaking every lib
+     helper invoked with a flag (including `/jdi-add-phase`'s documented
+     `validate-slug --check-unique`). `jdi.js` now maps kebab `--foo-bar` →
+     `-FooBar` at the single dispatch boundary (`runLibScript`).
+- **`jdi-artifacts-gate.yml` now pins `validate-phase` to `.jdi/VERSION`**
+  (#23): unpinned `npx -y jdi-cli` meant `@latest`, so a new release could
+  flip a previously-valid `copilot/*` PR red with zero repo change (the
+  0.12.0→0.12.1 window did exactly that). The gate reads the version the
+  repo declares (written by `install`/`update`, self-maintaining) and falls
+  back to latest when absent.
+
 ## [0.12.1] - 2026-07-23
 
 Packaging hotfix for the 0.12.0 delegated-agent surface. First real adopter
