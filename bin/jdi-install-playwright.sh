@@ -73,10 +73,12 @@ install_pw_dep() {
   echo "  Installing @playwright/test via $pm..."
 
   case "$pm" in
-    pnpm) pnpm add -D @playwright/test ;;
-    yarn) yarn add -D @playwright/test ;;
-    bun)  bun add -d @playwright/test ;;
-    *)    npm install --save-dev @playwright/test ;;
+    # --ignore-scripts (S6505): @playwright/test needs no lifecycle scripts --
+    # browsers install via the explicit 'playwright install' step below.
+    pnpm) pnpm add -D --ignore-scripts @playwright/test ;;
+    yarn) yarn add -D --ignore-scripts @playwright/test ;;
+    bun)  bun add -d --ignore-scripts @playwright/test ;;
+    *)    npm install --save-dev --ignore-scripts @playwright/test ;;
   esac
 }
 
@@ -86,7 +88,8 @@ install_chromium() {
     return 0
   fi
   echo "  Installing chromium browser (~170MB, may take a minute)..."
-  npx --yes playwright install chromium || {
+  # Run the locally installed binary -- no on-demand npx package execution (S6505)
+  "$PROJECT_DIR/node_modules/.bin/playwright" install chromium || {
     echo "  [warn] chromium install failed. Rerun later: npx playwright install chromium"
     return 0
   }

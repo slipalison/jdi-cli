@@ -1,7 +1,7 @@
 {
   "name": "jdi-cli",
   "version": "0.13.2",
-  "description": "JDI (Just Do It) — lean workflow toolkit for Claude Code, GitHub Copilot, Antigravity, OpenCode, and JetBrains Junie. 17 slash commands (/jdi-issue autonomous intake + /jdi-next auto-router + 7 loop + ralph + adopt + meta + roadmap mutation + DoD confirm), 7 core agents (incl. jdi-solo for delegated coding-agent sessions) + N per-project specialists with file-glob routing. Definition of Done as reviewer Gate 8. Mechanical artifact gates (validate-phase + pre-commit + CI workflow) for autonomous agents. Optional Playwright MCP + Caveman plugin install.",
+  "description": "JDI (Just Do It) — lean workflow toolkit for Claude Code, GitHub Copilot, Antigravity, OpenCode, and JetBrains Junie. 17 slash commands (/jdi-issue autonomous intake + /jdi-next auto-router + 7 loop + ralph + adopt + meta + roadmap mutation + DoD confirm), 7 core agents (incl. jdi-solo for delegated coding-agent sessions) + N per-project specialists with file-glob routing. Conflict-free .jdi state layout (one file = one writer — server-side PR merges ignore merge=union; migrate-layout for existing projects). Definition of Done as reviewer Gate 8. Mechanical artifact gates (validate-phase + pre-commit + CI workflow) for autonomous agents. Optional Playwright MCP + Caveman plugin install.",
   "bin": {
     "jdi": "bin/jdi.js"
   },
@@ -66,6 +66,6 @@
   "scripts": {
     "build": "node bin/jdi.js build",
     "doctor": "node bin/jdi.js doctor",
-    "test:local": "npm pack && echo 'Package generated. Test with: npx ./jdi-cli-1.4.0.tgz install <runtime>'"
+    "test:local": "npm pack && node -e \"console.log('Package generated. Test with: npx ./jdi-cli-' + require('./package.json').version + '.tgz install <runtime>')\""
   }
 }

@@ -58,7 +58,11 @@ for arg in "$@"; do
   esac
 done
 
-say() { [[ "$QUIET" -eq 1 ]] || echo "$1"; }
+say() {
+  local msg="$1"
+  [[ "$QUIET" -eq 1 ]] || echo "$msg"
+  return 0
+}
 
 # Not a JDI project or not migrated to v3 — nothing to render, by design.
 [[ -d .jdi ]] || exit 0
@@ -71,7 +75,11 @@ trap 'rm -rf "$TMPDIR_R"' EXIT
 # cat a file normalizing CRLF -> LF and guaranteeing a trailing newline, so
 # the rendered views are byte-identical regardless of who wrote the entries
 # (Windows agents write CRLF; the .sh and .ps1 renderers must agree).
-cat_nl() { awk '{ sub(/\r$/, ""); print }' "$1"; }
+cat_nl() {
+  local file="$1"
+  awk '{ sub(/\r$/, ""); print }' "$file"
+  return $?
+}
 
 # List entry files of a dir, C-sorted, skipping LEGACY*, _*, hidden, non-.md.
 entries_of() {
@@ -80,6 +88,7 @@ entries_of() {
     | LC_ALL=C sort \
     | grep -E '\.md$' \
     | grep -vE '^(LEGACY|_)' || true
+  return 0
 }
 
 # Extract a fenced section from a registry entry file.
@@ -87,22 +96,26 @@ section_of() {
   local file="$1" name="$2"
   awk -v s="<!-- jdi:${name} -->" -v e="<!-- /jdi:${name} -->" \
     '{ sub(/\r$/, "") } $0 == s { f = 1; next } $0 == e { f = 0 } f' "$file"
+  return $?
 }
 
 # Frontmatter field (first block between --- lines): field_of <file> <key>
 field_of() {
-  awk -v key="$2" '
+  local file="$1" key="$2"
+  awk -v key="$key" '
     { sub(/\r$/, "") }
     NR == 1 && $0 == "---" { fm = 1; next }
     fm && $0 == "---" { exit }
     fm && index($0, key ":") == 1 {
       sub("^" key ":[[:space:]]*", ""); print; exit
     }
-  ' "$1"
+  ' "$file"
+  return $?
 }
 
 # Body after the frontmatter block, stripped of leading blank lines.
 body_of() {
+  local file="$1"
   awk '
     { sub(/\r$/, "") }
     NR == 1 && $0 == "---" { fm = 1; next }
@@ -115,7 +128,8 @@ body_of() {
       while (end >= start && lines[end] == "") end--
       for (i = start; i <= end; i++) print lines[i]
     }
-  ' "$1"
+  ' "$file"
+  return $?
 }
 
 # Install a rendered view: absent or banner-first-line -> write; else refuse.
@@ -141,6 +155,7 @@ install_view() {
   fi
   mv "$tmp" "$target"
   say "[render] $target"
+  return 0
 }
 
 # --- ROADMAP.md <- .jdi/roadmap/ -----------------------------------------
@@ -207,6 +222,7 @@ EOF
   } > "$out"
 
   install_view "$out" ".jdi/ROADMAP.md"
+  return 0
 }
 
 # --- concat views (DECISIONS.md, todos.md) --------------------------------
@@ -235,6 +251,7 @@ EOF
   } > "$out"
 
   install_view "$out" "$target"
+  return 0
 }
 
 # --- registry-group views <- .jdi/registry/ -------------------------------
@@ -266,6 +283,7 @@ EOF
   } > "$out"
 
   install_view "$out" "$target"
+  return 0
 }
 
 render_registry_group() {
@@ -293,6 +311,7 @@ Audit trail of every specialist/agent created for this project.'
 
 | Skill | Path | Quando aplicar | Loaded by |
 |---|---|---|---|'
+  return 0
 }
 
 # --- run ------------------------------------------------------------------

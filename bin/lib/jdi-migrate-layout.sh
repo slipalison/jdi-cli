@@ -48,8 +48,16 @@ for arg in "$@"; do
   esac
 done
 
-fail() { echo "ERROR: $1" >&2; exit 1; }
-act()  { echo "  $1"; }
+fail() {
+  local msg="$1"
+  echo "ERROR: $msg" >&2
+  exit 1
+}
+act() {
+  local msg="$1"
+  echo "  $msg"
+  return 0
+}
 
 [[ -d .jdi ]] || fail "no .jdi/ here — run from the project root of a JDI project"
 git rev-parse --git-dir >/dev/null 2>&1 || fail "not a git repository — v3 migration rewires git tracking"
@@ -73,12 +81,16 @@ echo "migrate-layout: legacy shared files -> conflict-free per-entry layout (v3)
 [[ "$DRY" -eq 1 ]] && echo "(dry-run — no changes)"
 
 # Track helpers as no-ops in dry-run.
-run() { if [[ "$DRY" -eq 1 ]]; then act "would: $*"; else "$@"; fi; }
+run() {
+  if [[ "$DRY" -eq 1 ]]; then act "would: $*"; else "$@"; fi
+  return $?
+}
 
 ignore_add() {
   local pattern="$1"
   if grep -qxF "$pattern" .gitignore 2>/dev/null; then return 0; fi
   if [[ "$DRY" -eq 1 ]]; then act "would: gitignore $pattern"; else echo "$pattern" >> .gitignore; fi
+  return 0
 }
 
 # git mv that tolerates untracked sources (mv + add) and is a no-op when the
@@ -94,6 +106,7 @@ move_frozen() {
   else
     mv -f "$src" "$dst"
   fi
+  return 0
 }
 
 # --- 1. ROADMAP.md -> .jdi/roadmap/<slug>.md ------------------------------

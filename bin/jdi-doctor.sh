@@ -24,6 +24,7 @@ PROJECT_DIR="$PWD"
 
 # Literais repetidos extraidos pra constante (S1192)
 readonly JDI_AGENT_GLOB='jdi-*.md'
+readonly SKILL_FILE_NAME='SKILL.md'
 readonly PLAYWRIGHT_KEY='"playwright"'
 
 # Cores (sem cor se nao for tty)
@@ -183,7 +184,7 @@ for rt in claude copilot antigravity opencode; do
     case "$rt" in
       claude)      count=$(find "$JDI_ROOT/runtimes/claude/agents" -name "*.md" 2>/dev/null | wc -l | tr -d ' ') ;;
       copilot)     count=$(find "$JDI_ROOT/runtimes/copilot/agents" -name "*.agent.md" 2>/dev/null | wc -l | tr -d ' ') ;;
-      antigravity) count=$(find "$JDI_ROOT/runtimes/antigravity/skills" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ') ;;
+      antigravity) count=$(find "$JDI_ROOT/runtimes/antigravity/skills" -name "$SKILL_FILE_NAME" 2>/dev/null | wc -l | tr -d ' ') ;;
       opencode)    count=$(find "$JDI_ROOT/runtimes/opencode/agents" -name "*.md" 2>/dev/null | wc -l | tr -d ' ') ;;
       *)           count=0 ;;
     esac
@@ -296,7 +297,7 @@ if [[ -d "$PROJECT_DIR/.github/agents" ]]; then
 fi
 
 if [[ -d "$PROJECT_DIR/.github/skills" ]]; then
-  count=$(find "$PROJECT_DIR/.github/skills" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ')
+  count=$(find "$PROJECT_DIR/.github/skills" -name "$SKILL_FILE_NAME" 2>/dev/null | wc -l | tr -d ' ')
   if [[ "$count" -gt 0 ]]; then
     ok ".github/skills/ com $count skills JDI (Copilot CLI + coding agent)"
     INSTALL_FOUND=true
@@ -306,7 +307,7 @@ elif [[ -d "$PROJECT_DIR/.github/prompts" ]] && ls "$PROJECT_DIR/.github/prompts
 fi
 
 if [[ -d "$PROJECT_DIR/.agents/skills" ]]; then
-  count=$(find "$PROJECT_DIR/.agents/skills" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ')
+  count=$(find "$PROJECT_DIR/.agents/skills" -name "$SKILL_FILE_NAME" 2>/dev/null | wc -l | tr -d ' ')
   if [[ "$count" -gt 0 ]]; then
     ok ".agents/skills/ com $count skills JDI (Antigravity 2.0)"
     INSTALL_FOUND=true
@@ -314,7 +315,7 @@ if [[ -d "$PROJECT_DIR/.agents/skills" ]]; then
 fi
 
 if [[ -d "$PROJECT_DIR/.gemini/antigravity/skills" ]]; then
-  count=$(find "$PROJECT_DIR/.gemini/antigravity/skills" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ')
+  count=$(find "$PROJECT_DIR/.gemini/antigravity/skills" -name "$SKILL_FILE_NAME" 2>/dev/null | wc -l | tr -d ' ')
   if [[ "$count" -gt 0 ]]; then
     warn ".gemini/antigravity/skills/ com $count skills JDI (1.x legado — o 2.0 nao le; 'jdi update' migra)"
     INSTALL_FOUND=true
@@ -322,7 +323,7 @@ if [[ -d "$PROJECT_DIR/.gemini/antigravity/skills" ]]; then
 fi
 
 if [[ -d "$PROJECT_DIR/.junie/skills" ]]; then
-  count=$(find "$PROJECT_DIR/.junie/skills" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ')
+  count=$(find "$PROJECT_DIR/.junie/skills" -name "$SKILL_FILE_NAME" 2>/dev/null | wc -l | tr -d ' ')
   if [[ "$count" -gt 0 ]]; then
     ok ".junie/skills/ com $count skills JDI"
     INSTALL_FOUND=true

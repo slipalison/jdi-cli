@@ -87,28 +87,30 @@ function Get-FmField([string]$path, [string]$key) {
   return ''
 }
 
+# Lines after the first frontmatter block. No leading '---' -> all lines;
+# unterminated frontmatter -> nothing (matches the .sh awk).
+function Remove-FrontMatter([string[]]$lines) {
+  if ($lines.Count -eq 0 -or $lines[0] -ne '---') { return ,$lines }
+  for ($i = 1; $i -lt $lines.Count; $i++) {
+    if ($lines[$i] -ne '---') { continue }
+    if ($i + 1 -ge $lines.Count) { return ,@() }
+    return ,($lines[($i + 1)..($lines.Count - 1)])
+  }
+  return ,@()
+}
+
+function Select-TrimmedLines([string[]]$lines) {
+  $start = 0
+  while ($start -lt $lines.Count -and $lines[$start] -eq '') { $start++ }
+  $end = $lines.Count - 1
+  while ($end -ge $start -and $lines[$end] -eq '') { $end-- }
+  if ($end -lt $start) { return ,@() }
+  return ,($lines[$start..$end])
+}
+
 # Body after the frontmatter block, leading/trailing blank lines trimmed.
 function Get-Body([string]$path) {
-  $lines = Get-NormalizedLines $path
-  $body = New-Object System.Collections.Generic.List[string]
-  $fm = 0
-  foreach ($line in $lines) {
-    if ($fm -eq 0) {
-      if ($line -eq '---') { $fm = 1; continue }
-      $fm = 3
-    }
-    if ($fm -eq 1) {
-      if ($line -eq '---') { $fm = 2; continue }
-      continue
-    }
-    $body.Add($line)
-  }
-  $start = 0
-  while ($start -lt $body.Count -and $body[$start] -eq '') { $start++ }
-  $end = $body.Count - 1
-  while ($end -ge $start -and $body[$end] -eq '') { $end-- }
-  if ($end -lt $start) { return @() }
-  return $body.GetRange($start, $end - $start + 1)
+  return Select-TrimmedLines (Remove-FrontMatter (Get-NormalizedLines $path))
 }
 
 # Install a rendered view (content = full text WITH trailing newline).
@@ -150,6 +152,56 @@ function Install-View([string]$content, [string]$target) {
 
 # --- ROADMAP.md <- .jdi/roadmap/ -----------------------------------------
 
+# Parsed `order:` of a roadmap entry; 999999 + warn when missing/unparsable.
+function Get-EntryOrder([string]$path) {
+  $orderRaw = Get-FmField $path 'order'
+  if ($orderRaw -ne '') {
+    $parsed = 0.0
+    if ([double]::TryParse($orderRaw, [System.Globalization.NumberStyles]::Float,
+        [System.Globalization.CultureInfo]::InvariantCulture, [ref]$parsed)) {
+      return $parsed
+    }
+  }
+  Warn "[warn] $path has no 'order:' frontmatter - sorted last"
+  return [double]999999
+}
+
+# Roadmap entries as (Order, Slug, Name), sorted by (order asc, slug ordinal
+# asc). Explicit comparison sort: PS 5.1 Sort-Object is neither guaranteed
+# stable nor ordinal on strings; the .sh side is LC_ALL=C (ordinal).
+function Get-RoadmapItems([string]$dir) {
+  $items = @()
+  foreach ($f in (Get-Entries $dir)) {
+    $slug = $f -replace '\.md$', ''
+    $order = Get-EntryOrder "$dir/$f"
+    $name = Get-FmField "$dir/$f" 'name'
+    if ($name -eq '') { $name = $slug }
+    $items += [PSCustomObject]@{ Order = $order; Slug = $slug; Name = $name }
+  }
+  [Array]::Sort($items, [System.Comparison[object]]{
+    param($a, $b)
+    $c = $a.Order.CompareTo($b.Order)
+    if ($c -ne 0) { return $c }
+    return [string]::CompareOrdinal($a.Slug, $b.Slug)
+  })
+  return ,$items
+}
+
+# Emit one ranked phase block; warns when the body's Slug field disagrees
+# with the filename (filename wins).
+function Add-PhaseBlock([System.Text.StringBuilder]$sb, [int]$rank, $it, [string]$dir) {
+  [void]$sb.Append("`n### Phase $($rank): $($it.Name)`n")
+  foreach ($line in (Get-Body "$dir/$($it.Slug).md")) {
+    [void]$sb.Append($line + "`n")
+    if ($line -match '^- \*\*Slug:\*\*\s*(.*)$') {
+      $declared = $Matches[1].Trim()
+      if ($declared -ne '' -and $declared -ne $it.Slug) {
+        Warn "[warn] $dir/$($it.Slug).md declares Slug '$declared' (filename wins)"
+      }
+    }
+  }
+}
+
 function Render-Roadmap {
   $dir = '.jdi/roadmap'
   if (-not (Test-Path $dir -PathType Container)) { return }
@@ -163,57 +215,15 @@ function Render-Roadmap {
     [void]$sb.Append("# Roadmap`n`n## Phases`n")
   }
 
-  $items = @()
-  foreach ($f in (Get-Entries $dir)) {
-    $slug = $f -replace '\.md$', ''
-    $orderRaw = Get-FmField "$dir/$f" 'order'
-    $name = Get-FmField "$dir/$f" 'name'
-    $order = [double]999999
-    if ($orderRaw -eq '') {
-      Warn "[warn] $dir/$f has no 'order:' frontmatter - sorted last"
-    }
-    else {
-      $parsed = 0.0
-      if ([double]::TryParse($orderRaw, [System.Globalization.NumberStyles]::Float,
-          [System.Globalization.CultureInfo]::InvariantCulture, [ref]$parsed)) {
-        $order = $parsed
-      }
-      else {
-        Warn "[warn] $dir/$f has no 'order:' frontmatter - sorted last"
-      }
-    }
-    if ($name -eq '') { $name = $slug }
-    $items += [PSCustomObject]@{ Order = $order; Slug = $slug; Name = $name }
-  }
-
-  # Explicit comparison sort: PS 5.1 Sort-Object is neither guaranteed stable
-  # nor ordinal on strings; the .sh side is LC_ALL=C (ordinal). Parity first.
-  $sorted = @($items)
-  [Array]::Sort($sorted, [System.Comparison[object]]{
-    param($a, $b)
-    $c = $a.Order.CompareTo($b.Order)
-    if ($c -ne 0) { return $c }
-    return [string]::CompareOrdinal($a.Slug, $b.Slug)
-  })
-
   $rank = 0
   $prevOrder = $null
-  foreach ($it in $sorted) {
+  foreach ($it in (Get-RoadmapItems $dir)) {
     $rank++
     if ($null -ne $prevOrder -and $it.Order -eq $prevOrder) {
       Warn "[warn] duplicate order '$($it.Order)' in $dir/ (concurrent add) - stable slug tie-break applied; renumber when convenient"
     }
     $prevOrder = $it.Order
-    [void]$sb.Append("`n### Phase $($rank): $($it.Name)`n")
-    foreach ($line in (Get-Body "$dir/$($it.Slug).md")) {
-      [void]$sb.Append($line + "`n")
-      if ($line -match '^- \*\*Slug:\*\*\s*(.*)$') {
-        $declared = $Matches[1].Trim()
-        if ($declared -ne '' -and $declared -ne $it.Slug) {
-          Warn "[warn] $dir/$($it.Slug).md declares Slug '$declared' (filename wins)"
-        }
-      }
-    }
+    Add-PhaseBlock $sb $rank $it $dir
   }
 
   if (Test-Path "$dir/_footer.md") {
