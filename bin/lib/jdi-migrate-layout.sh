@@ -48,10 +48,13 @@ for arg in "$@"; do
   esac
 done
 
+# Prints the error and returns 1; call sites append `|| exit 1` so the
+# termination is explicit where it happens (and S7682 gets its explicit
+# return without unreachable code after an exit).
 fail() {
   local msg="$1"
   echo "ERROR: $msg" >&2
-  exit 1
+  return 1
 }
 act() {
   local msg="$1"
@@ -59,8 +62,8 @@ act() {
   return 0
 }
 
-[[ -d .jdi ]] || fail "no .jdi/ here — run from the project root of a JDI project"
-git rev-parse --git-dir >/dev/null 2>&1 || fail "not a git repository — v3 migration rewires git tracking"
+[[ -d .jdi ]] || fail "no .jdi/ here — run from the project root of a JDI project" || exit 1
+git rev-parse --git-dir >/dev/null 2>&1 || fail "not a git repository — v3 migration rewires git tracking" || exit 1
 
 # Already v3? Re-running is a render refresh, not an error.
 if [[ -d .jdi/roadmap ]]; then
@@ -74,7 +77,7 @@ fi
 
 # Dirty .jdi/ tree makes the git mv/rm surgery ambiguous.
 if [[ "$FORCE" -eq 0 ]] && ! git diff --quiet -- .jdi 2>/dev/null; then
-  fail "uncommitted changes under .jdi/ — commit them first (or --force)"
+  fail "uncommitted changes under .jdi/ — commit them first (or --force)" || exit 1
 fi
 
 echo "migrate-layout: legacy shared files -> conflict-free per-entry layout (v3)"
@@ -111,7 +114,7 @@ move_frozen() {
 
 # --- 1. ROADMAP.md -> .jdi/roadmap/<slug>.md ------------------------------
 
-[[ -f .jdi/ROADMAP.md ]] || fail ".jdi/ROADMAP.md not found — nothing to split (corrupt project?)"
+[[ -f .jdi/ROADMAP.md ]] || fail ".jdi/ROADMAP.md not found — nothing to split (corrupt project?)" || exit 1
 
 SPLIT_DIR="$(mktemp -d)"
 trap 'rm -rf "$SPLIT_DIR"' EXIT
@@ -141,7 +144,7 @@ awk -v out="$SPLIT_DIR" '
 ' .jdi/ROADMAP.md
 
 PHASE_COUNT=$(ls "$SPLIT_DIR"/*.part 2>/dev/null | wc -l | tr -d ' ')
-[[ "$PHASE_COUNT" -gt 0 ]] || fail "no '### Phase N:' blocks found in ROADMAP.md — cannot split"
+[[ "$PHASE_COUNT" -gt 0 ]] || fail "no '### Phase N:' blocks found in ROADMAP.md — cannot split" || exit 1
 
 act "split ROADMAP.md into $PHASE_COUNT phase file(s) under .jdi/roadmap/"
 if [[ "$DRY" -eq 0 ]]; then
@@ -150,10 +153,12 @@ if [[ "$DRY" -eq 0 ]]; then
     ORDER="$(tr -d '[:space:]' < "$part.order")"
     NAME="$(head -n 1 "$part.name")"
     RAW_SLUG="$(grep -m1 -E '^- \*\*Slug:\*\*' "$part" | sed -E 's/^- \*\*Slug:\*\*[[:space:]]*//' | tr -d '\r' || true)"
-    [[ -n "$RAW_SLUG" ]] || fail "phase '$NAME' has no '- **Slug:**' line — fix ROADMAP.md first"
+    [[ -n "$RAW_SLUG" ]] || fail "phase '$NAME' has no '- **Slug:**' line — fix ROADMAP.md first" || exit 1
     SLUG="$(echo "$RAW_SLUG" | sed -E 's/^[0-9]+-//')"
-    echo "$SLUG" | grep -qE '^[a-z0-9][a-z0-9-]{2,49}$' || fail "phase '$NAME' has invalid slug '$RAW_SLUG'"
-    [[ -f ".jdi/roadmap/$SLUG.md" ]] && fail "duplicate slug '$SLUG' in ROADMAP.md — fix before migrating"
+    echo "$SLUG" | grep -qE '^[a-z0-9][a-z0-9-]{2,49}$' || fail "phase '$NAME' has invalid slug '$RAW_SLUG'" || exit 1
+    if [[ -f ".jdi/roadmap/$SLUG.md" ]]; then
+      fail "duplicate slug '$SLUG' in ROADMAP.md — fix before migrating" || exit 1
+    fi
     {
       echo "---"
       echo "order: $ORDER"
