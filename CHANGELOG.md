@@ -5,6 +5,46 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.3] - 2026-08-01
+
+Quality pass — zero SonarCloud issues (31 found, all fixed at the root, none
+suppressed) and a README sync with the 0.13.x conflict-free layout. No
+behavior change: 46/46 merge-scenario asserts, 16/16 `.ps1` parse clean on
+real PowerShell 5.1, both builders byte-identical, doctor green.
+
+### Fixed
+- **S6505 (3 vulnerabilities)**: `@playwright/test` install now passes
+  `--ignore-scripts` on all four package managers (browsers install via the
+  explicit `playwright install` step — no lifecycle scripts needed); the
+  chromium step runs the locally installed binary instead of on-demand
+  `npx`.
+- **S3776 (2 critical, cognitive complexity)**: `jdi-render.ps1`'s `Get-Body`
+  split into `Remove-FrontMatter` + `Select-TrimmedLines`; `Render-Roadmap`
+  split into `Get-EntryOrder` + `Get-RoadmapItems` + `Add-PhaseBlock`.
+  Byte-parity with the `.sh` renderer re-proven by the merge-scenario suite.
+- **S131 (1 critical)**: the resolver's v3 entry-filter `case` gained a
+  default arm.
+- **S7682/S7679 (19 major)**: every function in `jdi-render.sh`,
+  `jdi-migrate-layout.sh` and `jdi-validate-phase.sh` takes positional
+  parameters into locals and ends in an explicit `return`. The
+  `migrate-layout` die helper (`fail()`) now reports and returns 1, with
+  `|| exit 1` at each call site instead of exiting from inside the helper
+  (the one `&& fail` site became an `if` — a blind `|| exit 1` there would
+  also fire on the happy path via `&&` short-circuit precedence).
+- **S7688 (3 major)**: `validate-phase.sh` resolver-rc checks use `[[ ]]`.
+- **S1192 (2 minor)**: `SKILL_FILE_NAME` constant in `jdi-doctor.sh`;
+  `SCOPE_PROJECT` constant in `jdi-install.sh`.
+- **S7780 (2 minor)**: `jdi.js` Windows paths use `String.raw`.
+
+### Changed
+- README state-model tree now shows the v3 per-entry dirs (`roadmap/`,
+  `decisions/`, `todos/`, `registry/`) as source of truth and the legacy
+  paths as rendered views; memory-layer diagrams drop `merge=union`;
+  invariants describe write-once decision/registry files; the doctor
+  section list gains #13 (delegated coding agent) and the layout checks in
+  #6. `package.json`: `test:local` echoes the real version instead of a
+  hardcoded `1.4.0`; description mentions the conflict-free layout.
+
 ## [0.13.2] - 2026-08-01
 
 0.13.1's PS 7.4 fix was necessary but not sufficient — the published package
