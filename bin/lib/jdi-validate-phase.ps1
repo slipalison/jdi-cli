@@ -19,7 +19,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 # No `??` here: null-coalescing is PS 7+ and breaks the PS 5.1 parser
-# (5.1 is the fallback interpreter on stock Windows — see issue #24).
+# (5.1 is the fallback interpreter on stock Windows - see issue #24).
 if ($null -eq $Rest) { $Rest = @() }
 foreach ($arg in $Rest) {
   switch ($arg) {
