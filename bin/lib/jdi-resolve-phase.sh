@@ -55,9 +55,16 @@ elif ! echo "$ID" | grep -qE '^[a-z0-9][a-z0-9-]{2,49}$'; then
   exit 1
 fi
 
-# --- State files --------------------------------------------------------
+# --- Layout detection ---------------------------------------------------
+# v3 (conflict-free) keeps one file per phase under .jdi/roadmap/ and
+# regenerates .jdi/ROADMAP.md as an UNTRACKED view. When the dir exists it is
+# the source of truth and the view is never parsed (it may be stale or absent
+# on a fresh clone). Legacy projects fall through to the ROADMAP.md parser.
 
-if [[ ! -f .jdi/ROADMAP.md ]]; then
+LAYOUT_V3=false
+if [[ -d .jdi/roadmap ]]; then
+  LAYOUT_V3=true
+elif [[ ! -f .jdi/ROADMAP.md ]]; then
   echo "ERROR: .jdi/ROADMAP.md not found (run /jdi-new first)" >&2
   exit 3
 fi
@@ -77,14 +84,58 @@ else
   SCHEMA_VERSION=2
 fi
 
-# --- ROADMAP lookup -----------------------------------------------------
+# --- v3 lookup (.jdi/roadmap/<slug>.md) ---------------------------------
+# Position = 1-based rank sorting entries by (order asc, slug asc). `order`
+# comes from the entry frontmatter and may be fractional (insert-between
+# never renumbers sibling files — that is what makes concurrent adds
+# conflict-free). Filenames are the slug of record.
+
+if [[ "$LAYOUT_V3" == true ]]; then
+  RANKED=$(
+    for f in .jdi/roadmap/*.md; do
+      [[ -f "$f" ]] || continue
+      base="$(basename "$f")"
+      case "$base" in _*|LEGACY*) continue ;; esac
+      slug="${base%.md}"
+      order=$(awk '
+        { sub(/\r$/, "") }
+        NR == 1 && $0 == "---" { fm = 1; next }
+        fm && $0 == "---" { exit }
+        fm && index($0, "order:") == 1 { sub(/^order:[[:space:]]*/, ""); print; exit }
+      ' "$f")
+      [[ -n "$order" ]] || order=999999
+      printf '%s\t%s\n' "$order" "$slug"
+    done | LC_ALL=C sort -t"$(printf '\t')" -k1,1g -k2,2 | cut -f2
+  )
+
+  if [[ "$IS_INTEGER" == true ]]; then
+    POSITION="$ID"
+    RAW_SLUG=$(printf '%s\n' "$RANKED" | sed -n "${POSITION}p")
+    if [[ -z "$RAW_SLUG" ]]; then
+      echo "ERROR: phase $POSITION not found in ROADMAP" >&2
+      exit 2
+    fi
+  else
+    # Accept canonical slug and legacy NN-slug spelling for the same phase.
+    QUERY=$(echo "$ID" | sed -E 's/^[0-9]+-//')
+    POSITION=$(printf '%s\n' "$RANKED" | grep -nxF "$QUERY" | head -1 | cut -d: -f1)
+    if [[ -z "$POSITION" ]]; then
+      echo "ERROR: slug '$ID' not found in ROADMAP" >&2
+      exit 2
+    fi
+    RAW_SLUG="$QUERY"
+  fi
+
+  SCHEMA_VERSION=3
+
+# --- ROADMAP lookup (legacy single file) --------------------------------
 # Each phase block in ROADMAP looks like:
 #   ### Phase 3: User Authentication
 #   - **Slug:** 03-user-auth        (v1)
 #   - **Slug:** user-auth           (v2)
 # We extract (position, raw_slug) pairs.
 
-if [[ "$IS_INTEGER" == true ]]; then
+elif [[ "$IS_INTEGER" == true ]]; then
   # Integer → find phase by position, return its slug
   POSITION="$ID"
   RAW_SLUG=$(awk -v target="$POSITION" '

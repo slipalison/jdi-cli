@@ -82,9 +82,18 @@ Loop until user says "enough" / "go" / "ship it" OR 5 questions reached.
 Per question:
 1. ASK_USER with 3-4 specific options + "Other (I'll type)" option
 2. Wait for response
-3. Append the decision to `.jdi/DECISIONS.md` — schema v2 uses collision-free IDs `D-{YYYY-MM-DD}-{phase_slug}-{seq}` (two devs discussing different phases on parallel branches never collide); v1 keeps `D-N` increment
+3. Record the decision with ID `D-{YYYY-MM-DD}-{phase_slug}-{seq}`:
+   - **Layout v3** (`.jdi/decisions/` dir exists): write ONE FILE per decision
+     — `.jdi/decisions/D-{YYYY-MM-DD}-{phase_slug}-{seq}.md`, first line
+     `{ID} ({date}): {decision}`. Never touch `.jdi/DECISIONS.md` (it is an
+     untracked rendered view). After the session's decisions are written, run
+     `npx -y jdi-cli render` once to refresh the views.
+   - **Legacy layout**: append to `.jdi/DECISIONS.md` (schema v2 IDs; v1 keeps
+     `D-N` increment).
 4. If user cited doc/spec/path -> add to `canonical_refs`
-5. If user mentions feature out of scope -> add to `todos.md`, redirect
+5. If user mentions feature out of scope -> record the todo: layout v3 writes
+   `.jdi/todos/{YYYY-MM-DD}-{phase_slug}.md` (create once per session, append
+   bullets within the session); legacy appends to `.jdi/todos.md`. Redirect.
 
 No batching. No chaining. One at a time.
 
@@ -159,7 +168,7 @@ AskUserQuestion(
 
 - **Reformulate** → sub-prompt with hint "make it measurable (command, threshold, path, assertion)". Re-validate.
 - **Drop** → discard. Continue current loop.
-- **Convert to D-XX** → append to `.jdi/DECISIONS.md` as new `D-{date}-{slug}-{seq}` (schema v2) or `D-N` (v1). Do not include in DoD.
+- **Convert to D-XX** → record as `D-{date}-{slug}-{seq}` via the same write path as Step 3 (layout v3: new file in `.jdi/decisions/`; legacy: append to `.jdi/DECISIONS.md`). Do not include in DoD.
 
 ### Step 4: Write CONTEXT.md
 Path: `{phase_dir}/CONTEXT.md` (orchestrator pre-resolved — never hand-build `NN-slug`)
@@ -231,8 +240,8 @@ Next: /jdi-plan {phase_slug}
 
 <output>
 - `{phase_dir}/CONTEXT.md` (created — folder created on first write if absent; includes `## Definition of Done` section with Auto-verifiable and Manual subsections per `core/templates/dod-schema.md`)
-- `.jdi/DECISIONS.md` (updated, append-only — on schema v2 use `D-{YYYY-MM-DD}-{phase_slug}-{seq}` IDs to avoid cross-branch collisions; v1 keeps `D-N` increment; includes any DoD items the user chose to convert to decisions)
-- `.jdi/todos.md` (updated, if scope creep)
+- Decisions: layout v3 → one `.jdi/decisions/D-{YYYY-MM-DD}-{phase_slug}-{seq}.md` per decision + `npx -y jdi-cli render`; legacy → append to `.jdi/DECISIONS.md` (v2 IDs; v1 keeps `D-N`). Includes any DoD items converted to decisions.
+- Todos (if scope creep): layout v3 → `.jdi/todos/{YYYY-MM-DD}-{phase_slug}.md`; legacy → append to `.jdi/todos.md`
 - Next-step message in chat (includes DoD counts: N auto + N manual)
 </output>
 </output>

@@ -245,6 +245,29 @@ if [[ -d "$PROJECT_DIR/.jdi" ]]; then
       note ".jdi/config.json orchestration: standard (single-agent path)"
     fi
   fi
+
+  # --- layout conflict-free (v3) -------------------------------------------
+  if [[ -d "$PROJECT_DIR/.jdi/roadmap" ]]; then
+    ok "layout conflict-free v3 (.jdi/roadmap/ per-entry; views geradas)"
+    # views nunca podem estar trackeadas — server-side merge ignora merge=union
+    if git -C "$PROJECT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+      TRACKED_VIEWS=$(git -C "$PROJECT_DIR" ls-files -- \
+        .jdi/ROADMAP.md .jdi/DECISIONS.md .jdi/todos.md .jdi/registry.md \
+        .jdi/specialists.md .jdi/reviewers.md .jdi/skills-registry.md 2>/dev/null)
+      if [[ -n "$TRACKED_VIEWS" ]]; then
+        warn "views geradas ainda trackeadas no git: $(echo "$TRACKED_VIEWS" | tr '\n' ' ')— rode: npx -y jdi-cli migrate-layout"
+      else
+        ok "views untracked (ROADMAP/DECISIONS/todos/registry ficam fora do git)"
+      fi
+    fi
+    if (cd "$PROJECT_DIR" && bash "$JDI_ROOT/bin/lib/jdi-render.sh" --check --quiet); then
+      ok "views em sincronia com os per-entry dirs (render --check)"
+    else
+      warn "views desatualizadas ou com warnings — rode: npx -y jdi-cli render"
+    fi
+  else
+    warn "layout legado (arquivos compartilhados em .jdi/). Merges de PR no GitHub IGNORAM merge=union — dois devs em paralelo conflitam em ROADMAP/DECISIONS. Migre: npx -y jdi-cli migrate-layout"
+  fi
 else
   warn ".jdi/ ausente. Rode /jdi-new ou esta fora de um projeto JDI."
 fi

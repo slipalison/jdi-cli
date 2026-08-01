@@ -1,5 +1,7 @@
 # Specialists
 
+> **Layout v3 (0.13.0+):** este arquivo eh uma VIEW gerada por `npx -y jdi-cli render` a partir de `.jdi/registry/R-{date}-{slug}.md` (um arquivo por bootstrap//jdi-create, secoes fenced `<!-- jdi:... -->`). Nunca edite a view nem faca append nela — escreva o arquivo per-entry e rode render. Em projetos legados (sem `.jdi/registry/`) o append direto continua valendo.
+
 Per-project doer specialists. Cada projeto tem 1 doer (ou mais, se multi-stack).
 
 `/jdi-do <N>` le esse arquivo. Match -> spawn specialist registrado.

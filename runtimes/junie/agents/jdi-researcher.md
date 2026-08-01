@@ -285,35 +285,47 @@ Applied by `/jdi-bootstrap` to `.opencode/opencode.jsonc`. Other runtimes ignore
 
 Auto-verifiable and Manual subsections are BOTH required. If user dropped all items from one subsection, write `- _(none)_` placeholder so the parser stays consistent.
 
-### Step 5: Generate ROADMAP.md
+### Step 5: Generate the roadmap (conflict-free layout v3)
 
-Path: `.jdi/ROADMAP.md`
+The roadmap is ONE FILE PER PHASE under `.jdi/roadmap/` — `.jdi/ROADMAP.md`
+becomes an untracked view rendered from it (Step 7). Two developers adding
+phases on parallel branches create two different files, which no server-side
+PR merge can conflict on (GitHub/GitLab ignore `.gitattributes merge=union`,
+so shared append files are NOT safe — the layout is the guarantee).
 
-Each MVP feature (Q4) becomes 1 phase. Short name + slug.
+```bash
+mkdir -p .jdi/roadmap
+```
+
+Write `.jdi/roadmap/_header.md` (view preamble):
 
 ```markdown
 # {project_name} — Roadmap
 
 ## Phases
-
-### Phase 1: {feature 1 name}
-- **Slug:** {slug1}
-- **Goal:** {1-line description}
-
-### Phase 2: {feature 2 name}
-- **Slug:** {slug2}
-- **Goal:** {1-line description}
-
-(... up to N)
 ```
 
-Slug values are canonical (no `NN-` prefix). Multi-developer parallel branches rely on slug uniqueness for safe merges; the numeric `### Phase N` heading is display-only and may be renumbered on insert/remove.
+Each MVP feature (Q4) becomes 1 phase: write `.jdi/roadmap/{slug}.md`:
 
-ROADMAP.md carries NO per-phase status and NO current-phase pointer — those
-are derived from each phase folder's artifacts (SHIPPED.md → done; REVIEW →
-verified; SUMMARY → executed; PLAN → planned; CONTEXT → discussed; nothing →
-pending). This keeps ROADMAP.md append/insert-only, so parallel developers
-shipping different phases never conflict on it.
+```markdown
+---
+order: {N}
+name: {feature N name}
+---
+- **Slug:** {slug}
+- **Goal:** {1-line description}
+```
+
+Rules:
+- Filename = canonical slug (no `NN-` prefix) = phase identity. Validate each
+  with `npx -y jdi-cli validate-slug "{slug}" --check-unique`.
+- `order:` is a plain number (1, 2, ... N here). It may become fractional
+  later — `/jdi-add-phase --before/--after` inserts between neighbors without
+  renumbering sibling files. Display position = rank when sorted by order.
+- The roadmap carries NO per-phase status and NO current-phase pointer —
+  those are derived from each phase folder's artifacts (SHIPPED.md → done;
+  REVIEW → verified; SUMMARY → executed; PLAN → planned; CONTEXT → discussed;
+  nothing → pending).
 
 ### Step 6: Generate initial state files
 
@@ -329,51 +341,57 @@ next_step: /jdi-bootstrap
 
 `schema_version: 2` activates slug-as-ID. `current_phase_slug` is the canonical phase identifier; `current_phase` is kept as a display mirror. STATE.md is an untracked advisory cache (gitignored in Step 7) — commands regenerate it from phase artifacts when absent.
 
-```markdown
-# .jdi/DECISIONS.md
-# Locked project decisions
+Decisions are one file per decision under `.jdi/decisions/` (filename = ID —
+collision-free across branches by construction). Write `.jdi/decisions/D-1.md`:
 
+```markdown
 D-1 ({date}): Code design locked = {Q3}
 ```
 
-### Step 7: mkdir + .gitattributes + .gitignore
+(`D-1`/`D-2` literal IDs are reserved for init-time decisions — they are
+written once, before any branching. Every later decision uses
+`D-{YYYY-MM-DD}-{phase_slug}-{seq}` as the filename.)
+
+### Step 7: mkdir + .gitattributes + .gitignore + render
 
 ```bash
 mkdir -p .jdi/phases
 mkdir -p .jdi/agents
+mkdir -p .jdi/todos .jdi/registry
+touch .jdi/todos/.gitkeep .jdi/registry/.gitkeep
 ```
 
-Do NOT create empty placeholders for `specialists.md`, `reviewers.md`, `registry.md`. Architect (specialist mode) creates them populated when `/jdi-bootstrap` runs.
+Do NOT create placeholder view files (`specialists.md`, `reviewers.md`,
+`registry.md`) — the architect writes per-entry files under `.jdi/registry/`
+when `/jdi-bootstrap` runs, and `jdi-cli render` generates the views.
 
-Create `.gitattributes` at root — line-ending normalization (avoids CRLF warnings on Windows) plus `merge=union` on the append-only JDI files, so two developers appending on parallel branches auto-merge instead of conflicting (union keeps both sides' lines; safe because these files are append-only by contract and v2 IDs are collision-free):
+Create `.gitattributes` at root — line-ending normalization only (avoids CRLF
+warnings on Windows). NO `merge=union` lines: server-side PR merges
+(GitHub/GitLab/ADO) ignore custom merge drivers, so union never protected
+PRs — the v3 per-entry layout is the conflict-freedom mechanism, and it needs
+no merge driver at all:
 
 ```
 * text=auto eol=lf
 *.{cmd,bat,ps1} text eol=crlf
 *.{png,jpg,jpeg,gif,webp,ico,pdf,zip,tar,gz} binary
-.jdi/DECISIONS.md merge=union
-.jdi/todos.md merge=union
-.jdi/registry.md merge=union
-.jdi/specialists.md merge=union
-.jdi/reviewers.md merge=union
-.jdi/skills-registry.md merge=union
-.jdi/archive/index.md merge=union
-.jdi/ROADMAP.md merge=union
 ```
 
-ROADMAP.md carries `merge=union` (0.11.0+): `/jdi-issue` made phase appends a
-per-card operation, so parallel appends must auto-merge. The union trade-off
-(a racing `remove-phase` can resurrect a removed block) is rare, visible in
-`/jdi-status`, audited by the `D-{date}-{slug}-rm` decision, and fixed by
-re-running the remove. Do NOT put `merge=union` on PROJECT.md or config.json —
-conflicts there must stay visible.
-
-STATE.md is a per-clone advisory cache — keep it out of git so it can never
-be a merge conflict (every command rewrites it; commands regenerate it from
-phase artifacts when absent):
+The single-file views and STATE.md are per-clone artifacts — keep them out of
+git so they can never be a merge conflict (commands regenerate them):
 
 ```bash
-grep -qxF '.jdi/STATE.md' .gitignore 2>/dev/null || echo '.jdi/STATE.md' >> .gitignore
+for p in .jdi/STATE.md .jdi/ROADMAP.md .jdi/DECISIONS.md .jdi/todos.md \
+         .jdi/registry.md .jdi/specialists.md .jdi/reviewers.md .jdi/skills-registry.md; do
+  grep -qxF "$p" .gitignore 2>/dev/null || echo "$p" >> .gitignore
+done
+```
+
+Generate the views (ROADMAP.md, DECISIONS.md, ...) at their usual paths so
+every reader keeps working:
+
+```bash
+npx -y jdi-cli render
 ```
 
 ### Step 8: Commit
@@ -384,11 +402,14 @@ git add .jdi/ .gitattributes .gitignore
 git commit -m "chore(jdi): initialize {project_name}"
 ```
 
+(The rendered views and STATE.md are gitignored — only the per-entry dirs,
+PROJECT.md and config.json land in git.)
+
 ### Step 9: Confirm
 
 ```
 {project_name} ({slug}) ok. Stack: {stack}. Design: {design}. Phases: {N}. DoD baseline: {N_auto} auto + {N_manual} manual.
-Files: .jdi/{PROJECT,ROADMAP,STATE,DECISIONS}.md
+Files: .jdi/PROJECT.md + .jdi/roadmap/ ({N} phases) + .jdi/decisions/D-1.md (+ rendered views)
 Next: /jdi-bootstrap
 ```
 
@@ -415,13 +436,13 @@ Next: /jdi-bootstrap
 
 <output>
 - `.jdi/PROJECT.md` (includes `## Definition of Done` section with Auto-verifiable and Manual subsections per `core/templates/dod-schema.md`)
-- `.jdi/ROADMAP.md`
-- `.jdi/STATE.md`
-- `.jdi/DECISIONS.md`
-- `.jdi/phases/` (empty, ready for phases)
-- `.jdi/agents/` (empty, ready for bootstrap)
-- `.gitattributes` (root: line endings + merge=union on append-only JDI files)
-- `.gitignore` entry `.jdi/STATE.md` (advisory cache, never versioned)
+- `.jdi/roadmap/` — `_header.md` + one `{slug}.md` per phase (conflict-free layout v3)
+- `.jdi/decisions/D-1.md` (code design locked)
+- `.jdi/STATE.md` (untracked advisory cache)
+- `.jdi/ROADMAP.md`, `.jdi/DECISIONS.md` — rendered views (untracked, `npx -y jdi-cli render`)
+- `.jdi/phases/`, `.jdi/agents/`, `.jdi/todos/`, `.jdi/registry/` dirs
+- `.gitattributes` (root: line endings only — no merge=union; the layout is the conflict-freedom mechanism)
+- `.gitignore` entries for STATE.md and the 7 rendered views
 - Initial commit
 - Final message with next step (includes DoD baseline counts: N auto + N manual)
 </output>

@@ -448,46 +448,58 @@ if (-not (Test-Path .gitignore) -or -not (Select-String -Path .gitignore -Patter
 
 Gate 7 cache (screenshots, logs, JSON findings, generated spec) must NEVER be committed.
 
-### S6: Update routing
+### S6 + S7: Routing + audit trail
 
-For each routing file: if it does NOT exist, create with full header. If it exists, append a new line.
+**Layout v3** (`.jdi/registry/` dir exists — every project initialized or
+migrated on 0.13.0+): write ONE entry file per bootstrap run —
+`.jdi/registry/R-{YYYY-MM-DD}-{slug}.md` — carrying the audit block AND the
+routing rows in fenced sections. `jdi-cli render` regenerates the
+`registry.md` / `specialists.md` / `reviewers.md` views from it, so every
+reader keeps its path while no shared file is ever appended to (two devs
+bootstrapping different stacks on parallel branches create two different
+files — nothing to conflict, even on server-side PR merges):
 
-`.jdi/specialists.md` (schema v2 — adds `File glob` column for multi-stack routing):
 ```markdown
-| Stack | Agent | File glob | Trigger |
-|---|---|---|---|
-| {stack_label} | jdi-doer-{slug} | {file_glob} | executor for files matching glob |
-```
-
-Single-stack default: `**/*` (catch-all). Multi-stack: per-iteration glob.
-
-`.jdi/reviewers.md` (schema v2):
-```markdown
-| Agent | File glob | Trigger | Blocks ship? |
-|---|---|---|---|
-| jdi-reviewer-{slug} | {file_glob} | /jdi-verify | yes, if BLOCKED |
-```
-
-In multi-stack, append ONE row per iteration. Existing single-row tables stay compatible (planner treats absent glob column as `**/*`).
-
-### S7: Audit + commit
-
-`.jdi/registry.md` (create or append). Entry ID is deterministic —
-`R-{YYYY-MM-DD}-{slug}` — so two developers bootstrapping different stacks on
-parallel branches never collide (same rationale as v2 D-IDs; legacy `R-{N}`
-entries are accepted on read, never rewritten):
-```markdown
+<!-- jdi:registry -->
 ## R-{date}-{slug} ({date})
 **Type:** specialist (doer + reviewer)
 **Slug:** {slug}
 **Stack:** {stack}
 **Files:** .jdi/agents/jdi-doer-{slug}.md, .jdi/agents/jdi-reviewer-{slug}.md
+<!-- /jdi:registry -->
+<!-- jdi:specialists -->
+| {stack_label} | jdi-doer-{slug} | {file_glob} | executor for files matching glob |
+<!-- /jdi:specialists -->
+<!-- jdi:reviewers -->
+| jdi-reviewer-{slug} | {file_glob} | /jdi-verify | yes, if BLOCKED |
+<!-- /jdi:reviewers -->
 ```
+
+Single-stack default glob: `**/*` (catch-all). Multi-stack: one
+`<!-- jdi:specialists -->` / `<!-- jdi:reviewers -->` row per iteration, all
+inside this same entry file. Then refresh the views:
+
+```bash
+npx -y jdi-cli render
+git add .jdi/agents/ .jdi/registry/
+git commit -m "chore(jdi): bootstrap specialists for {project_name}"
+```
+
+**Legacy layout** (no `.jdi/registry/` dir): keep the old behavior — for each
+routing file, create with full header if absent, else append one row:
+`.jdi/specialists.md` (schema v2, 4 columns `| Stack | Agent | File glob |
+Trigger |`), `.jdi/reviewers.md` (`| Agent | File glob | Trigger | Blocks
+ship? |`), and append the same `## R-{date}-{slug}` block to
+`.jdi/registry.md`. Then:
 
 ```bash
 git add .jdi/agents/ .jdi/specialists.md .jdi/reviewers.md .jdi/registry.md
 git commit -m "chore(jdi): bootstrap specialists for {project_name}"
 ```
+
+(Existing single-row tables stay compatible — planner treats an absent glob
+column as `**/*`. Legacy `R-{N}` entries are accepted on read, never
+rewritten.)
 
 ### S8: Confirm
 
@@ -777,49 +789,19 @@ If skill has references, create placeholders in `core/skills/{name}/references/`
 
 Create both. Agent references skill in `<skills_to_load>`.
 
-### Step 8: Update integration points
+### Step 8 + 9: Update integration points + audit trail
 
-Edit affected files per Step 5 plan.
+Edit affected files per Step 5 plan (`core/agents/jdi-doer.md` `<routing>`
+section for specialists; `core/commands/jdi-ship.md` if no auto-discovery;
+`<skills_to_load>` of each agent that loads a new skill).
 
-#### Specialist
-
-Append to `.jdi/specialists.md`:
-```markdown
-| {language} | jdi-{name} | {trigger description} |
-```
-
-Edit `core/agents/jdi-doer.md` `<routing>` section:
-```markdown
-- {language} files -> spawn jdi-{name} (registered in .jdi/specialists.md)
-```
-
-#### Reviewer
-
-Append to `.jdi/reviewers.md`:
-```markdown
-| jdi-{name} | {trigger} | {blocks ship?} |
-```
-
-Edit `core/commands/jdi-ship.md` if it doesn't have auto-discovery yet.
-
-#### Skill
-
-Append to `.jdi/skills-registry.md`:
-```markdown
-| {name} | core/skills/{name}/ | {when to apply} | {agents that load it} |
-```
-
-Edit each agent listed in `agents that load it`, `<skills_to_load>` section:
-```markdown
-- {name}: {when}
-```
-
-### Step 9: Audit trail
-
-Append to `.jdi/registry.md` (deterministic ID `R-{YYYY-MM-DD}-{name}` —
-collision-free across branches; legacy `R-{N}` accepted on read):
+**Layout v3** (`.jdi/registry/` dir exists): write ONE entry file —
+`.jdi/registry/R-{YYYY-MM-DD}-{name}.md` — with the audit block and any
+routing/registry rows in fenced sections (only include the sections that
+apply to this `{type}`):
 
 ```markdown
+<!-- jdi:registry -->
 ## R-{date}-{name} ({date})
 **Type:** {agent|skill|composite}
 **Name:** jdi-{name}
@@ -827,7 +809,26 @@ collision-free across branches; legacy `R-{N}` accepted on read):
 **Why:** {Q1 answer}
 **Files:** {list}
 **Integration:** {list}
+<!-- /jdi:registry -->
+<!-- jdi:specialists -->
+| {language} | jdi-{name} | **/* | {trigger description} |
+<!-- /jdi:specialists -->
+<!-- jdi:reviewers -->
+| jdi-{name} | **/* | {trigger} | {blocks ship?} |
+<!-- /jdi:reviewers -->
+<!-- jdi:skills -->
+| {name} | core/skills/{name}/ | {when to apply} | {agents that load it} |
+<!-- /jdi:skills -->
 ```
+
+Then `npx -y jdi-cli render` to refresh the views.
+
+**Legacy layout**: append the rows directly — `.jdi/specialists.md`
+(`| {language} | jdi-{name} | {trigger description} |`), `.jdi/reviewers.md`
+(`| jdi-{name} | {trigger} | {blocks ship?} |`), `.jdi/skills-registry.md`
+(`| {name} | core/skills/{name}/ | {when to apply} | {agents that load it} |`)
+and the `## R-{date}-{name}` audit block to `.jdi/registry.md` (legacy
+`R-{N}` accepted on read).
 
 ### Step 10: Build + install
 
@@ -858,7 +859,9 @@ Show how to invoke:
 ### Step 12: Commit
 
 ```bash
-git add core/ .jdi/specialists.md .jdi/reviewers.md .jdi/skills-registry.md .jdi/registry.md runtimes/
+# layout v3: the per-entry file is the only .jdi state to commit
+git add core/ .jdi/registry/ runtimes/
+# legacy layout instead: git add core/ .jdi/specialists.md .jdi/reviewers.md .jdi/skills-registry.md .jdi/registry.md runtimes/
 git commit -m "feat(jdi-create): add {type} jdi-{name}"
 ```
 

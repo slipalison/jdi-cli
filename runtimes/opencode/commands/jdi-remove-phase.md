@@ -38,6 +38,8 @@ Examples:
 
 ### Step 1: Validation
 
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+
 ```bash
 test -d .jdi/ || { echo "Not a JDI project."; exit 1; }
 test -f .jdi/ROADMAP.md || { echo "ROADMAP.md missing."; exit 1; }
@@ -107,6 +109,8 @@ if [ -f "$PHASE_DIR/SHIPPED.md" ]; then
 fi
 
 # Legacy layout (pre-0.2.0 ROADMAPs with per-phase Status lines): honor them.
+# (On layout v3 ROADMAP.md is the rendered view — reading it here is fine,
+# the render carries no Status lines for v3-born phases.)
 STATUS=$(awk -v target="$PHASE_SLUG" '
   /^### Phase / { in_block = 1; matched = 0 }
   in_block && /^- \*\*Slug:\*\*/ {
@@ -159,7 +163,6 @@ If Cancel → exit 0 clean.
 ```bash
 if [ "$PHASE_FOLDER_EXISTS" = "true" ]; then
   mkdir -p .jdi/archive
-  test -f .jdi/archive/index.md || echo "# Archive index" > .jdi/archive/index.md
 
   TARGET=".jdi/archive/removed-$PHASE_SLUG"
   # Disambiguate if a previous removal of the same slug exists
@@ -170,7 +173,13 @@ if [ "$PHASE_FOLDER_EXISTS" = "true" ]; then
   done
 
   mv "$PHASE_DIR" "$TARGET"
-  echo "- $(basename "$TARGET") (removed $(date -u +%F) via /jdi-remove-phase, original folder: $(basename "$PHASE_DIR"))" >> .jdi/archive/index.md
+
+  # archive/index.md is legacy-only: on layout v3 the archive DIR LISTING is
+  # the index (one folder per archived phase — nothing shared to conflict).
+  # Append only where the file already exists (legacy projects):
+  if [ ! -d .jdi/roadmap ] && [ -f .jdi/archive/index.md ]; then
+    echo "- $(basename "$TARGET") (removed $(date -u +%F) via /jdi-remove-phase, original folder: $(basename "$PHASE_DIR"))" >> .jdi/archive/index.md
+  fi
 fi
 ```
 
@@ -178,23 +187,48 @@ PowerShell:
 ```powershell
 if ($phaseFolderExists) {
   if (-not (Test-Path .jdi/archive)) { New-Item -ItemType Directory .jdi/archive | Out-Null }
-  if (-not (Test-Path .jdi/archive/index.md)) { Set-Content .jdi/archive/index.md "# Archive index" }
   $target = ".jdi/archive/removed-$phaseSlug"
   $i = 2
   while (Test-Path $target) { $target = ".jdi/archive/removed-$phaseSlug-$i"; $i++ }
   Move-Item $phaseDir $target
-  Add-Content .jdi/archive/index.md "- $(Split-Path $target -Leaf) (removed $(Get-Date -Format 'yyyy-MM-dd') via /jdi-remove-phase, original folder: $(Split-Path $phaseDir -Leaf))"
+  if (-not (Test-Path .jdi/roadmap) -and (Test-Path .jdi/archive/index.md)) {
+    Add-Content .jdi/archive/index.md "- $(Split-Path $target -Leaf) (removed $(Get-Date -Format 'yyyy-MM-dd') via /jdi-remove-phase, original folder: $(Split-Path $phaseDir -Leaf))"
+  }
 }
 ```
 
-### Step 7: Edit ROADMAP.md
+### Step 7: Remove the roadmap entry
 
-Remove the entire `### Phase $PHASE_POSITION: ...` block (header + bullets) up to (but not including) the next `### Phase` line or end of file.
+**Layout v3** (`.jdi/roadmap/` dir exists): delete the entry file and the
+audit decision is a NEW file — no shared file is touched. If another branch
+is working on this phase, the merge surfaces a visible modify/delete conflict
+on the phase's own files, which is exactly the right signal.
 
-Renumber subsequent `### Phase K` headings to `K-1` (display order). **Slug values are NOT changed** — they remain canonical.
+```bash
+git rm --quiet ".jdi/roadmap/$PHASE_SLUG.md" 2>/dev/null || rm -f ".jdi/roadmap/$PHASE_SLUG.md"
+```
 
-Recompute `total_phases` (legacy only — 0.11.0+ ROADMAPs do not store the
-counter; it is derived from heading count):
+Write `.jdi/decisions/D-{YYYY-MM-DD}-{slug}-rm.md`:
+
+```
+D-{YYYY-MM-DD}-{slug}-rm: Phase '{slug}' removed via /jdi-remove-phase. Artifacts: {archived_path or "none"}.
+```
+
+Refresh views + commit:
+
+```bash
+npx -y jdi-cli render
+git add .jdi/roadmap/ .jdi/decisions/
+git add .jdi/archive/ 2>/dev/null || true
+git commit -m "chore(jdi): remove phase $PHASE_SLUG"
+```
+
+**Legacy layout**: remove the entire `### Phase $PHASE_POSITION: ...` block
+(header + bullets) up to (but not including) the next `### Phase` line or end
+of file. Renumber subsequent `### Phase K` headings to `K-1` (display order;
+slug values NEVER change). Recompute `total_phases` only if a legacy line
+exists:
+
 ```bash
 NEW_TOTAL=$(grep -cE '^### Phase ' .jdi/ROADMAP.md)
 if grep -qE '^total_phases:' .jdi/ROADMAP.md; then
@@ -203,28 +237,18 @@ if grep -qE '^total_phases:' .jdi/ROADMAP.md; then
 fi
 ```
 
-**Post-merge hygiene note (merge=union):** ROADMAP.md carries `merge=union`
-since 0.11.0 so parallel `add-phase`/`/jdi-issue` appends auto-merge. Side
-effect: if THIS remove races a merge from another branch, the removed block
-can reappear. The removal is audited (`D-{date}-{slug}-rm` in DECISIONS.md,
-which never conflicts) — if the block resurfaces after a merge, re-run
-`/jdi-remove-phase {slug}` (idempotent; artifacts already archived).
-
-### Step 8: Audit trail in DECISIONS.md
-
-Append (v2 uses deterministic IDs; v1 uses D-N increment):
-
-```
-D-{YYYY-MM-DD}-{slug}-rm: Phase '{slug}' removed via /jdi-remove-phase. Artifacts: {archived_path or "none"}.
-```
-
-### Step 9: Commit
+Append the audit line to `.jdi/DECISIONS.md`
+(`D-{YYYY-MM-DD}-{slug}-rm: Phase '{slug}' removed ...`), then:
 
 ```bash
 git add .jdi/ROADMAP.md .jdi/DECISIONS.md
 git add .jdi/archive/ 2>/dev/null || true
 git commit -m "chore(jdi): remove phase $PHASE_SLUG"
 ```
+
+(Legacy merge=union note: if this remove races a merge from another branch
+the removed block can reappear — re-run `/jdi-remove-phase {slug}`,
+idempotent. This failure mode does not exist on layout v3.)
 
 ### Step 10: Confirm
 

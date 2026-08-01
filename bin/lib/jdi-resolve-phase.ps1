@@ -45,8 +45,15 @@ if (-not $isInteger -and -not ($Id -match '^[a-z0-9][a-z0-9-]{2,49}$')) {
   Fail 1 "invalid phase ID '$Id' (must be integer or slug a-z0-9-, 3-40 chars)"
 }
 
-# --- State files ---
-if (-not (Test-Path .jdi/ROADMAP.md)) { Fail 3 '.jdi/ROADMAP.md not found (run /jdi-new first)' }
+# --- Layout detection ---
+# v3 (conflict-free) keeps one file per phase under .jdi/roadmap/ and
+# regenerates .jdi/ROADMAP.md as an UNTRACKED view. When the dir exists it is
+# the source of truth and the view is never parsed (it may be stale or absent
+# on a fresh clone). Legacy projects fall through to the ROADMAP.md parser.
+$layoutV3 = Test-Path .jdi/roadmap -PathType Container
+if (-not $layoutV3 -and -not (Test-Path .jdi/ROADMAP.md)) {
+  Fail 3 '.jdi/ROADMAP.md not found (run /jdi-new first)'
+}
 
 # --- Schema detection ---
 # STATE.md is an untracked advisory cache (0.3.0+) — absence is normal on a
@@ -60,23 +67,72 @@ if (Test-Path .jdi/STATE.md) {
   if ($svMatch.Success) { $schemaVersion = [int]$svMatch.Groups[1].Value }
 }
 
-# --- Parse ROADMAP phases into (position, rawSlug) tuples ---
-$roadmap = Get-Content .jdi/ROADMAP.md
+# --- Parse phases into (position, rawSlug) tuples ---
 $phases = New-Object System.Collections.Generic.List[object]
-$current = 0
-foreach ($line in $roadmap) {
-  if ($line -match '^### Phase\s+(\d+)\s*:') {
-    $current = [int]$Matches[1]
-  }
-  elseif ($current -gt 0 -and $line -match '^- \*\*Slug:\*\*\s*(\S+)') {
-    $raw = $Matches[1]
-    $canonical = $raw -replace '^\d+-', ''
-    $phases.Add([PSCustomObject]@{
-      Position      = $current
-      RawSlug       = $raw
-      CanonicalSlug = $canonical
+
+if ($layoutV3) {
+  # v3: position = 1-based rank sorting entries by (order asc, slug asc).
+  # `order` comes from the entry frontmatter and may be fractional
+  # (insert-between never renumbers sibling files). Filename = slug of record.
+  $entries = @(Get-ChildItem .jdi/roadmap -File -Filter '*.md' -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -notmatch '^(_|LEGACY)' } |
+    ForEach-Object {
+      $order = [double]999999
+      $inFm = $false
+      foreach ($line in (Get-Content $_.FullName)) {
+        if (-not $inFm) {
+          if ($line -eq '---') { $inFm = $true; continue } else { break }
+        }
+        if ($line -eq '---') { break }
+        if ($line -match '^order:\s*(\S+)') {
+          $parsed = 0.0
+          if ([double]::TryParse($Matches[1], [System.Globalization.NumberStyles]::Float,
+              [System.Globalization.CultureInfo]::InvariantCulture, [ref]$parsed)) {
+            $order = $parsed
+          }
+          break
+        }
+      }
+      [PSCustomObject]@{ Order = $order; Slug = $_.BaseName }
     })
-    $current = 0
+
+  # Explicit comparison sort: PS 5.1 Sort-Object is neither guaranteed stable
+  # nor ordinal on strings; the .sh side is LC_ALL=C (ordinal). Parity first.
+  [Array]::Sort($entries, [System.Comparison[object]]{
+    param($a, $b)
+    $c = $a.Order.CompareTo($b.Order)
+    if ($c -ne 0) { return $c }
+    return [string]::CompareOrdinal($a.Slug, $b.Slug)
+  })
+
+  $rank = 0
+  foreach ($e in $entries) {
+    $rank++
+    $phases.Add([PSCustomObject]@{
+      Position      = $rank
+      RawSlug       = $e.Slug
+      CanonicalSlug = $e.Slug
+    })
+  }
+  $schemaVersion = 3
+}
+else {
+  $roadmap = Get-Content .jdi/ROADMAP.md
+  $current = 0
+  foreach ($line in $roadmap) {
+    if ($line -match '^### Phase\s+(\d+)\s*:') {
+      $current = [int]$Matches[1]
+    }
+    elseif ($current -gt 0 -and $line -match '^- \*\*Slug:\*\*\s*(\S+)') {
+      $raw = $Matches[1]
+      $canonical = $raw -replace '^\d+-', ''
+      $phases.Add([PSCustomObject]@{
+        Position      = $current
+        RawSlug       = $raw
+        CanonicalSlug = $canonical
+      })
+      $current = 0
+    }
   }
 }
 
@@ -88,9 +144,16 @@ if ($isInteger) {
   if (-not $match) { Fail 2 "phase $position not found in ROADMAP" }
 }
 else {
-  $match = $phases | Where-Object {
-    $_.RawSlug -eq $Id -or $_.CanonicalSlug -eq $Id
-  } | Select-Object -First 1
+  if ($layoutV3) {
+    # v3 filenames are canonical; accept the legacy NN-slug spelling too.
+    $q = $Id -replace '^\d+-', ''
+    $match = $phases | Where-Object { $_.CanonicalSlug -eq $q } | Select-Object -First 1
+  }
+  else {
+    $match = $phases | Where-Object {
+      $_.RawSlug -eq $Id -or $_.CanonicalSlug -eq $Id
+    } | Select-Object -First 1
+  }
   if (-not $match) { Fail 2 "slug '$Id' not found in ROADMAP" }
 }
 

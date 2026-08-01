@@ -176,6 +176,25 @@ function cmdLibPassthrough(baseName, usage, rawArgs) {
   process.exit(code);
 }
 
+// GNU-style --kebab-flags -> PowerShell -PascalCase parameters, applied only
+// when dispatching to .ps1 (bash helpers parse --flags themselves). Values
+// keep following as separate args, which matches PS named-parameter binding.
+function toPsArgs(rawArgs) {
+  return rawArgs.map((a) =>
+    /^--[a-z][a-z-]*$/.test(a)
+      ? '-' + a.slice(2).split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('')
+      : a
+  );
+}
+
+// Like cmdLibPassthrough but zero-arg friendly (render / migrate-layout) and
+// flag-mapped for the PowerShell side.
+function cmdLibZeroArg(baseName, rawArgs) {
+  const args = isWindows ? toPsArgs(rawArgs) : rawArgs;
+  const { code } = runLibScript(baseName, args);
+  process.exit(code);
+}
+
 // Build CLI args from a flag spec, picking the platform-correct flag name.
 // spec: [{ key, win, nix, value? }]. value:true forwards the flag's value.
 function buildFlagArgs(flags, spec) {
@@ -447,6 +466,8 @@ async function cmdHelp() {
   console.log(`  ${c.cyan}validate-phase${c.reset} ${c.gray}<slug|pos> [--for-pr]${c.reset}  Valida artefatos da phase (gate mecanico p/ CI e agents)`);
   console.log(`  ${c.cyan}truncate${c.reset} ${c.gray}<file> <max>${c.reset}      Trunca arquivo preservando estrutura`);
   console.log(`  ${c.cyan}monitor${c.reset} ${c.gray}<file...>${c.reset}          Estima context budget dos arquivos`);
+  console.log(`  ${c.cyan}render${c.reset} ${c.gray}[--check]${c.reset}          Regenera as views de .jdi/ (layout conflict-free v3)`);
+  console.log(`  ${c.cyan}migrate-layout${c.reset} ${c.gray}[--dry-run]${c.reset}  Migra .jdi/ legado pro layout conflict-free (v3)`);
   console.log('');
 
   console.log(`${c.bold}Runtimes (install):${c.reset}`);
@@ -553,6 +574,12 @@ async function main() {
       break;
     case 'truncate':
       cmdLibPassthrough('jdi-truncate', 'truncate <file> <max_chars>', process.argv.slice(3));
+      break;
+    case 'render':
+      cmdLibZeroArg('jdi-render', process.argv.slice(3));
+      break;
+    case 'migrate-layout':
+      cmdLibZeroArg('jdi-migrate-layout', process.argv.slice(3));
       break;
     case 'monitor':
       cmdLibPassthrough('jdi-monitor', 'monitor <file...>', process.argv.slice(3));

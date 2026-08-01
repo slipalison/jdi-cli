@@ -243,6 +243,33 @@ if (Test-Path "$ProjectDir\.jdi") {
       Write-WARN ".jdi/config.json present but not valid JSON"
     }
   }
+
+  # --- layout conflict-free (v3) -----------------------------------------
+  if (Test-Path (Join-Path $ProjectDir '.jdi\roadmap') -PathType Container) {
+    Write-OK "layout conflict-free v3 (.jdi/roadmap/ per-entry; views geradas)"
+    Push-Location $ProjectDir
+    try {
+      git rev-parse --git-dir *> $null
+      if ($LASTEXITCODE -eq 0) {
+        $trackedViews = git ls-files -- .jdi/ROADMAP.md .jdi/DECISIONS.md .jdi/todos.md .jdi/registry.md .jdi/specialists.md .jdi/reviewers.md .jdi/skills-registry.md 2>$null
+        if ($trackedViews) {
+          Write-WARN "views geradas ainda trackeadas no git: $($trackedViews -join ' ') - rode: npx -y jdi-cli migrate-layout"
+        } else {
+          Write-OK "views untracked (ROADMAP/DECISIONS/todos/registry ficam fora do git)"
+        }
+      }
+      & (Join-Path $JdiRoot 'bin\lib\jdi-render.ps1') -Check -Quiet
+      if ($LASTEXITCODE -eq 0) {
+        Write-OK "views em sincronia com os per-entry dirs (render --check)"
+      } else {
+        Write-WARN "views desatualizadas ou com warnings - rode: npx -y jdi-cli render"
+      }
+    } finally {
+      Pop-Location
+    }
+  } else {
+    Write-WARN "layout legado (arquivos compartilhados em .jdi/). Merges de PR no GitHub IGNORAM merge=union - dois devs em paralelo conflitam em ROADMAP/DECISIONS. Migre: npx -y jdi-cli migrate-layout"
+  }
 } else {
   Write-WARN '.jdi/ ausente. Rode /jdi-new ou esta fora de um projeto JDI.'
 }

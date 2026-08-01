@@ -31,6 +31,8 @@ Finalizes phase after /jdi-verify approves. Writes phases/<slug>/SHIPPED.md (the
 <process>
 
 ### Step 1: Validation
+
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 ```bash
 test -d .jdi/ || { echo "Not a JDI project."; exit 1; }
 
@@ -222,9 +224,18 @@ THRESHOLD=$((NEXT_POSITION - ARCHIVE_AFTER))
 
 if [ "$THRESHOLD" -ge 1 ]; then
   mkdir -p .jdi/archive
-  test -f .jdi/archive/index.md || echo "# Archive index" > .jdi/archive/index.md
 
-  # Walk ROADMAP phases by position, archive folders whose position <= THRESHOLD
+  # archive/index.md is legacy-only: on layout v3 the archive DIR LISTING is
+  # the index (nothing shared to conflict). Only append where it already
+  # exists (legacy projects).
+  WRITE_INDEX=false
+  if [ ! -d .jdi/roadmap ]; then
+    test -f .jdi/archive/index.md || echo "# Archive index" > .jdi/archive/index.md
+    WRITE_INDEX=true
+  fi
+
+  # Walk phases by position (ROADMAP.md is the rendered view on v3 — safe to
+  # read after the render refresh in Step 0), archive folders <= THRESHOLD
   awk '
     /^### Phase / {
       line = $0
@@ -245,7 +256,7 @@ if [ "$THRESHOLD" -ge 1 ]; then
 
     VERDICT_OLD=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|BLOCKED)' "$JDI_PHASE_DIR/REVIEW.md" 2>/dev/null | awk '{print $2}' || echo "UNKNOWN")
     mv "$JDI_PHASE_DIR" .jdi/archive/
-    echo "- $(basename "$JDI_PHASE_DIR"): $VERDICT_OLD (archived $(date -u +%F))" >> .jdi/archive/index.md
+    [ "$WRITE_INDEX" = "true" ] && echo "- $(basename "$JDI_PHASE_DIR"): $VERDICT_OLD (archived $(date -u +%F))" >> .jdi/archive/index.md
   done
 fi
 ```

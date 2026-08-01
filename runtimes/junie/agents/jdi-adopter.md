@@ -313,7 +313,18 @@ Existing tests: {framework}, ~{N} files, current coverage {pct or unknown}
 {same as researcher — copy block}
 ```
 
-### Step 6: Generate `.jdi/ROADMAP.md`
+### Step 6: Generate the roadmap (conflict-free layout v3)
+
+One file per phase under `.jdi/roadmap/` — `.jdi/ROADMAP.md` becomes an
+untracked view rendered from it (Step 8). Server-side PR merges ignore
+`.gitattributes merge=union`, so shared append files are NOT safe across
+parallel branches; the per-entry layout is the guarantee.
+
+```bash
+mkdir -p .jdi/roadmap
+```
+
+`.jdi/roadmap/_header.md`:
 
 ```markdown
 # {project_name} — Roadmap (adopted)
@@ -325,23 +336,25 @@ adopted: true
 Project adopted on {date}. Pre-existing code is not in this roadmap — only NEW features added via JDI.
 
 ## Phases
-
-### Phase 1: {feature 1 from Q4}
-- **Slug:** {slug1}
-- **Goal:** {1-line description}
-
-### Phase 2: {feature 2 from Q4}
-- **Slug:** {slug2}
-- **Goal:** {description}
-
-(... up to N)
 ```
 
-Slug values are canonical (no `NN-` prefix). Numeric position is display-only.
-ROADMAP.md carries no per-phase status and no current-phase pointer — phase
-status is derived from each phase folder's artifacts (SHIPPED.md → done,
-REVIEW → verified, SUMMARY → executed, PLAN → planned, CONTEXT → discussed),
-keeping the file conflict-free across parallel team branches.
+One `.jdi/roadmap/{slug}.md` per feature from Q4:
+
+```markdown
+---
+order: {N}
+name: {feature N from Q4}
+---
+- **Slug:** {slug}
+- **Goal:** {1-line description}
+```
+
+Filename = canonical slug (no `NN-` prefix) = phase identity; validate each
+with `npx -y jdi-cli validate-slug "{slug}" --check-unique`. Display position
+= rank by `order:`. The roadmap carries no per-phase status and no
+current-phase pointer — phase status is derived from each phase folder's
+artifacts (SHIPPED.md → done, REVIEW → verified, SUMMARY → executed, PLAN →
+planned, CONTEXT → discussed).
 
 ### Step 7: Generate state files
 
@@ -358,21 +371,28 @@ next_step: /jdi-bootstrap
 
 `schema_version: 2` activates slug-as-ID for multi-developer safety. `current_phase_slug` is canonical; `current_phase` is the display mirror.
 
-```markdown
-# .jdi/DECISIONS.md
-# Locked project decisions
+Decisions are one file per decision under `.jdi/decisions/` (filename = ID).
+Write `.jdi/decisions/D-1.md`:
 
+```markdown
 D-1 ({date}): Code design = {Q2} (detected and confirmed in /jdi-adopt)
+```
+
+and `.jdi/decisions/D-2.md`:
+
+```markdown
 D-2 ({date}): Adopted brownfield. Coverage 80% enforced ONLY on new files (created after {current_commit_hash}). Pre-existing code not enforced.
 ```
 
-`{current_commit_hash}` = `git rev-parse HEAD` (if repo). If no git, use ISO date. Reviewer uses this marker to distinguish "new" vs "legacy".
+`{current_commit_hash}` = `git rev-parse HEAD` (if repo). If no git, use ISO date. Reviewer uses this marker to distinguish "new" vs "legacy". (`D-1`/`D-2` literal IDs are reserved for init-time decisions — written once, before any branching. Every later decision uses `D-{YYYY-MM-DD}-{phase_slug}-{seq}` as the filename.)
 
-### Step 8: mkdir + .gitattributes + .gitignore
+### Step 8: mkdir + .gitattributes + .gitignore + render
 
 ```bash
 mkdir -p .jdi/phases
 mkdir -p .jdi/agents
+mkdir -p .jdi/todos .jdi/registry
+touch .jdi/todos/.gitkeep .jdi/registry/.gitkeep
 
 # .gitattributes — only create the EOL block if absent (existing project may have its own)
 [ -f .gitattributes ] || cat > .gitattributes <<'EOF'
@@ -381,31 +401,21 @@ mkdir -p .jdi/agents
 *.{png,jpg,jpeg,gif,webp,ico,pdf,zip,tar,gz} binary
 EOF
 
-# merge=union on the append-only JDI files (idempotent append — safe on an
-# existing .gitattributes). Two devs appending on parallel branches auto-merge
-# instead of conflicting; safe because these files are append-only by contract.
-grep -q '\.jdi/DECISIONS\.md merge=union' .gitattributes 2>/dev/null || cat >> .gitattributes <<'EOF'
-.jdi/DECISIONS.md merge=union
-.jdi/todos.md merge=union
-.jdi/registry.md merge=union
-.jdi/specialists.md merge=union
-.jdi/reviewers.md merge=union
-.jdi/skills-registry.md merge=union
-.jdi/archive/index.md merge=union
-EOF
+# NO merge=union lines: server-side PR merges (GitHub/GitLab/ADO) ignore
+# custom merge drivers, so union never protected PRs. The v3 per-entry layout
+# (one file per roadmap entry/decision/todo/registry entry) is the
+# conflict-freedom mechanism and needs no merge driver.
 
-# ROADMAP.md union (0.11.0+, separate guard so pre-existing installs get it):
-# /jdi-issue made phase appends per-card — parallel appends must auto-merge.
-# Trade-off (racing remove-phase can resurrect a block) is rare, visible in
-# /jdi-status, audited by D-{date}-{slug}-rm, fixed by re-running the remove.
-grep -q '\.jdi/ROADMAP\.md merge=union' .gitattributes 2>/dev/null || echo '.jdi/ROADMAP.md merge=union' >> .gitattributes
+# The single-file views and STATE.md are per-clone artifacts — never
+# versioned, never a merge conflict (commands regenerate them):
+for p in .jdi/STATE.md .jdi/ROADMAP.md .jdi/DECISIONS.md .jdi/todos.md \
+         .jdi/registry.md .jdi/specialists.md .jdi/reviewers.md .jdi/skills-registry.md; do
+  grep -qxF "$p" .gitignore 2>/dev/null || echo "$p" >> .gitignore
+done
 
-# STATE.md is a per-clone advisory cache — never versioned, never a merge
-# conflict (commands regenerate it from phase artifacts when absent)
-grep -qxF '.jdi/STATE.md' .gitignore 2>/dev/null || echo '.jdi/STATE.md' >> .gitignore
+# Generate the views at their usual paths so every reader keeps working
+npx -y jdi-cli render
 ```
-
-Do NOT put `merge=union` on PROJECT.md or config.json — conflicts there must stay visible.
 
 ### Step 9: Commit
 
@@ -422,7 +432,7 @@ git commit -m "chore(jdi): adopt {project_name} brownfield"
 ```
 {project_name} ({slug}) adopted. Stack: {stack}. Design: {design}. New phases: {N}.
 Existing assets captured in PROJECT.md as context.
-Files: .jdi/{PROJECT,ROADMAP,STATE,DECISIONS}.md
+Files: .jdi/PROJECT.md + .jdi/roadmap/ ({N} phases) + .jdi/decisions/D-1.md,D-2.md (+ rendered views)
 Next: /jdi-bootstrap
 ```
 
@@ -454,7 +464,7 @@ Next: /jdi-bootstrap
 - `.jdi/DECISIONS.md` (D-1 code design, D-2 adopted boundary)
 - `.jdi/phases/` (empty)
 - `.jdi/agents/` (empty)
-- `.gitattributes` (EOL block only if absent; merge=union block appended idempotently)
+- `.gitattributes` (EOL block only if absent; no merge=union — the v3 per-entry layout is the conflict-freedom mechanism)
 - `.gitignore` entry `.jdi/STATE.md` (advisory cache, never versioned)
 - Commit `chore(jdi): adopt {name} brownfield`
 - Final message with next step

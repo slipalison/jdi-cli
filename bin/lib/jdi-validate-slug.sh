@@ -57,6 +57,14 @@ done
 
 # --- Rule 3 + 4: uniqueness vs current repo state ---
 if [[ "$CHECK_UNIQUE" == true ]]; then
+  # Layout v3: one file per phase under .jdi/roadmap/ is the roadmap source
+  # of truth (ROADMAP.md is a rendered view of it, so checking the dir covers
+  # both). Filename = slug of record.
+  if [[ -d .jdi/roadmap && -f ".jdi/roadmap/$SLUG.md" ]]; then
+    echo "ERROR: slug '$SLUG' already listed in roadmap (.jdi/roadmap/$SLUG.md)" >&2
+    exit 3
+  fi
+
   if [[ ! -d .jdi/phases ]]; then
     # No phases yet — definitely unique
     echo "$SLUG"
@@ -84,8 +92,10 @@ if [[ "$CHECK_UNIQUE" == true ]]; then
     exit 3
   fi
 
-  # ROADMAP collision: any phase whose Slug field (raw or canonical) equals $SLUG
-  if [[ -f .jdi/ROADMAP.md ]] && awk -v target="$SLUG" '
+  # ROADMAP collision: any phase whose Slug field (raw or canonical) equals $SLUG.
+  # Skipped under layout v3 — ROADMAP.md there is a rendered view of the dir
+  # already checked above (and may be stale on a fresh clone).
+  if [[ ! -d .jdi/roadmap ]] && [[ -f .jdi/ROADMAP.md ]] && awk -v target="$SLUG" '
       /^- \*\*Slug:\*\*/ {
         sub(/^- \*\*Slug:\*\*[[:space:]]*/, "")
         raw = $0

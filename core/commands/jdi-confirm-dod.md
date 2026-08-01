@@ -29,6 +29,8 @@ After `/jdi-verify` produces verdict `APPROVED_PENDING_MANUAL`, this command wal
 <process>
 
 ### Step 1: Validation
+
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 ```bash
 test -d .jdi/ || { echo "Not a JDI project."; exit 1; }
 ```
