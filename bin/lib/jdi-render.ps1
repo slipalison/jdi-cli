@@ -113,6 +113,11 @@ function Get-Body([string]$path) {
 
 # Install a rendered view (content = full text WITH trailing newline).
 function Install-View([string]$content, [string]$target) {
+  # Views are LF-only, byte-identical with the .sh renderer. Herestring
+  # literals inherit this FILE's own line endings - and git checks .ps1 out
+  # as CRLF (repo .gitattributes eol=crlf) - so normalize the assembled
+  # content as a whole instead of trusting any single source.
+  $content = $content -replace "`r`n", "`n" -replace "`r", "`n"
   if ($Check) {
     if (-not (Test-Path $target)) {
       Say "[drift] $target missing - run: npx -y jdi-cli render"

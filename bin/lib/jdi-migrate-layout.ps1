@@ -14,6 +14,12 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# PS 7.4+ turns native-command nonzero exits into terminating errors when
+# ErrorActionPreference is Stop ($PSNativeCommandUseErrorActionPreference
+# defaults to $true). This script probes git with EXPECTED failures
+# (ls-files --error-unmatch, rm --cached of untracked paths) - keep native
+# exit codes as data, not exceptions. No-op on 5.1/7.0-7.3.
+$PSNativeCommandUseErrorActionPreference = $false
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 function Fail([string]$msg) {
