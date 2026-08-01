@@ -5,6 +5,31 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.1] - 2026-08-01
+
+Hotfix for two field defects in 0.13.0's Windows path, both caught by running
+the PUBLISHED package end-to-end (`npx jdi-cli@0.13.0 migrate-layout`) against
+the real brownfield repo — and both now covered by consumer-path test
+scenarios (43 assertions total).
+
+### Fixed
+- **`migrate-layout` died halfway on PowerShell 7.4+.** PS 7.4 defaults
+  `$PSNativeCommandUseErrorActionPreference` to `$true`: with
+  `$ErrorActionPreference = 'Stop'`, a native command exiting nonzero becomes
+  a terminating error. The script probes git with EXPECTED failures
+  (`ls-files --error-unmatch` on an untracked STATE.md) — `*> $null` silences
+  the text, not the exit — so the run aborted before rendering/staging,
+  leaving a half-migrated tree. Fixed by treating native exit codes as data
+  (`$PSNativeCommandUseErrorActionPreference = $false` in the script; no-op
+  on 5.1/7.0-7.3).
+- **PS1-rendered views could carry CRLF and break sh/ps1 parity.** Herestring
+  literals inherit the `.ps1` FILE's own line endings, and the repo's
+  `.gitattributes` checks `.ps1` out as CRLF — so the fallback table headers
+  (used when a legacy project lacks e.g. `skills-registry.md`) embedded
+  `\r\n` and `render --check` reported permanent drift against the `.sh`
+  renderer. Fixed at the single install point: the assembled view is
+  LF-normalized as a whole before writing/diffing.
+
 ## [0.13.0] - 2026-08-01
 
 Conflict-free layout v3. A real two-branch PR (TranslateReader #15) conflicted
