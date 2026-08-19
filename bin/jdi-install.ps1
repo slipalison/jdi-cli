@@ -315,8 +315,10 @@ if ($Githooks) {
 if ($Scope -eq 'project' -or $Scope -eq 'user') {
   if (Test-Path (Join-Path $ProjectDir '.jdi')) {
     $pkgJson = Get-Content (Join-Path $Root 'package.json') -Raw | ConvertFrom-Json
-    Set-Content -Path (Join-Path $ProjectDir '.jdi/VERSION') -Value $pkgJson.version -Encoding UTF8 -NoNewline
+    # WriteAllText + UTF8 sem BOM: Set-Content -Encoding UTF8 no PS 5.1 grava
+    # BOM, e o bash (update.sh de outro dev) leria "\xEF\xBB\xBFpt-BR" != "pt-BR".
+    [System.IO.File]::WriteAllText((Join-Path $ProjectDir '.jdi/VERSION'), [string]$pkgJson.version, $Utf8NoBom)
     # Escreve .jdi/LANG pra jdi update reaplicar a diretiva sem exigir -Lang de novo
-    Set-Content -Path (Join-Path $ProjectDir '.jdi/LANG') -Value $JdiLang -Encoding UTF8 -NoNewline
+    [System.IO.File]::WriteAllText((Join-Path $ProjectDir '.jdi/LANG'), [string]$JdiLang, $Utf8NoBom)
   }
 }

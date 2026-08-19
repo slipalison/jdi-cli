@@ -350,9 +350,10 @@ async function cmdInstall({ positional, flags }) {
     ];
     ui.nextSteps(nextStepList);
   } else {
+    const doctorCmd = `${c.cyan}npx jdi-cli doctor${c.reset}`;
     ui.errorSummary(tr('install.fail_title'), [
       `${sym.error} ${tr('label.exit_code')}: ${code}`,
-      `${sym.info} ${tr('install.fail_hint', `${c.cyan}npx jdi-cli doctor${c.reset}`)}`,
+      `${sym.info} ${tr('install.fail_hint', doctorCmd)}`,
     ]);
     process.exit(code);
   }
@@ -369,9 +370,10 @@ async function cmdBuild({ flags }) {
   const { code } = runShellScript('jdi-build');
 
   if (code === 0) {
+    const runtimesDir = `${c.dim}runtimes/${c.reset}`;
     ui.successSummary(tr('build.success_title'), [
       `${sym.success} ${tr('build.success_line1')}`,
-      `${sym.success} ${tr('build.success_line2', `${c.dim}runtimes/${c.reset}`)}`,
+      `${sym.success} ${tr('build.success_line2', runtimesDir)}`,
     ]);
     ui.nextSteps([
       tr('build.next1', `${c.cyan}npx jdi-cli install <runtime>${c.reset}`),
@@ -679,10 +681,12 @@ async function main() {
     case '-V':
       cmdVersion();
       break;
-    default:
+    default: {
+      const helpCmd = `${c.cyan}npx jdi-cli help${c.reset}`;
       ui.fail(tr('error.unknown_command', parsed.cmd));
-      console.log(`  ${tr('error.see_help', `${c.cyan}npx jdi-cli help${c.reset}`)}`);
+      console.log(`  ${tr('error.see_help', helpCmd)}`);
       process.exit(1);
+    }
   }
 }
 
