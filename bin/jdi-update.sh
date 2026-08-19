@@ -34,6 +34,21 @@ done
 # Le versao nova do package.json shipado
 NEW_VERSION=$(grep -oE '"version":\s*"[^"]+"' "$ROOT/package.json" | head -1 | sed 's/.*"\([^"]*\)"/\1/')
 
+# Idioma: JDI_LANG so chega setado quando o usuario passou --lang em
+# `jdi update` (ver bin/jdi.js). Sem override explicito, cai no idioma
+# persistido em .jdi/LANG (escrito pelo install); sem esse arquivo
+# (projeto pre-i18n), default 'en'. Export pra jdi-install.sh (chamado
+# como subprocesso abaixo) herdar via ambiente.
+LANG_FILE="$PROJECT_DIR/.jdi/LANG"
+if [[ -z "${JDI_LANG:-}" ]]; then
+  if [[ -f "$LANG_FILE" ]]; then
+    JDI_LANG="$(tr -d '[:space:]' < "$LANG_FILE")"
+  else
+    JDI_LANG="en"
+  fi
+fi
+export JDI_LANG
+
 # Pre-flight
 if [[ ! -d "$PROJECT_DIR/.jdi" ]]; then
   echo "Esse diretorio nao tem .jdi/. Use 'npx jdi-cli install <runtime>' pra primeira instalacao."
@@ -229,6 +244,7 @@ fi
 
 if [[ $DRY_RUN -eq 0 ]]; then
   printf '%s' "$NEW_VERSION" > "$VERSION_FILE"
+  printf '%s' "$JDI_LANG" > "$LANG_FILE"
 fi
 
 echo

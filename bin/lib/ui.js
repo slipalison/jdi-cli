@@ -1,5 +1,19 @@
 'use strict';
 
+const i18n = require('./i18n');
+
+// Idioma corrente da saida — setado uma vez por bin/jdi.js via setLang(),
+// antes de qualquer comando rodar. Default: i18n.DEFAULT_LANG (en).
+let currentLang = i18n.DEFAULT_LANG;
+
+function setLang(lang) {
+  currentLang = lang;
+}
+
+function tr(key, ...args) {
+  return i18n.t(currentLang, key, ...args);
+}
+
 // ANSI escape codes — sem deps externas
 const isTTY = process.stdout.isTTY;
 const supportsColor = isTTY && !process.env.NO_COLOR;
@@ -81,7 +95,6 @@ function saberColor(idx) {
   }
   return `\x1b[38;5;${SABER_COLORS_256[idx]}m`;
 }
-const TAGLINE = 'Cut through the chaos. Ship the work. [Just do it]';
 
 // Build one saber line, blade ignited from right (hilt) extending left to bladeChars.
 // Layout (right-anchored): [spaces if blade incomplete][tip?][blade chars][hilt]
@@ -144,7 +157,7 @@ function buildFrame({ showHilt, sabersBlade, showTagline }) {
   lines.push('');
 
   if (showTagline) {
-    lines.push(`  ${purple}${c.italic}${TAGLINE}${r}`);
+    lines.push(`  ${purple}${c.italic}${tr('ui.tagline')}${r}`);
   } else {
     lines.push('');
   }
@@ -242,7 +255,7 @@ async function bannerAnimated() {
   let spinIdx = 0;
   while (Date.now() - start < HOLD_MS) {
     const frame = SPIN_FRAMES[spinIdx % SPIN_FRAMES.length];
-    process.stdout.write(`\r  ${purple}${frame}${r} ${c.dim}igniting...${r}   `);
+    process.stdout.write(`\r  ${purple}${frame}${r} ${c.dim}${tr('ui.igniting')}${r}   `);
     spinIdx++;
     await sleep(SPIN_INTERVAL);
   }
@@ -386,7 +399,7 @@ function errorSummary(title, lines) {
 // Hint pra proximo passo
 function nextSteps(steps) {
   console.log('');
-  console.log(`${c.bold}${c.cyan}Proximos passos:${c.reset}`);
+  console.log(`${c.bold}${c.cyan}${tr('ui.next_steps_title')}${c.reset}`);
   for (let i = 0; i < steps.length; i++) {
     console.log(`  ${c.cyan}${i + 1}.${c.reset} ${steps[i]}`);
   }
@@ -397,6 +410,7 @@ module.exports = {
   c,
   sym,
   synthwave,
+  setLang,
   banner,
   bannerAnimated,
   box,

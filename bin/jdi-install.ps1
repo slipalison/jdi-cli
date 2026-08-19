@@ -45,6 +45,68 @@ function Copy-Tree {
   Copy-Item -Path (Join-Path $From '*') -Destination $To -Recurse -Force
 }
 
+# Idioma de instalacao - vem de bin/jdi.js via variavel de ambiente
+# (JDI_LANG=en|pt-BR), nunca de parametro deste script (mantem os .sh/.ps1
+# sem -Lang proprio).
+$LangPtBr = 'pt-BR'
+$JdiLang = if ($env:JDI_LANG) { $env:JDI_LANG } else { 'en' }
+
+# Diretiva de idioma: injeta um aviso IDIOMA logo depois do fechamento do
+# frontmatter de cada command/agent/skill instalado, quando JdiLang=pt-BR.
+# O build (core/ -> runtimes/) fica neutro de idioma; a injecao acontece
+# so aqui, no install, pra runtimes/ nao mudar. Le/escreve UTF8 sem BOM
+# explicitamente (nao Get-Content/Set-Content) porque o PowerShell 5.1
+# decodifica arquivo sem BOM pela codepage ANSI por default, o que
+# corromperia os bytes non-ASCII ja existentes nos arquivos de core/.
+$LangDirectiveFile = Join-Path $Root 'core\templates\lang-directive.pt-BR.md'
+$LangDirectiveMarker = '<!-- jdi:lang-directive -->'
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
+# Insere a diretiva num unico arquivo .md, logo apos o '---' de fechamento
+# do frontmatter. Idempotente (nao duplica se o marker ja estiver no
+# arquivo). Ignora silenciosamente arquivo inexistente.
+function Add-LangDirectiveToFile {
+  param([string]$FilePath)
+  if (-not (Test-Path $FilePath)) { return }
+
+  $text = [System.IO.File]::ReadAllText($FilePath, [System.Text.Encoding]::UTF8)
+  if ($text.Contains($LangDirectiveMarker)) { return }
+
+  $directive = [System.IO.File]::ReadAllText($LangDirectiveFile, [System.Text.Encoding]::UTF8)
+  $directiveLines = [string[]]($directive.TrimEnd("`n") -split "`n")
+
+  $fm = 0
+  $out = New-Object System.Collections.Generic.List[string]
+  foreach ($line in ($text -split "`n")) {
+    $out.Add($line)
+    if ($line.TrimEnd("`r") -eq '---' -and $fm -lt 2) {
+      $fm++
+      if ($fm -eq 2) { $out.AddRange($directiveLines) }
+    }
+  }
+  [System.IO.File]::WriteAllText($FilePath, ($out -join "`n"), $Utf8NoBom)
+}
+
+# Aplica a injecao a todo .md de 1o nivel num diretorio (agents/, commands/,
+# prompts/). Silencioso se o diretorio nao existir ou estiver vazio.
+function Add-LangDirectiveToDir {
+  param([string]$Dir)
+  if (-not (Test-Path $Dir)) { return }
+  Get-ChildItem -Path $Dir -Filter '*.md' -File | ForEach-Object {
+    Add-LangDirectiveToFile -FilePath $_.FullName
+  }
+}
+
+# Aplica a injecao a todo skills/<nome>/SKILL.md sob um diretorio.
+function Add-LangDirectiveToSkills {
+  param([string]$SkillsRoot)
+  if (-not (Test-Path $SkillsRoot)) { return }
+  Get-ChildItem -Path $SkillsRoot -Directory | ForEach-Object {
+    $skillFile = Join-Path $_.FullName 'SKILL.md'
+    if (Test-Path $skillFile) { Add-LangDirectiveToFile -FilePath $skillFile }
+  }
+}
+
 function Install-Claude {
   $dest = if ($Scope -eq 'user') { Join-Path $UserHome '.claude' } else { Join-Path $ProjectDir '.claude' }
   New-Item -ItemType Directory -Force -Path "$dest\agents" | Out-Null
@@ -54,6 +116,12 @@ function Install-Claude {
   Copy-Tree -From "$Root\runtimes\claude\agents" -To "$dest\agents"
   Copy-Tree -From "$Root\runtimes\claude\commands" -To "$dest\commands"
   Copy-Tree -From "$Root\runtimes\claude\skills" -To "$dest\skills"
+
+  if ($JdiLang -eq $LangPtBr) {
+    Add-LangDirectiveToDir -Dir "$dest\agents"
+    Add-LangDirectiveToDir -Dir "$dest\commands"
+    Add-LangDirectiveToSkills -SkillsRoot "$dest\skills"
+  }
 
   if ($Scope -eq 'project') {
     if (Test-Path "$Root\runtimes\claude\CLAUDE.md") {
@@ -81,6 +149,12 @@ function Install-Copilot {
   # Skills servem as 3 superficies: Copilot CLI (que NAO le .github/prompts/),
   # VS Code agent mode e o coding agent do github.com
   Copy-Tree -From "$Root\runtimes\copilot\skills" -To "$dest\skills"
+
+  if ($JdiLang -eq $LangPtBr) {
+    Add-LangDirectiveToDir -Dir "$dest\agents"
+    Add-LangDirectiveToDir -Dir "$dest\prompts"
+    Add-LangDirectiveToSkills -SkillsRoot "$dest\skills"
+  }
 
   if (Test-Path "$Root\runtimes\copilot\copilot-instructions.md") {
     Copy-Item -Path "$Root\runtimes\copilot\copilot-instructions.md" -Destination "$dest\copilot-instructions.md" -Force
@@ -117,6 +191,10 @@ function Install-Antigravity {
   New-Item -ItemType Directory -Force -Path "$dest\skills" | Out-Null
   Copy-Tree -From "$Root\runtimes\antigravity\skills" -To "$dest\skills"
 
+  if ($JdiLang -eq $LangPtBr) {
+    Add-LangDirectiveToSkills -SkillsRoot "$dest\skills"
+  }
+
   if ($Scope -eq 'project' -and (Test-Path "$Root\runtimes\antigravity\agents.md")) {
     Copy-Item -Path "$Root\runtimes\antigravity\agents.md" -Destination "$dest\agents.md" -Force
   }
@@ -141,6 +219,12 @@ function Install-Opencode {
   Copy-Tree -From "$Root\runtimes\opencode\agents" -To "$dest\agents"
   Copy-Tree -From "$Root\runtimes\opencode\commands" -To "$dest\commands"
   Copy-Tree -From "$Root\runtimes\opencode\skills" -To "$dest\skills"
+
+  if ($JdiLang -eq $LangPtBr) {
+    Add-LangDirectiveToDir -Dir "$dest\agents"
+    Add-LangDirectiveToDir -Dir "$dest\commands"
+    Add-LangDirectiveToSkills -SkillsRoot "$dest\skills"
+  }
 
   if ($Scope -eq 'project') {
     if (Test-Path "$Root\runtimes\opencode\AGENTS.md") {
@@ -185,6 +269,11 @@ function Install-Junie {
   Copy-Tree -From "$Root\runtimes\junie\agents" -To "$dest\agents"
   Copy-Tree -From "$Root\runtimes\junie\skills" -To "$dest\skills"
 
+  if ($JdiLang -eq $LangPtBr) {
+    Add-LangDirectiveToDir -Dir "$dest\agents"
+    Add-LangDirectiveToSkills -SkillsRoot "$dest\skills"
+  }
+
   if ($Scope -eq 'project') {
     Copy-Item -Path "$Root\runtimes\junie\AGENTS.md" -Destination "$dest\AGENTS.md" -Force
     # Specialists gerados pelo bootstrap: Junie delega por .junie/agents/
@@ -227,5 +316,7 @@ if ($Scope -eq 'project' -or $Scope -eq 'user') {
   if (Test-Path (Join-Path $ProjectDir '.jdi')) {
     $pkgJson = Get-Content (Join-Path $Root 'package.json') -Raw | ConvertFrom-Json
     Set-Content -Path (Join-Path $ProjectDir '.jdi/VERSION') -Value $pkgJson.version -Encoding UTF8 -NoNewline
+    # Escreve .jdi/LANG pra jdi update reaplicar a diretiva sem exigir -Lang de novo
+    Set-Content -Path (Join-Path $ProjectDir '.jdi/LANG') -Value $JdiLang -Encoding UTF8 -NoNewline
   }
 }

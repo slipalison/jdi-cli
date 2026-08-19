@@ -41,6 +41,21 @@ $UserHome = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
 $pkgJson = Get-Content (Join-Path $Root 'package.json') -Raw | ConvertFrom-Json
 $NewVersion = $pkgJson.version
 
+# Idioma: $env:JDI_LANG so chega setado quando o usuario passou -Lang em
+# `jdi update` (ver bin/jdi.js). Sem override explicito, cai no idioma
+# persistido em .jdi/LANG (escrito pelo install); sem esse arquivo
+# (projeto pre-i18n), default 'en'. Fica no ambiente do processo, entao
+# jdi-install.ps1 (chamado como subprocesso abaixo) herda sem precisar
+# de -Lang proprio.
+$LangFile = Join-Path $ProjectDir '.jdi/LANG'
+if (-not $env:JDI_LANG) {
+  if (Test-Path $LangFile) {
+    $env:JDI_LANG = (Get-Content $LangFile -Raw).Trim()
+  } else {
+    $env:JDI_LANG = 'en'
+  }
+}
+
 # Pre-flight
 if (-not (Test-Path (Join-Path $ProjectDir '.jdi'))) {
   Write-Output "Esse diretorio nao tem .jdi/. Use 'npx jdi-cli install <runtime>' pra primeira instalacao."
@@ -227,6 +242,7 @@ if ($specialists.Count -gt 0) {
 
 if (-not $DryRun) {
   Set-Content -Path $VersionFile -Value $NewVersion -Encoding UTF8 -NoNewline
+  Set-Content -Path $LangFile -Value $env:JDI_LANG -Encoding UTF8 -NoNewline
 }
 
 Write-Output ""

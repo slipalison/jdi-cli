@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
 const ui = require('./lib/ui');
+const i18n = require('./lib/i18n');
 const { c, sym } = ui;
 
 const VERSION = require('../package.json').version;
@@ -13,6 +14,13 @@ const isWindows = process.platform === 'win32';
 
 const VALID_RUNTIMES = ['claude', 'copilot', 'antigravity', 'opencode', 'junie', 'all'];
 const VALID_SCOPES = ['user', 'project'];
+
+// Idioma resolvido uma vez em main() e usado por todo o dispatcher.
+let cliLang = i18n.DEFAULT_LANG;
+
+function tr(key, ...args) {
+  return i18n.t(cliLang, key, ...args);
+}
 
 // =================================================================
 // Argument parsing — minimal, no deps
@@ -29,7 +37,7 @@ const BOOL_FLAGS = new Set(['verbose', 'help', 'version', 'noColor']);
 // Flags whose value is the NEXT token (`--flag value`), besides `--flag=value`.
 // Without this, `--runtime claude` parsed as {runtime:true} + positional
 // "claude" and broke the shell delegation.
-const VALUE_FLAGS = new Set(['scope', 'runtime', 'repo', 'antigravity-scope']);
+const VALUE_FLAGS = new Set(['scope', 'runtime', 'repo', 'antigravity-scope', 'lang']);
 
 function parseArgs(argv) {
   const args = argv.slice(2);
@@ -133,7 +141,7 @@ function runShellScript(scriptName, scriptArgs = []) {
   const scriptPath = getScriptPath(scriptName);
 
   if (!fs.existsSync(scriptPath)) {
-    ui.fail(`Script nao encontrado: ${scriptPath}`);
+    ui.fail(tr('error.script_not_found', scriptPath));
     return { code: 1 };
   }
 
@@ -276,24 +284,24 @@ function buildFlagArgs(flags, spec) {
 
 function ensureRuntime(runtime) {
   if (!runtime) {
-    ui.fail('Runtime obrigatorio.');
+    ui.fail(tr('error.runtime_required'));
     console.log('');
-    console.log(`  Uso: ${c.cyan}jdi install <runtime> [--scope user|project]${c.reset}`);
-    console.log(`  Runtimes: ${VALID_RUNTIMES.join(', ')}`);
+    console.log(`  ${tr('help.usage_label')} ${c.cyan}jdi install <runtime> [--scope user|project]${c.reset}`);
+    console.log(`  ${tr('error.runtimes_label')}: ${VALID_RUNTIMES.join(', ')}`);
     console.log('');
     process.exit(1);
   }
   if (!VALID_RUNTIMES.includes(runtime)) {
-    ui.fail(`Runtime invalido: ${runtime}`);
-    console.log(`  Validos: ${VALID_RUNTIMES.join(', ')}`);
+    ui.fail(tr('error.runtime_invalid', runtime));
+    console.log(`  ${tr('error.valid_options')}: ${VALID_RUNTIMES.join(', ')}`);
     process.exit(1);
   }
 }
 
 function ensureScope(scope) {
   if (scope && !VALID_SCOPES.includes(scope)) {
-    ui.fail(`Scope invalido: ${scope}`);
-    console.log(`  Validos: ${VALID_SCOPES.join(', ')}`);
+    ui.fail(tr('error.scope_invalid', scope));
+    console.log(`  ${tr('error.valid_options')}: ${VALID_SCOPES.join(', ')}`);
     process.exit(1);
   }
 }
@@ -311,10 +319,10 @@ async function cmdInstall({ positional, flags }) {
 
   await ui.bannerAnimated();
 
-  ui.header(`Instalando JDI para ${c.bold}${runtime}${c.reset}`);
-  ui.info(`Diretorio: ${c.dim}${process.cwd()}${c.reset}`);
-  ui.info(`Scope: ${c.dim}${scope}${c.reset}`);
-  ui.info(`Plataforma: ${c.dim}${process.platform} (${isWindows ? 'PowerShell' : 'bash'})${c.reset}`);
+  ui.header(tr('install.header', `${c.bold}${runtime}${c.reset}`));
+  ui.info(`${tr('label.directory')}: ${c.dim}${process.cwd()}${c.reset}`);
+  ui.info(`${tr('label.scope')}: ${c.dim}${scope}${c.reset}`);
+  ui.info(`${tr('label.platform')}: ${c.dim}${process.platform} (${isWindows ? 'PowerShell' : 'bash'})${c.reset}`);
   console.log('');
 
   const args = isWindows
@@ -322,29 +330,29 @@ async function cmdInstall({ positional, flags }) {
     : [runtime, '--scope', scope];
   if (flags.githooks) args.push(isWindows ? '-Githooks' : '--githooks');
 
-  const sp = ui.spinner(`Instalando adapters em ${runtime}...`);
+  const sp = ui.spinner(tr('install.spinner', runtime));
   sp.stop();
 
   const { code } = runShellScript('jdi-install', args);
 
   if (code === 0) {
-    ui.successSummary('JDI instalado com sucesso', [
-      `${sym.success} Runtime: ${c.bold}${runtime}${c.reset}`,
-      `${sym.success} Scope: ${c.bold}${scope}${c.reset}`,
-      `${sym.success} Diretorio: ${c.dim}${process.cwd()}${c.reset}`,
+    ui.successSummary(tr('install.success_title'), [
+      `${sym.success} ${tr('label.runtime')}: ${c.bold}${runtime}${c.reset}`,
+      `${sym.success} ${tr('label.scope')}: ${c.bold}${scope}${c.reset}`,
+      `${sym.success} ${tr('label.directory')}: ${c.dim}${process.cwd()}${c.reset}`,
     ]);
 
     const nextStepList = [
-      `Abre teu runtime (${runtime}) no diretorio do projeto`,
-      `Roda ${c.cyan}/jdi-new "<descricao do projeto>"${c.reset} pra inicializar`,
-      `Depois ${c.cyan}/jdi-bootstrap${c.reset} pra criar specialists per-project`,
-      `Comando ${c.cyan}npx jdi-cli doctor${c.reset} pra diagnostico`,
+      tr('install.next1', runtime),
+      tr('install.next2', `${c.cyan}${tr('install.next2_cmd')}${c.reset}`),
+      tr('install.next3', `${c.cyan}/jdi-bootstrap${c.reset}`),
+      tr('install.next4', `${c.cyan}npx jdi-cli doctor${c.reset}`),
     ];
     ui.nextSteps(nextStepList);
   } else {
-    ui.errorSummary('Instalacao falhou', [
-      `${sym.error} Exit code: ${code}`,
-      `${sym.info} Tente ${c.cyan}npx jdi-cli doctor${c.reset} pra diagnostico`,
+    ui.errorSummary(tr('install.fail_title'), [
+      `${sym.error} ${tr('label.exit_code')}: ${code}`,
+      `${sym.info} ${tr('install.fail_hint', `${c.cyan}npx jdi-cli doctor${c.reset}`)}`,
     ]);
     process.exit(code);
   }
@@ -353,24 +361,24 @@ async function cmdInstall({ positional, flags }) {
 async function cmdBuild({ flags }) {
   await ui.bannerAnimated();
 
-  ui.header('Building JDI runtimes');
-  ui.info(`Source: ${c.dim}${PKG_ROOT}/core/${c.reset}`);
-  ui.info(`Output: ${c.dim}${PKG_ROOT}/runtimes/${c.reset}`);
+  ui.header(tr('build.header'));
+  ui.info(`${tr('label.source')}: ${c.dim}${PKG_ROOT}/core/${c.reset}`);
+  ui.info(`${tr('label.output')}: ${c.dim}${PKG_ROOT}/runtimes/${c.reset}`);
   console.log('');
 
   const { code } = runShellScript('jdi-build');
 
   if (code === 0) {
-    ui.successSummary('Build completo', [
-      `${sym.success} 4 runtimes gerados (claude, copilot, antigravity, opencode)`,
-      `${sym.success} Adapters em ${c.dim}runtimes/${c.reset}`,
+    ui.successSummary(tr('build.success_title'), [
+      `${sym.success} ${tr('build.success_line1')}`,
+      `${sym.success} ${tr('build.success_line2', `${c.dim}runtimes/${c.reset}`)}`,
     ]);
     ui.nextSteps([
-      `Instala em projeto: ${c.cyan}npx jdi-cli install <runtime>${c.reset}`,
-      `Diagnostico: ${c.cyan}npx jdi-cli doctor${c.reset}`,
+      tr('build.next1', `${c.cyan}npx jdi-cli install <runtime>${c.reset}`),
+      tr('build.next2', `${c.cyan}npx jdi-cli doctor${c.reset}`),
     ]);
   } else {
-    ui.errorSummary('Build falhou', [`${sym.error} Exit code: ${code}`]);
+    ui.errorSummary(tr('build.fail_title'), [`${sym.error} ${tr('label.exit_code')}: ${code}`]);
     process.exit(code);
   }
 }
@@ -378,8 +386,8 @@ async function cmdBuild({ flags }) {
 async function cmdUpdate({ flags }) {
   await ui.bannerAnimated();
 
-  ui.header('JDI Update');
-  ui.info(`Diretorio: ${c.dim}${process.cwd()}${c.reset}`);
+  ui.header(tr('update.header'));
+  ui.info(`${tr('label.directory')}: ${c.dim}${process.cwd()}${c.reset}`);
   console.log('');
 
   const args = buildFlagArgs(flags, [
@@ -398,8 +406,8 @@ async function cmdUpdate({ flags }) {
 async function cmdUninstall({ positional, flags }) {
   await ui.bannerAnimated();
 
-  ui.header('JDI Uninstall');
-  ui.info(`Diretorio: ${c.dim}${process.cwd()}${c.reset}`);
+  ui.header(tr('uninstall.header'));
+  ui.info(`${tr('label.directory')}: ${c.dim}${process.cwd()}${c.reset}`);
   console.log('');
 
   const runtime = positional[0] || 'all';
@@ -424,8 +432,8 @@ async function cmdUninstall({ positional, flags }) {
 async function cmdInstallPlaywright({ flags }) {
   await ui.bannerAnimated();
 
-  ui.header('JDI: Install Playwright + MCP');
-  ui.info(`Directory: ${c.dim}${process.cwd()}${c.reset}`);
+  ui.header(tr('playwright.header'));
+  ui.info(`${tr('label.directory')}: ${c.dim}${process.cwd()}${c.reset}`);
   console.log('');
 
   const args = buildFlagArgs(flags, [
@@ -438,18 +446,18 @@ async function cmdInstallPlaywright({ flags }) {
   const { code } = runShellScript('jdi-install-playwright', args);
 
   if (code === 0) {
-    ui.successSummary('Playwright + MCP ready', [
-      `${sym.success} @playwright/test installed`,
-      `${sym.success} chromium browser ${flags['skip-browser'] ? 'skipped' : 'installed'}`,
-      `${sym.success} MCP config ${flags['skip-mcp'] ? 'skipped' : 'injected (where runtime present)'}`,
+    ui.successSummary(tr('playwright.success_title'), [
+      `${sym.success} ${tr('playwright.line_installed')}`,
+      `${sym.success} ${flags['skip-browser'] ? tr('playwright.line_browser_skipped') : tr('playwright.line_browser_installed')}`,
+      `${sym.success} ${flags['skip-mcp'] ? tr('playwright.line_mcp_skipped') : tr('playwright.line_mcp_injected')}`,
     ]);
     ui.nextSteps([
-      `Restart your runtime to pick up MCP changes`,
-      `Claude Code: ${c.cyan}/mcp${c.reset} to verify`,
-      `OpenCode: ${c.cyan}opencode reload${c.reset}`,
+      tr('playwright.next1'),
+      tr('playwright.next2', `${c.cyan}/mcp${c.reset}`),
+      tr('playwright.next3', `${c.cyan}opencode reload${c.reset}`),
     ]);
   } else {
-    ui.errorSummary('Playwright install failed', [`${sym.error} Exit code: ${code}`]);
+    ui.errorSummary(tr('playwright.fail_title'), [`${sym.error} ${tr('label.exit_code')}: ${code}`]);
     process.exit(code);
   }
 }
@@ -457,8 +465,8 @@ async function cmdInstallPlaywright({ flags }) {
 async function cmdInstallCaveman({ flags }) {
   await ui.bannerAnimated();
 
-  ui.header('JDI: Install Caveman plugin');
-  ui.info(`Directory: ${c.dim}${process.cwd()}${c.reset}`);
+  ui.header(tr('caveman.header'));
+  ui.info(`${tr('label.directory')}: ${c.dim}${process.cwd()}${c.reset}`);
   console.log('');
 
   const args = buildFlagArgs(flags, [
@@ -470,16 +478,16 @@ async function cmdInstallCaveman({ flags }) {
   const { code } = runShellScript('jdi-install-caveman', args);
 
   if (code === 0) {
-    ui.successSummary('Caveman ready', [
-      `${sym.success} Plugin cloned`,
-      `${sym.info} Restart Claude Code to load`,
+    ui.successSummary(tr('caveman.success_title'), [
+      `${sym.success} ${tr('caveman.line_cloned')}`,
+      `${sym.info} ${tr('caveman.line_restart')}`,
     ]);
     ui.nextSteps([
-      `Verify: ${c.cyan}/caveman-help${c.reset}`,
-      `Toggle mode: ${c.cyan}/caveman lite|full|ultra${c.reset}`,
+      tr('caveman.next1', `${c.cyan}/caveman-help${c.reset}`),
+      tr('caveman.next2', `${c.cyan}/caveman lite|full|ultra${c.reset}`),
     ]);
   } else {
-    ui.errorSummary('Caveman install failed', [`${sym.error} Exit code: ${code}`]);
+    ui.errorSummary(tr('caveman.fail_title'), [`${sym.error} ${tr('label.exit_code')}: ${code}`]);
     process.exit(code);
   }
 }
@@ -487,8 +495,8 @@ async function cmdInstallCaveman({ flags }) {
 async function cmdDoctor({ flags }) {
   await ui.bannerAnimated();
 
-  ui.header('JDI Doctor');
-  ui.info(`Diretorio atual: ${c.dim}${process.cwd()}${c.reset}`);
+  ui.header(tr('doctor.header'));
+  ui.info(`${tr('doctor.dir_label')}: ${c.dim}${process.cwd()}${c.reset}`);
   console.log('');
 
   let args = [];
@@ -505,74 +513,75 @@ async function cmdDoctor({ flags }) {
 async function cmdHelp() {
   await ui.bannerAnimated();
 
-  console.log(`${c.bold}Uso:${c.reset}`);
-  console.log(`  ${c.cyan}npx jdi-cli <comando> [opcoes]${c.reset}`);
+  console.log(`${c.bold}${tr('help.usage_label')}${c.reset}`);
+  console.log(`  ${c.cyan}${tr('help.usage_line')}${c.reset}`);
   console.log('');
 
-  console.log(`${c.bold}Comandos:${c.reset}`);
-  console.log(`  ${c.cyan}install${c.reset} ${c.gray}<runtime>${c.reset}      Instala JDI no projeto atual`);
-  console.log(`  ${c.cyan}update${c.reset}                 Atualiza JDI ja instalado (preserva state)`);
-  console.log(`  ${c.cyan}uninstall${c.reset} ${c.gray}[runtime]${c.reset}    Remove JDI do projeto (preserva .jdi/ por default)`);
-  console.log(`  ${c.cyan}build${c.reset}                  Re-builda runtimes/ a partir de core/`);
-  console.log(`  ${c.cyan}doctor${c.reset}                 Diagnostico do projeto + JDI`);
-  console.log(`  ${c.cyan}install-playwright${c.reset}     Instala @playwright/test + chromium + MCP config`);
-  console.log(`  ${c.cyan}install-caveman${c.reset}        Instala plugin caveman (modo ultra-compresso)`);
-  console.log(`  ${c.cyan}help${c.reset}                   Mostra esta ajuda`);
-  console.log(`  ${c.cyan}--version${c.reset}              Mostra versao`);
+  console.log(`${c.bold}${tr('help.commands_label')}${c.reset}`);
+  console.log(`  ${c.cyan}install${c.reset} ${c.gray}<runtime>${c.reset}      ${tr('help.cmd.install')}`);
+  console.log(`  ${c.cyan}update${c.reset}                 ${tr('help.cmd.update')}`);
+  console.log(`  ${c.cyan}uninstall${c.reset} ${c.gray}[runtime]${c.reset}    ${tr('help.cmd.uninstall')}`);
+  console.log(`  ${c.cyan}build${c.reset}                  ${tr('help.cmd.build')}`);
+  console.log(`  ${c.cyan}doctor${c.reset}                 ${tr('help.cmd.doctor')}`);
+  console.log(`  ${c.cyan}install-playwright${c.reset}     ${tr('help.cmd.install_playwright')}`);
+  console.log(`  ${c.cyan}install-caveman${c.reset}        ${tr('help.cmd.install_caveman')}`);
+  console.log(`  ${c.cyan}help${c.reset}                   ${tr('help.cmd.help')}`);
+  console.log(`  ${c.cyan}--version${c.reset}              ${tr('help.cmd.version')}`);
   console.log('');
 
-  console.log(`${c.bold}Helpers (plumbing usado pelos slash commands):${c.reset}`);
-  console.log(`  ${c.cyan}resolve-phase${c.reset} ${c.gray}<slug|pos> [--json]${c.reset}  Resolve phase id -> slug/dir/position`);
-  console.log(`  ${c.cyan}validate-slug${c.reset} ${c.gray}<slug> [--check-unique]${c.reset}  Valida shape de slug`);
-  console.log(`  ${c.cyan}validate-phase${c.reset} ${c.gray}<slug|pos> [--for-pr]${c.reset}  Valida artefatos da phase (gate mecanico p/ CI e agents)`);
-  console.log(`  ${c.cyan}truncate${c.reset} ${c.gray}<file> <max>${c.reset}      Trunca arquivo preservando estrutura`);
-  console.log(`  ${c.cyan}monitor${c.reset} ${c.gray}<file...>${c.reset}          Estima context budget dos arquivos`);
-  console.log(`  ${c.cyan}render${c.reset} ${c.gray}[--check]${c.reset}          Regenera as views de .jdi/ (layout conflict-free v3)`);
-  console.log(`  ${c.cyan}migrate-layout${c.reset} ${c.gray}[--dry-run]${c.reset}  Migra .jdi/ legado pro layout conflict-free (v3)`);
+  console.log(`${c.bold}${tr('help.helpers_label')}${c.reset}`);
+  console.log(`  ${c.cyan}resolve-phase${c.reset} ${c.gray}<slug|pos> [--json]${c.reset}  ${tr('help.helper.resolve_phase')}`);
+  console.log(`  ${c.cyan}validate-slug${c.reset} ${c.gray}<slug> [--check-unique]${c.reset}  ${tr('help.helper.validate_slug')}`);
+  console.log(`  ${c.cyan}validate-phase${c.reset} ${c.gray}<slug|pos> [--for-pr]${c.reset}  ${tr('help.helper.validate_phase')}`);
+  console.log(`  ${c.cyan}truncate${c.reset} ${c.gray}<file> <max>${c.reset}      ${tr('help.helper.truncate')}`);
+  console.log(`  ${c.cyan}monitor${c.reset} ${c.gray}<file...>${c.reset}          ${tr('help.helper.monitor')}`);
+  console.log(`  ${c.cyan}render${c.reset} ${c.gray}[--check]${c.reset}          ${tr('help.helper.render')}`);
+  console.log(`  ${c.cyan}migrate-layout${c.reset} ${c.gray}[--dry-run]${c.reset}  ${tr('help.helper.migrate_layout')}`);
   console.log('');
 
-  console.log(`${c.bold}Runtimes (install):${c.reset}`);
+  console.log(`${c.bold}${tr('help.runtimes_label')}${c.reset}`);
   console.log(`  ${c.cyan}claude${c.reset}                 Claude Code`);
   console.log(`  ${c.cyan}copilot${c.reset}                GitHub Copilot`);
   console.log(`  ${c.cyan}antigravity${c.reset}            Google Antigravity`);
   console.log(`  ${c.cyan}opencode${c.reset}               OpenCode`);
-  console.log(`  ${c.cyan}all${c.reset}                    Todos os 4`);
+  console.log(`  ${c.cyan}all${c.reset}                    ${tr('help.runtime.all')}`);
   console.log('');
 
-  console.log(`${c.bold}Opcoes:${c.reset}`);
-  console.log(`  ${c.cyan}--scope${c.reset} ${c.gray}<user|project|both>${c.reset}  Escopo (default install: project; default uninstall: both)`);
-  console.log(`  ${c.cyan}--githooks${c.reset}             Install: copia hooks no-op pra .githooks/ (opt-in)`);
-  console.log(`  ${c.cyan}--verbose${c.reset}              Output detalhado (so doctor)`);
-  console.log(`  ${c.cyan}--dry-run${c.reset}              Mostra o que faria sem aplicar (update, uninstall)`);
-  console.log(`  ${c.cyan}--purge${c.reset}                Uninstall: remove tambem .jdi/ (DESTRUTIVO)`);
-  console.log(`  ${c.cyan}--yes${c.reset}                  Uninstall: pula confirmacoes interativas`);
-  console.log(`  ${c.cyan}--force-specialists${c.reset}    Update: regenera specialists sem perguntar`);
-  console.log(`  ${c.cyan}--skip-specialists${c.reset}     Update: nao mexe em specialists`);
-  console.log(`  ${c.cyan}--no-color${c.reset}             Desabilita cores ANSI`);
-  console.log(`  ${c.cyan}-h, --help${c.reset}             Esta ajuda`);
+  console.log(`${c.bold}${tr('help.options_label')}${c.reset}`);
+  console.log(`  ${c.cyan}--scope${c.reset} ${c.gray}<user|project|both>${c.reset}  ${tr('help.opt.scope')}`);
+  console.log(`  ${c.cyan}--githooks${c.reset}             ${tr('help.opt.githooks')}`);
+  console.log(`  ${c.cyan}--lang${c.reset} ${c.gray}<en|pt-BR>${c.reset}     ${tr('help.opt.lang')}`);
+  console.log(`  ${c.cyan}--verbose${c.reset}              ${tr('help.opt.verbose')}`);
+  console.log(`  ${c.cyan}--dry-run${c.reset}              ${tr('help.opt.dry_run')}`);
+  console.log(`  ${c.cyan}--purge${c.reset}                ${tr('help.opt.purge')}`);
+  console.log(`  ${c.cyan}--yes${c.reset}                  ${tr('help.opt.yes')}`);
+  console.log(`  ${c.cyan}--force-specialists${c.reset}    ${tr('help.opt.force_specialists')}`);
+  console.log(`  ${c.cyan}--skip-specialists${c.reset}     ${tr('help.opt.skip_specialists')}`);
+  console.log(`  ${c.cyan}--no-color${c.reset}             ${tr('help.opt.no_color')}`);
+  console.log(`  ${c.cyan}-h, --help${c.reset}             ${tr('help.opt.help')}`);
   console.log('');
 
-  console.log(`${c.bold}Exemplos:${c.reset}`);
-  console.log(`  ${c.dim}# Instalacao no projeto atual${c.reset}`);
+  console.log(`${c.bold}${tr('help.examples_label')}${c.reset}`);
+  console.log(`  ${c.dim}${tr('help.example.install')}${c.reset}`);
   console.log(`  ${c.cyan}npx jdi-cli@latest install opencode${c.reset}`);
   console.log('');
-  console.log(`  ${c.dim}# Atualizar projeto ja instalado pra versao mais recente${c.reset}`);
+  console.log(`  ${c.dim}${tr('help.example.update')}${c.reset}`);
   console.log(`  ${c.cyan}npx jdi-cli@latest update${c.reset}`);
   console.log('');
-  console.log(`  ${c.dim}# Preview do que update faria${c.reset}`);
+  console.log(`  ${c.dim}${tr('help.example.update_dry_run')}${c.reset}`);
   console.log(`  ${c.cyan}npx jdi-cli@latest update --dry-run${c.reset}`);
   console.log('');
-  console.log(`  ${c.dim}# Desinstalar (preserva .jdi/ state)${c.reset}`);
+  console.log(`  ${c.dim}${tr('help.example.uninstall')}${c.reset}`);
   console.log(`  ${c.cyan}npx jdi-cli@latest uninstall${c.reset}`);
   console.log('');
-  console.log(`  ${c.dim}# Desinstalar tudo, incluindo state files${c.reset}`);
+  console.log(`  ${c.dim}${tr('help.example.uninstall_purge')}${c.reset}`);
   console.log(`  ${c.cyan}npx jdi-cli@latest uninstall --purge --yes${c.reset}`);
   console.log('');
-  console.log(`  ${c.dim}# Diagnostico${c.reset}`);
+  console.log(`  ${c.dim}${tr('help.example.doctor')}${c.reset}`);
   console.log(`  ${c.cyan}npx jdi-cli@latest doctor${c.reset}`);
   console.log('');
 
-  console.log(`${c.bold}Saiba mais:${c.reset} ${c.cyan}https://github.com/slipalison/jdi-cli${c.reset}`);
+  console.log(`${c.bold}${tr('help.more_info_label')}${c.reset} ${c.cyan}https://github.com/slipalison/jdi-cli${c.reset}`);
   console.log('');
 }
 
@@ -589,6 +598,22 @@ async function main() {
 
   if (parsed.flags?.noColor) {
     process.env.NO_COLOR = '1';
+  }
+
+  try {
+    cliLang = i18n.resolveLang(parsed.flags);
+  } catch (err) {
+    ui.fail(err.message);
+    process.exit(1);
+  }
+  ui.setLang(cliLang);
+  // Transporte pro script filho (.sh/.ps1) via spawnSync, que herda
+  // process.env por default — evita repetir --lang/-Lang em cada script.
+  // So propaga quando o usuario passou --lang explicitamente: sem a flag,
+  // jdi-update precisa poder cair no .jdi/LANG persistido em vez do
+  // default 'en' de cliLang.
+  if (parsed.flags?.lang !== undefined) {
+    process.env.JDI_LANG = cliLang;
   }
 
   if (parsed.flags?.version) {
@@ -655,8 +680,8 @@ async function main() {
       cmdVersion();
       break;
     default:
-      ui.fail(`Comando desconhecido: ${parsed.cmd}`);
-      console.log(`  Use ${c.cyan}npx jdi-cli help${c.reset} pra ver comandos disponiveis.`);
+      ui.fail(tr('error.unknown_command', parsed.cmd));
+      console.log(`  ${tr('error.see_help', `${c.cyan}npx jdi-cli help${c.reset}`)}`);
       process.exit(1);
   }
 }

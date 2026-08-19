@@ -21,10 +21,73 @@ esac
 
 [[ "${2:-}" == "--scope" ]] && SCOPE="${3:-project}"
 
+readonly SCOPE_PROJECT="project"
+
 GITHOOKS=0
 for arg in "$@"; do
   [[ "$arg" == "--githooks" ]] && GITHOOKS=1
 done
+
+# Idioma de instalacao — vem de bin/jdi.js via env (JDI_LANG=en|pt-BR),
+# nunca de flag deste script (mantem os .sh/.ps1 sem --lang proprio).
+readonly LANG_PT_BR="pt-BR"
+JDI_LANG="${JDI_LANG:-en}"
+
+# Diretiva de idioma: injeta um aviso IDIOMA logo depois do fechamento do
+# frontmatter de cada command/agent/skill instalado, quando JDI_LANG=pt-BR.
+# O build (core/ -> runtimes/) fica neutro de idioma; a injecao acontece
+# so aqui, no install, pra runtimes/ nao mudar (S1192: caminho extraido
+# pra constante, referenciado nas 3 funcoes abaixo).
+readonly LANG_DIRECTIVE_FILE="$ROOT/core/templates/lang-directive.pt-BR.md"
+readonly LANG_DIRECTIVE_MARKER='<!-- jdi:lang-directive -->'
+
+# Injeta a diretiva num unico arquivo .md, logo apos o `---` de
+# fechamento do frontmatter. Idempotente (nao duplica se o marker ja
+# estiver no arquivo). Ignora silenciosamente arquivo inexistente.
+inject_lang_directive_file() {
+  local file="$1"
+  [[ -f "$file" ]] || return 0
+  grep -qF "$LANG_DIRECTIVE_MARKER" "$file" && return 0
+
+  local tmp
+  tmp="$(mktemp)"
+  awk -v directive_file="$LANG_DIRECTIVE_FILE" '
+    /^---$/ && fm < 2 {
+      fm++
+      print
+      if (fm == 2) {
+        while ((getline line < directive_file) > 0) print line
+        close(directive_file)
+      }
+      next
+    }
+    { print }
+  ' "$file" > "$tmp"
+  mv "$tmp" "$file"
+}
+
+# Aplica a injecao a todo .md de 1o nivel num diretorio (agents/, commands/,
+# prompts/). Silencioso se o diretorio nao existir ou estiver vazio.
+inject_lang_directive_dir() {
+  local dir="$1"
+  [[ -d "$dir" ]] || return 0
+  local f
+  for f in "$dir"/*.md; do
+    [[ -e "$f" ]] || continue
+    inject_lang_directive_file "$f"
+  done
+}
+
+# Aplica a injecao a todo skills/<nome>/SKILL.md sob um diretorio.
+inject_lang_directive_skills() {
+  local skills_root="$1"
+  [[ -d "$skills_root" ]] || return 0
+  local f
+  for f in "$skills_root"/*/SKILL.md; do
+    [[ -e "$f" ]] || continue
+    inject_lang_directive_file "$f"
+  done
+}
 
 install_claude() {
   local dest
@@ -39,6 +102,12 @@ install_claude() {
   cp -R "$ROOT/runtimes/claude/commands/." "$dest/commands/"
   if [[ -d "$ROOT/runtimes/claude/skills" ]]; then
     cp -R "$ROOT/runtimes/claude/skills/." "$dest/skills/"
+  fi
+
+  if [[ "$JDI_LANG" == "$LANG_PT_BR" ]]; then
+    inject_lang_directive_dir "$dest/agents"
+    inject_lang_directive_dir "$dest/commands"
+    inject_lang_directive_skills "$dest/skills"
   fi
 
   if [[ "$SCOPE" == "$SCOPE_PROJECT" ]]; then
@@ -62,6 +131,12 @@ install_copilot() {
   # VS Code agent mode e o coding agent do github.com
   cp -R "$ROOT/runtimes/copilot/skills/." "$dest/skills/"
   cp "$ROOT/runtimes/copilot/copilot-instructions.md" "$dest/copilot-instructions.md"
+
+  if [[ "$JDI_LANG" == "$LANG_PT_BR" ]]; then
+    inject_lang_directive_dir "$dest/agents"
+    inject_lang_directive_dir "$dest/prompts"
+    inject_lang_directive_skills "$dest/skills"
+  fi
 
   # Coding agent (issues delegadas): setup do ambiente + gate de artefatos.
   # Nunca sobrescreve workflows existentes do consumidor.
@@ -99,6 +174,10 @@ install_antigravity() {
   mkdir -p "$dest/skills"
   cp -R "$ROOT/runtimes/antigravity/skills/." "$dest/skills/"
 
+  if [[ "$JDI_LANG" == "$LANG_PT_BR" ]]; then
+    inject_lang_directive_skills "$dest/skills"
+  fi
+
   if [[ "$SCOPE" == "$SCOPE_PROJECT" ]]; then
     cp "$ROOT/runtimes/antigravity/agents.md" "$dest/agents.md"
   fi
@@ -130,6 +209,12 @@ install_opencode() {
   # Skills: OpenCode tambem le .claude/skills/. Se ja instalou Claude, reutiliza.
   if [[ -d "$ROOT/runtimes/opencode/skills" ]]; then
     cp -R "$ROOT/runtimes/opencode/skills/." "$dest/skills/" 2>/dev/null || true
+  fi
+
+  if [[ "$JDI_LANG" == "$LANG_PT_BR" ]]; then
+    inject_lang_directive_dir "$dest/agents"
+    inject_lang_directive_dir "$dest/commands"
+    inject_lang_directive_skills "$dest/skills"
   fi
 
   if [[ "$SCOPE" == "$SCOPE_PROJECT" ]]; then
@@ -175,6 +260,11 @@ install_junie() {
   cp -R "$ROOT/runtimes/junie/agents/." "$dest/agents/"
   cp -R "$ROOT/runtimes/junie/skills/." "$dest/skills/"
 
+  if [[ "$JDI_LANG" == "$LANG_PT_BR" ]]; then
+    inject_lang_directive_dir "$dest/agents"
+    inject_lang_directive_skills "$dest/skills"
+  fi
+
   if [[ "$SCOPE" == "$SCOPE_PROJECT" ]]; then
     cp "$ROOT/runtimes/junie/AGENTS.md" "$dest/AGENTS.md"
     # Specialists gerados pelo bootstrap: Junie delega por .junie/agents/
@@ -210,4 +300,6 @@ fi
 if [[ -d "$PWD/.jdi" ]]; then
   pkg_version=$(grep -oE '"version":\s*"[^"]+"' "$ROOT/package.json" | head -1 | sed 's/.*"\([^"]*\)"/\1/')
   printf '%s' "$pkg_version" > "$PWD/.jdi/VERSION"
+  # Escreve .jdi/LANG pra jdi update reaplicar a diretiva sem exigir --lang de novo
+  printf '%s' "$JDI_LANG" > "$PWD/.jdi/LANG"
 fi

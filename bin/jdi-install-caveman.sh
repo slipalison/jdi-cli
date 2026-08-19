@@ -21,7 +21,7 @@ REPO='https://github.com/JuliusBrussee/caveman.git'
 SCOPE=user
 FORCE=0
 PROJECT_DIR="$(pwd)"
-USER_HOME="${HOME:-$USERPROFILE}"
+USER_HOME="${HOME:-${USERPROFILE:-}}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
