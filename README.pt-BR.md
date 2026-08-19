@@ -213,7 +213,7 @@ seu-projeto/
 └── {seu código}
 ```
 
-Para outros runtimes, troque `.claude/` por `.github/`, `.agents/` (Antigravity 2.0) ou `.opencode/`. Veja [PORTABILITY.md](https://github.com/Douglasproglima/jdi-cli/blob/main/PORTABILITY.md).
+Para outros runtimes, troque `.claude/` por `.github/`, `.agents/` (Antigravity 2.0) ou `.opencode/`. Veja [PORTABILITY.md](PORTABILITY.md).
 
 ### Camadas de memória — quem escreve o quê, e por quanto tempo
 
@@ -287,7 +287,7 @@ sequenceDiagram
     CMD->>PH: move fases antigas → archive/ (mantém as 5 últimas)
 ```
 
-O ciclo: o que uma fase APRENDE (warnings, blockers, waivers) sobrevive como no máximo 5 bullets destilados que o planner e o doer das PRÓXIMAS fases consomem — ~300 tokens em vez de arrastar arquivos REVIEW inteiros adiante. Schema completo: [MEMORY.md](https://github.com/Douglasproglima/jdi-cli/blob/main/MEMORY.md).
+O ciclo: o que uma fase APRENDE (warnings, blockers, waivers) sobrevive como no máximo 5 bullets destilados que o planner e o doer das PRÓXIMAS fases consomem — ~300 tokens em vez de arrastar arquivos REVIEW inteiros adiante. Schema completo: [MEMORY.md](MEMORY.md).
 
 ### Invariantes
 
@@ -858,7 +858,7 @@ Depois disso, o `jdi` funciona sem o `npx`.
 | --- | --- | --- | --- |
 | `/jdi-create <descrição>` | descrição (opcional) | — | Gera um novo agente/skill genérico em `core/`. Protegido: só roda onde o `name` do `package.json` é `jdi-cli` (o repositório fonte), nunca em projetos consumidores |
 
-Veja [COMMANDS.md](https://github.com/Douglasproglima/jdi-cli/blob/main/COMMANDS.md) para os detalhes completos.
+Veja [COMMANDS.md](COMMANDS.md) para os detalhes completos.
 
 ### Adicionando um especialista no meio do projeto
 
@@ -980,7 +980,7 @@ Todo agente do fluxo tem acesso a ferramentas web (WebSearch, WebFetch, MCP `con
 | `frontend-rules` | WCAG 2.2 AA + checklist de UX, agnóstica de framework |
 | `frontend-validator` | Gate 7 — validação ao vivo com Playwright + axe-core |
 
-Veja [AGENTS.md](https://github.com/Douglasproglima/jdi-cli/blob/main/AGENTS.md) para os detalhes completos.
+Veja [AGENTS.md](AGENTS.md) para os detalhes completos.
 
 ## Runtimes suportados
 
@@ -997,7 +997,7 @@ Escopo padrão: `project`. Para escopo global de usuário: `--scope user`.
 
 **Especificidades do Junie:** os comandos são instalados como skills (`.junie/skills/`) — o Junie os descobre semanticamente, então mencione o comando + o slug na sua mensagem ("rode /jdi-plan para auth-flow"). Os agentes core são instalados como subagentes com allowlists de ferramentas **impostas** (o reviewer é de fato somente leitura). Depois do `/jdi-bootstrap`, rode `jdi install junie` novamente para copiar os especialistas gerados em `.junie/agents/` (o Junie delega a partir dali). Playwright MCP: configure manualmente via `mcp-locations` no `~/.junie/config.json`.
 
-Veja [PORTABILITY.md](https://github.com/Douglasproglima/jdi-cli/blob/main/PORTABILITY.md) para os detalhes de mapeamento por runtime.
+Veja [PORTABILITY.md](PORTABILITY.md) para os detalhes de mapeamento por runtime.
 
 ## Usuários avançados — shell scripts direto
 
@@ -1122,13 +1122,13 @@ Reinicie o runtime. No Claude Code: `/mcp` para verificar. No OpenCode: `opencod
 
 ## Veja também
 
-- [ARCHITECTURE.md](https://github.com/Douglasproglima/jdi-cli/blob/main/ARCHITECTURE.md) — visão técnica geral
-- [AGENTS.md](https://github.com/Douglasproglima/jdi-cli/blob/main/AGENTS.md) — agentes em detalhe
-- [COMMANDS.md](https://github.com/Douglasproglima/jdi-cli/blob/main/COMMANDS.md) — comandos em detalhe
-- [MEMORY.md](https://github.com/Douglasproglima/jdi-cli/blob/main/MEMORY.md) — schema do `.jdi/`
-- [EXTENSION.md](https://github.com/Douglasproglima/jdi-cli/blob/main/EXTENSION.md) — criar especialistas/agentes/skills
-- [CREATE.md](https://github.com/Douglasproglima/jdi-cli/blob/main/CREATE.md) + [CREATE-EXAMPLE.md](https://github.com/Douglasproglima/jdi-cli/blob/main/CREATE-EXAMPLE.md) — passo a passo do `/jdi-create`
-- [PORTABILITY.md](https://github.com/Douglasproglima/jdi-cli/blob/main/PORTABILITY.md) — detalhes multi-runtime
+- [ARCHITECTURE.md](ARCHITECTURE.md) — visão técnica geral
+- [AGENTS.md](AGENTS.md) — agentes em detalhe
+- [COMMANDS.md](COMMANDS.md) — comandos em detalhe
+- [MEMORY.md](MEMORY.md) — schema do `.jdi/`
+- [EXTENSION.md](EXTENSION.md) — criar especialistas/agentes/skills
+- [CREATE.md](CREATE.md) + [CREATE-EXAMPLE.md](CREATE-EXAMPLE.md) — passo a passo do `/jdi-create`
+- [PORTABILITY.md](PORTABILITY.md) — detalhes multi-runtime
 
 ## Licença
 
@@ -1138,7 +1138,7 @@ MIT.
 
 Rode `/jdi-create` dentro do repositório fonte do JDI para adicionar agentes/skills genéricos. Ele roda sobre `core/templates/{agent,skill}.md`, com integração automática.
 
-Pull requests: descreva o problema (quem precisa disso? quantos usuários?) antes de adicionar um novo agente. O JDI cresce **com cuidado** — teto informal: 7 agentes core, 25 skills core. Veja [EXTENSION.md](https://github.com/Douglasproglima/jdi-cli/blob/main/EXTENSION.md).
+Pull requests: descreva o problema (quem precisa disso? quantos usuários?) antes de adicionar um novo agente. O JDI cresce **com cuidado** — teto informal: 7 agentes core, 25 skills core. Veja [EXTENSION.md](EXTENSION.md).
 
 ## Publicando no npm (mantenedores)
 
