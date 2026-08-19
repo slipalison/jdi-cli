@@ -21,6 +21,8 @@ esac
 
 [[ "${2:-}" == "--scope" ]] && SCOPE="${3:-project}"
 
+readonly SCOPE_PROJECT="project"
+
 GITHOOKS=0
 for arg in "$@"; do
   [[ "$arg" == "--githooks" ]] && GITHOOKS=1
