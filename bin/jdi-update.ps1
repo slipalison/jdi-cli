@@ -43,18 +43,29 @@ $NewVersion = $pkgJson.version
 
 # Idioma: $env:JDI_LANG so chega setado quando o usuario passou -Lang em
 # `jdi update` (ver bin/jdi.js). Sem override explicito, cai no idioma
-# persistido em .jdi/LANG (escrito pelo install); sem esse arquivo
-# (projeto pre-i18n), default 'en'. Fica no ambiente do processo, entao
-# jdi-install.ps1 (chamado como subprocesso abaixo) herda sem precisar
-# de -Lang proprio.
+# persistido em .jdi/LANG (escrito pelo install). Sem esse arquivo
+# (projeto pre-i18n, ou greenfield onde o install rodou antes de .jdi/
+# existir), infere pelo marker da diretiva nos arquivos instalados --
+# senao o update reverteria pt-BR pra 'en' silenciosamente ao re-copiar.
+# Fica no ambiente do processo, entao jdi-install.ps1 (subprocesso
+# abaixo) herda sem precisar de -Lang proprio.
 $LangFile = Join-Path $ProjectDir '.jdi/LANG'
-if (-not $env:JDI_LANG) {
-  if (Test-Path $LangFile) {
-    $env:JDI_LANG = (Get-Content $LangFile -Raw).Trim()
-  } else {
-    $env:JDI_LANG = 'en'
+$ExplicitLang = if ($env:JDI_LANG) { $env:JDI_LANG } else { '' }
+$CurrentLang = 'en'
+if (Test-Path $LangFile) {
+  $CurrentLang = (Get-Content $LangFile -Raw).Trim()
+} else {
+  $probeDirs = @('.claude\commands', '.github\prompts', '.opencode\commands', '.agents\skills', '.junie')
+  foreach ($pd in $probeDirs) {
+    $full = Join-Path $ProjectDir $pd
+    if (-not (Test-Path $full)) { continue }
+    $hit = Get-ChildItem -Path $full -Recurse -Filter '*.md' -File -ErrorAction SilentlyContinue |
+      Select-String -SimpleMatch '<!-- jdi:lang-directive -->' -Quiet |
+      Select-Object -First 1
+    if ($hit) { $CurrentLang = 'pt-BR'; break }
   }
 }
+$env:JDI_LANG = if ($ExplicitLang) { $ExplicitLang } else { $CurrentLang }
 
 # Pre-flight
 if (-not (Test-Path (Join-Path $ProjectDir '.jdi'))) {
@@ -75,8 +86,15 @@ if ($DryRun) { Write-Output "  Mode: DRY-RUN (sem mudancas)" }
 Write-Output ""
 
 if ($OldVersion -eq $NewVersion -and -not $DryRun) {
-  Write-Output "Ja na versao mais recente ($NewVersion). Use --force pra reinstalar mesmo assim."
-  exit 0
+  # Troca de idioma explicita na mesma versao NAO e no-op: precisa
+  # re-copiar os runtime files pra injetar/remover a diretiva.
+  if ($ExplicitLang -and ($ExplicitLang -ne $CurrentLang)) {
+    Write-Output "Mesma versao ($NewVersion), mas -Lang mudou ($CurrentLang -> $ExplicitLang) - reaplicando runtime files."
+    Write-Output ""
+  } else {
+    Write-Output "Ja na versao mais recente ($NewVersion). Use --force pra reinstalar mesmo assim."
+    exit 0
+  }
 }
 
 # =========================================================
@@ -241,8 +259,11 @@ if ($specialists.Count -gt 0) {
 # =========================================================
 
 if (-not $DryRun) {
-  Set-Content -Path $VersionFile -Value $NewVersion -Encoding UTF8 -NoNewline
-  Set-Content -Path $LangFile -Value $env:JDI_LANG -Encoding UTF8 -NoNewline
+  # WriteAllText + UTF8 sem BOM: Set-Content -Encoding UTF8 no PS 5.1 grava
+  # BOM, e o bash (update.sh de outro dev) leria "\xEF\xBB\xBFpt-BR" != "pt-BR".
+  $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($VersionFile, [string]$NewVersion, $Utf8NoBom)
+  [System.IO.File]::WriteAllText($LangFile, [string]$env:JDI_LANG, $Utf8NoBom)
 }
 
 Write-Output ""

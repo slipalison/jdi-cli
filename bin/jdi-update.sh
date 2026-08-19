@@ -36,17 +36,27 @@ NEW_VERSION=$(grep -oE '"version":\s*"[^"]+"' "$ROOT/package.json" | head -1 | s
 
 # Idioma: JDI_LANG so chega setado quando o usuario passou --lang em
 # `jdi update` (ver bin/jdi.js). Sem override explicito, cai no idioma
-# persistido em .jdi/LANG (escrito pelo install); sem esse arquivo
-# (projeto pre-i18n), default 'en'. Export pra jdi-install.sh (chamado
-# como subprocesso abaixo) herdar via ambiente.
+# persistido em .jdi/LANG (escrito pelo install). Sem esse arquivo
+# (projeto pre-i18n, ou greenfield onde o install rodou antes de .jdi/
+# existir), infere pelo marker da diretiva nos arquivos instalados —
+# senao o update reverteria pt-BR pra 'en' silenciosamente ao re-copiar.
+# Export pra jdi-install.sh (subprocesso abaixo) herdar via ambiente.
 LANG_FILE="$PROJECT_DIR/.jdi/LANG"
-if [[ -z "${JDI_LANG:-}" ]]; then
-  if [[ -f "$LANG_FILE" ]]; then
-    JDI_LANG="$(tr -d '[:space:]' < "$LANG_FILE")"
-  else
-    JDI_LANG="en"
-  fi
+EXPLICIT_LANG="${JDI_LANG:-}"
+if [[ -f "$LANG_FILE" ]]; then
+  # tr tambem remove BOM UTF-8 (\357\273\277): versoes antigas do install.ps1
+  # em PS 5.1 gravavam BOM via Set-Content -Encoding UTF8.
+  CURRENT_LANG="$(tr -d '[:space:]\357\273\277' < "$LANG_FILE")"
+else
+  CURRENT_LANG="en"
+  for probe_dir in .claude/commands .github/prompts .opencode/commands .agents/skills .junie; do
+    if [[ -d "$PROJECT_DIR/$probe_dir" ]] && grep -rqF '<!-- jdi:lang-directive -->' "$PROJECT_DIR/$probe_dir" 2>/dev/null; then
+      CURRENT_LANG="pt-BR"
+      break
+    fi
+  done
 fi
+JDI_LANG="${EXPLICIT_LANG:-$CURRENT_LANG}"
 export JDI_LANG
 
 # Pre-flight
@@ -58,7 +68,7 @@ fi
 # Le versao instalada
 VERSION_FILE="$PROJECT_DIR/.jdi/VERSION"
 if [[ -f "$VERSION_FILE" ]]; then
-  OLD_VERSION=$(cat "$VERSION_FILE" | tr -d '[:space:]')
+  OLD_VERSION=$(tr -d '[:space:]\357\273\277' < "$VERSION_FILE")
 else
   OLD_VERSION="unknown (pre-1.2.1)"
 fi
@@ -72,8 +82,15 @@ echo "  Dir:  $PROJECT_DIR"
 echo
 
 if [[ "$OLD_VERSION" == "$NEW_VERSION" && $DRY_RUN -eq 0 ]]; then
-  echo "Ja na versao mais recente ($NEW_VERSION)."
-  exit 0
+  # Troca de idioma explicita na mesma versao NAO e no-op: precisa
+  # re-copiar os runtime files pra injetar/remover a diretiva.
+  if [[ -n "$EXPLICIT_LANG" && "$EXPLICIT_LANG" != "$CURRENT_LANG" ]]; then
+    echo "Mesma versao ($NEW_VERSION), mas --lang mudou ($CURRENT_LANG -> $EXPLICIT_LANG) — reaplicando runtime files."
+    echo
+  else
+    echo "Ja na versao mais recente ($NEW_VERSION)."
+    exit 0
+  fi
 fi
 
 # =========================================================
