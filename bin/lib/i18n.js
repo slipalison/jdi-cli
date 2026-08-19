@@ -276,7 +276,7 @@ function normalizeLang(raw) {
 // `--lang`, cai no default. `--lang` sem valor (bloqueado por outra flag
 // logo depois) chega aqui como `true` — tratado como invalido.
 function resolveLang(flags) {
-  const raw = flags && flags.lang;
+  const raw = flags?.lang;
   if (raw === undefined) return DEFAULT_LANG;
 
   const normalized = typeof raw === 'string' ? normalizeLang(raw) : null;
