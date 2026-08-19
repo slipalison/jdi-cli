@@ -1,5 +1,7 @@
 # JDI — Just Do It
 
+🌐 **English** | [Português (BR)](README.pt-BR.md)
+
 ```
        ██╗██████╗ ██╗
        ██║██╔══██╗██║
