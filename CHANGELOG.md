@@ -5,6 +5,58 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-08-19
+
+First community-driven release — the `--lang` feature and the two bash crash
+fixes landed via [#30](https://github.com/slipalison/jdi-cli/pull/30) by
+[@Douglasproglima](https://github.com/Douglasproglima), hardened by follow-up
+[#32](https://github.com/slipalison/jdi-cli/pull/32). **Contains a critical
+fix: `install` was broken on real bash (Linux/macOS/Git Bash) in 0.13.3.**
+
+### Added
+- **`--lang <en|pt-BR>` on every CLI command** (default `en`; aliases `pt`,
+  `pt-br`, `pt_br`, `en-US` accepted). Localizes the CLI chrome (help,
+  headers, install summaries, next-steps, errors) via a zero-dep catalog
+  (`bin/lib/i18n.js`). Command names, flags, file paths and literal state
+  values stay in English in both languages.
+- **pt-BR language directive injection at install time.** With
+  `--lang pt-BR`, install splices an `IDIOMA` blockquote right after the
+  frontmatter of every installed command/agent/skill, so the installed AI
+  agent converses in pt-BR — while `core/` and the generated `runtimes/`
+  stay language-neutral (injection is idempotent via an HTML-comment
+  marker; `update --lang en` removes it on re-copy). Read/written as UTF-8
+  without BOM explicitly, safe on PowerShell 5.1.
+- **`.jdi/LANG` persistence.** `install`/`update` record the language so a
+  plain `update` reapplies it. When the file is absent (greenfield installs
+  run before `.jdi/` exists, or pre-i18n projects), `update` infers the
+  language from the directive marker in the installed runtime files instead
+  of silently reverting to English. An explicit `update --lang <x>` that
+  differs from the persisted language re-copies runtime files even when the
+  version is already current (language switching is no longer a no-op).
+- **`README.pt-BR.md`** — full Portuguese translation with a language
+  switcher, relative links, shipped in the npm tarball.
+
+### Fixed
+- **CRITICAL: `install` crashed on real bash in 0.13.3.** The S1192 pass
+  declared the `SCOPE_PROJECT` constant in `jdi-uninstall.sh` but only
+  *referenced* it in `jdi-install.sh` — under `set -euo pipefail` every
+  `install claude|antigravity|opencode|junie|all` died with
+  `SCOPE_PROJECT: unbound variable` on Linux/macOS/Git Bash (Windows was
+  unaffected — the dispatcher runs `.ps1` there, which is why local testing
+  missed it). Found and fixed by @Douglasproglima.
+- **`USER_HOME` fallback crashed under `set -u`** in the playwright/caveman
+  installers when both `$HOME` and `$USERPROFILE` were unset
+  (`${HOME:-${USERPROFILE:-}}` now).
+- **PowerShell 5.1 wrote `.jdi/VERSION` and `.jdi/LANG` with a UTF-8 BOM**
+  (`Set-Content -Encoding UTF8` behavior on 5.1 only). A Windows-written
+  state file read by a teammate's bash `update` compared
+  `\xEF\xBB\xBFpt-BR != pt-BR` (silent language fallback) and saw a
+  permanent version mismatch. Writers now use BOM-less `WriteAllText`;
+  bash readers strip a legacy BOM defensively.
+- **SonarCloud stays at zero** — the 4 issues introduced by the feature
+  branch (3× S4624 nested template literals, 1× S6582 optional chain) were
+  fixed before release; main rescanned clean.
+
 ## [0.13.3] - 2026-08-01
 
 Quality pass — zero SonarCloud issues (31 found, all fixed at the root, none
