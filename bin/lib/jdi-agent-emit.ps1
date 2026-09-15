@@ -318,36 +318,56 @@ function Get-AgentDestPath {
 # directive file contributes one line per newline-terminated record (its
 # trailing blank line included), and CRLF input is normalized to LF.
 
+# Splits LF text into lines the way awk sees records: N newline-terminated
+# lines -> N records (the empty element -split yields after a final newline
+# is dropped). Trailing = whether the text ended with a newline, so
+# Join-LfText can restore it byte for byte.
+function Split-LfText {
+  param([string]$Text)
+  $Text = $Text.Replace("`r`n", "`n")
+  if ($Text.Length -eq 0) { return @{ Lines = [string[]]@(); Trailing = $false } }
+  $lines = [string[]]($Text -split "`n")
+  $trailing = ($lines[-1] -eq '')
+  if ($trailing) {
+    $lines = if ($lines.Length -eq 1) { [string[]]@() } else { [string[]]$lines[0..($lines.Length - 2)] }
+  }
+  return @{ Lines = $lines; Trailing = $trailing }
+}
+
+function Join-LfText {
+  param([System.Collections.Generic.List[string]]$Lines, [bool]$Trailing)
+  $result = ($Lines -join "`n")
+  if ($Trailing) { $result += "`n" }
+  return $result
+}
+
+# Inserts <Insert> lines right after the closing `---` of the frontmatter
+# (same record semantics as the awk injectors in jdi-agent-emit.sh).
+function Add-AfterFrontmatter {
+  param([string]$Text, [string[]]$Insert)
+  $split = Split-LfText -Text $Text
+  $fm = 0
+  $out = New-Object System.Collections.Generic.List[string]
+  foreach ($line in $split.Lines) {
+    $out.Add($line)
+    if ($line -eq '---' -and $fm -lt 2) {
+      $fm++
+      if ($fm -eq 2) { foreach ($d in $Insert) { $out.Add([string]$d) } }
+    }
+  }
+  return (Join-LfText -Lines $out -Trailing $split.Trailing)
+}
+
+function Get-LangDirectiveLines {
+  $directive = [System.IO.File]::ReadAllText($script:LangDirectiveFile, [System.Text.Encoding]::UTF8)
+  return (Split-LfText -Text $directive).Lines
+}
+
 function Add-LangDirectiveToText {
   param([string]$Text)
   $Text = $Text.Replace("`r`n", "`n")
   if ($Text.Contains($script:LangDirectiveMarker)) { return $Text }
-
-  $directive = [System.IO.File]::ReadAllText($script:LangDirectiveFile, [System.Text.Encoding]::UTF8)
-  $directive = $directive.Replace("`r`n", "`n")
-  $directiveLines = [string[]]($directive -split "`n")
-  # awk sees N records for N newline-terminated lines; -split yields N+1
-  # elements when the file ends with a newline - drop that last empty one.
-  if ($directiveLines.Length -gt 0 -and $directiveLines[-1] -eq '') {
-    $directiveLines = $directiveLines[0..($directiveLines.Length - 2)]
-  }
-
-  $textLines = [string[]]($Text -split "`n")
-  $trailing = ($textLines.Length -gt 0 -and $textLines[-1] -eq '')
-  if ($trailing) { $textLines = $textLines[0..($textLines.Length - 2)] }
-
-  $fm = 0
-  $out = New-Object System.Collections.Generic.List[string]
-  foreach ($line in $textLines) {
-    $out.Add($line)
-    if ($line -eq '---' -and $fm -lt 2) {
-      $fm++
-      if ($fm -eq 2) { foreach ($d in $directiveLines) { $out.Add([string]$d) } }
-    }
-  }
-  $result = ($out -join "`n")
-  if ($trailing) { $result += "`n" }
-  return $result
+  return (Add-AfterFrontmatter -Text $Text -Insert (Get-LangDirectiveLines))
 }
 
 # Insere a diretiva num unico arquivo .md. Idempotente. Ignora silenciosamente

@@ -56,8 +56,8 @@ $UserHome = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
 
 # A runtime counts as installed when its JDI core agents are present -
 # project dir first, user dir second (same markers jdi-update uses).
-function Test-RuntimeInstalled([string]$rt) {
-  switch ($rt) {
+function Test-RuntimeInstalled([string]$Rt) {
+  switch ($Rt) {
     'claude'      { return ((Test-Path ".claude\agents\$Architect.md") -or (Test-Path (Join-Path $UserHome ".claude\agents\$Architect.md"))) }
     'copilot'     { return (Test-Path ".github\agents\$Architect.agent.md") }
     'opencode'    { return ((Test-Path ".opencode\agents\$Architect.md") -or (Test-Path (Join-Path $UserHome ".config\opencode\agents\$Architect.md"))) }
@@ -93,27 +93,13 @@ function Get-ProjectLang {
 # GENERATED marker line right after the closing `---` (before the body).
 function Add-GeneratedMarker([string]$Text, [string]$Name) {
   $marker = "$GeneratedPrefix.jdi/agents/$Name.md$GeneratedSuffix"
-  $lines = [string[]]($Text -split "`n")
-  $trailing = ($lines.Length -gt 0 -and $lines[-1] -eq '')
-  if ($trailing) { $lines = $lines[0..($lines.Length - 2)] }
-  $fm = 0
-  $out = New-Object System.Collections.Generic.List[string]
-  foreach ($line in $lines) {
-    $out.Add($line)
-    if ($line -eq '---' -and $fm -lt 2) {
-      $fm++
-      if ($fm -eq 2) { $out.Add($marker) }
-    }
-  }
-  $result = ($out -join "`n")
-  if ($trailing) { $result += "`n" }
-  return $result
+  return (Add-AfterFrontmatter -Text $Text -Insert ([string[]]@($marker)))
 }
 
 # Render one (runtime, specialist) copy as LF text.
-function Get-RenderedCopy([string]$rt, [string]$srcPath, [string]$name) {
-  $text = Get-AgentContent -Runtime $rt -SrcPath $srcPath
-  $text = Add-GeneratedMarker -Text $text -Name $name
+function Get-RenderedCopy([string]$Rt, [string]$SrcPath, [string]$Name) {
+  $text = Get-AgentContent -Runtime $Rt -SrcPath $SrcPath
+  $text = Add-GeneratedMarker -Text $text -Name $Name
   if ($script:ProjectLang -eq $script:LangPtBr) {
     $text = Add-LangDirectiveToText -Text $text
   }
@@ -143,7 +129,7 @@ foreach ($spec in $specialists) {
 
   foreach ($rt in $targets) {
     $dst = Get-AgentDestPath -Runtime $rt -Name $name
-    $rendered = Get-RenderedCopy -rt $rt -srcPath $spec.FullName -name $name
+    $rendered = Get-RenderedCopy -Rt $rt -SrcPath $spec.FullName -Name $name
 
     $current = $null
     if (Test-Path $dst) {
