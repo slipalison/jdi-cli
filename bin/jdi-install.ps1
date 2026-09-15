@@ -48,43 +48,24 @@ function Copy-Tree {
 # Idioma de instalacao - vem de bin/jdi.js via variavel de ambiente
 # (JDI_LANG=en|pt-BR), nunca de parametro deste script (mantem os .sh/.ps1
 # sem -Lang proprio).
-$LangPtBr = 'pt-BR'
+# Shared lib: $LangPtBr, $LangDirectiveMarker, $Utf8NoBom, Add-LangDirectiveToFile
+# (the same injector jdi-sync-specialists.ps1 applies to the specialist
+# copies, so both agree byte for byte).
+. (Join-Path $PSScriptRoot 'lib\jdi-agent-emit.ps1')
 $JdiLang = if ($env:JDI_LANG) { $env:JDI_LANG } else { 'en' }
 
-# Diretiva de idioma: injeta um aviso IDIOMA logo depois do fechamento do
-# frontmatter de cada command/agent/skill instalado, quando JdiLang=pt-BR.
-# O build (core/ -> runtimes/) fica neutro de idioma; a injecao acontece
-# so aqui, no install, pra runtimes/ nao mudar. Le/escreve UTF8 sem BOM
-# explicitamente (nao Get-Content/Set-Content) porque o PowerShell 5.1
-# decodifica arquivo sem BOM pela codepage ANSI por default, o que
-# corromperia os bytes non-ASCII ja existentes nos arquivos de core/.
-$LangDirectiveFile = Join-Path $Root 'core\templates\lang-directive.pt-BR.md'
-$LangDirectiveMarker = '<!-- jdi:lang-directive -->'
-$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-
-# Insere a diretiva num unico arquivo .md, logo apos o '---' de fechamento
-# do frontmatter. Idempotente (nao duplica se o marker ja estiver no
-# arquivo). Ignora silenciosamente arquivo inexistente.
-function Add-LangDirectiveToFile {
-  param([string]$FilePath)
-  if (-not (Test-Path $FilePath)) { return }
-
-  $text = [System.IO.File]::ReadAllText($FilePath, [System.Text.Encoding]::UTF8)
-  if ($text.Contains($LangDirectiveMarker)) { return }
-
-  $directive = [System.IO.File]::ReadAllText($LangDirectiveFile, [System.Text.Encoding]::UTF8)
-  $directiveLines = [string[]]($directive.TrimEnd("`n") -split "`n")
-
-  $fm = 0
-  $out = New-Object System.Collections.Generic.List[string]
-  foreach ($line in ($text -split "`n")) {
-    $out.Add($line)
-    if ($line.TrimEnd("`r") -eq '---' -and $fm -lt 2) {
-      $fm++
-      if ($fm -eq 2) { $out.AddRange($directiveLines) }
-    }
-  }
-  [System.IO.File]::WriteAllText($FilePath, ($out -join "`n"), $Utf8NoBom)
+# Per-project specialists (.jdi/agents/, written by /jdi-bootstrap) must live
+# where the runtime discovers agents (.claude/agents/ etc.) or every
+# Agent(subagent_type=jdi-doer-*) spawn fails (#33). Always materialized in
+# the PROJECT dir - specialists are project state - for both scopes. No-op
+# before bootstrap.
+function Sync-Specialists {
+  param([string]$Rt)
+  $specs = Get-ChildItem -Path (Join-Path $ProjectDir '.jdi\agents') -Filter 'jdi-*.md' -ErrorAction SilentlyContinue
+  if (-not $specs) { return }
+  $env:JDI_LANG = $JdiLang
+  & (Join-Path $PSScriptRoot 'lib\jdi-sync-specialists.ps1') -Runtime $Rt -Quiet
+  Write-Output "  -> specialists de .jdi/agents/ sincronizados pro runtime $Rt (npx -y jdi-cli sync-specialists)"
 }
 
 # Aplica a injecao a todo .md de 1o nivel num diretorio (agents/, commands/,
@@ -116,6 +97,8 @@ function Install-Claude {
   Copy-Tree -From "$Root\runtimes\claude\agents" -To "$dest\agents"
   Copy-Tree -From "$Root\runtimes\claude\commands" -To "$dest\commands"
   Copy-Tree -From "$Root\runtimes\claude\skills" -To "$dest\skills"
+
+  Sync-Specialists -Rt 'claude'
 
   if ($JdiLang -eq $LangPtBr) {
     Add-LangDirectiveToDir -Dir "$dest\agents"
@@ -149,6 +132,8 @@ function Install-Copilot {
   # Skills servem as 3 superficies: Copilot CLI (que NAO le .github/prompts/),
   # VS Code agent mode e o coding agent do github.com
   Copy-Tree -From "$Root\runtimes\copilot\skills" -To "$dest\skills"
+
+  Sync-Specialists -Rt 'copilot'
 
   if ($JdiLang -eq $LangPtBr) {
     Add-LangDirectiveToDir -Dir "$dest\agents"
@@ -191,6 +176,8 @@ function Install-Antigravity {
   New-Item -ItemType Directory -Force -Path "$dest\skills" | Out-Null
   Copy-Tree -From "$Root\runtimes\antigravity\skills" -To "$dest\skills"
 
+  Sync-Specialists -Rt 'antigravity'
+
   if ($JdiLang -eq $LangPtBr) {
     Add-LangDirectiveToSkills -SkillsRoot "$dest\skills"
   }
@@ -219,6 +206,8 @@ function Install-Opencode {
   Copy-Tree -From "$Root\runtimes\opencode\agents" -To "$dest\agents"
   Copy-Tree -From "$Root\runtimes\opencode\commands" -To "$dest\commands"
   Copy-Tree -From "$Root\runtimes\opencode\skills" -To "$dest\skills"
+
+  Sync-Specialists -Rt 'opencode'
 
   if ($JdiLang -eq $LangPtBr) {
     Add-LangDirectiveToDir -Dir "$dest\agents"
@@ -269,6 +258,8 @@ function Install-Junie {
   Copy-Tree -From "$Root\runtimes\junie\agents" -To "$dest\agents"
   Copy-Tree -From "$Root\runtimes\junie\skills" -To "$dest\skills"
 
+  Sync-Specialists -Rt 'junie'
+
   if ($JdiLang -eq $LangPtBr) {
     Add-LangDirectiveToDir -Dir "$dest\agents"
     Add-LangDirectiveToSkills -SkillsRoot "$dest\skills"
@@ -276,14 +267,6 @@ function Install-Junie {
 
   if ($Scope -eq 'project') {
     Copy-Item -Path "$Root\runtimes\junie\AGENTS.md" -Destination "$dest\AGENTS.md" -Force
-    # Specialists gerados pelo bootstrap: Junie delega por .junie/agents/
-    $specs = Get-ChildItem -Path (Join-Path $ProjectDir '.jdi\agents') -Filter 'jdi-*.md' -ErrorAction SilentlyContinue
-    if ($specs) {
-      $specs | Copy-Item -Destination "$dest\agents\" -Force
-      Write-Output "  -> specialists de .jdi/agents/ copiados pra .junie/agents/ (delegacao Junie)"
-    } else {
-      Write-Output "  -> apos /jdi-bootstrap, rode 'jdi install junie' de novo pra copiar os specialists"
-    }
   }
 
   Write-Output "Junie instalado em: $dest (scope=$Scope)"

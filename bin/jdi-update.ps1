@@ -55,7 +55,7 @@ $CurrentLang = 'en'
 if (Test-Path $LangFile) {
   $CurrentLang = (Get-Content $LangFile -Raw).Trim()
 } else {
-  $probeDirs = @('.claude\commands', '.github\prompts', '.opencode\commands', '.agents\skills', '.junie')
+  $probeDirs = @('.claude\commands', '.github\prompts', '.opencode\commands', '.agents\skills\jdi-new', '.junie\skills\jdi-new')
   foreach ($pd in $probeDirs) {
     $full = Join-Path $ProjectDir $pd
     if (-not (Test-Path $full)) { continue }

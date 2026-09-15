@@ -30,40 +30,24 @@ done
 
 # Idioma de instalacao — vem de bin/jdi.js via env (JDI_LANG=en|pt-BR),
 # nunca de flag deste script (mantem os .sh/.ps1 sem --lang proprio).
-readonly LANG_PT_BR="pt-BR"
+# Shared lib: LANG_PT_BR, LANG_DIRECTIVE_*, inject_lang_directive_file (the
+# same injector jdi-sync-specialists.sh applies to the specialist copies, so
+# both agree byte for byte).
+# shellcheck source=lib/jdi-agent-emit.sh
+source "$ROOT/bin/lib/jdi-agent-emit.sh"
 JDI_LANG="${JDI_LANG:-en}"
 
-# Diretiva de idioma: injeta um aviso IDIOMA logo depois do fechamento do
-# frontmatter de cada command/agent/skill instalado, quando JDI_LANG=pt-BR.
-# O build (core/ -> runtimes/) fica neutro de idioma; a injecao acontece
-# so aqui, no install, pra runtimes/ nao mudar (S1192: caminho extraido
-# pra constante, referenciado nas 3 funcoes abaixo).
-readonly LANG_DIRECTIVE_FILE="$ROOT/core/templates/lang-directive.pt-BR.md"
-readonly LANG_DIRECTIVE_MARKER='<!-- jdi:lang-directive -->'
-
-# Injeta a diretiva num unico arquivo .md, logo apos o `---` de
-# fechamento do frontmatter. Idempotente (nao duplica se o marker ja
-# estiver no arquivo). Ignora silenciosamente arquivo inexistente.
-inject_lang_directive_file() {
-  local file="$1"
-  [[ -f "$file" ]] || return 0
-  grep -qF "$LANG_DIRECTIVE_MARKER" "$file" && return 0
-
-  local tmp
-  tmp="$(mktemp)"
-  awk -v directive_file="$LANG_DIRECTIVE_FILE" '
-    /^---$/ && fm < 2 {
-      fm++
-      print
-      if (fm == 2) {
-        while ((getline line < directive_file) > 0) print line
-        close(directive_file)
-      }
-      next
-    }
-    { print }
-  ' "$file" > "$tmp"
-  mv "$tmp" "$file"
+# Per-project specialists (.jdi/agents/, written by /jdi-bootstrap) must live
+# where the runtime discovers agents (.claude/agents/ etc.) or every
+# Agent(subagent_type=jdi-doer-*) spawn fails (#33). Always materialized in
+# the PROJECT dir — specialists are project state — for both scopes. No-op
+# before bootstrap.
+sync_specialists() {
+  local rt="$1"
+  ls "$PWD/.jdi/agents/"jdi-*.md >/dev/null 2>&1 || return 0
+  JDI_LANG="$JDI_LANG" bash "$ROOT/bin/lib/jdi-sync-specialists.sh" "$rt" --quiet
+  echo "  -> specialists de .jdi/agents/ sincronizados pro runtime $rt (npx -y jdi-cli sync-specialists)"
+  return 0
 }
 
 # Aplica a injecao a todo .md de 1o nivel num diretorio (agents/, commands/,
@@ -104,6 +88,8 @@ install_claude() {
     cp -R "$ROOT/runtimes/claude/skills/." "$dest/skills/"
   fi
 
+  sync_specialists "claude"
+
   if [[ "$JDI_LANG" == "$LANG_PT_BR" ]]; then
     inject_lang_directive_dir "$dest/agents"
     inject_lang_directive_dir "$dest/commands"
@@ -131,6 +117,8 @@ install_copilot() {
   # VS Code agent mode e o coding agent do github.com
   cp -R "$ROOT/runtimes/copilot/skills/." "$dest/skills/"
   cp "$ROOT/runtimes/copilot/copilot-instructions.md" "$dest/copilot-instructions.md"
+
+  sync_specialists "copilot"
 
   if [[ "$JDI_LANG" == "$LANG_PT_BR" ]]; then
     inject_lang_directive_dir "$dest/agents"
@@ -174,6 +162,8 @@ install_antigravity() {
   mkdir -p "$dest/skills"
   cp -R "$ROOT/runtimes/antigravity/skills/." "$dest/skills/"
 
+  sync_specialists "antigravity"
+
   if [[ "$JDI_LANG" == "$LANG_PT_BR" ]]; then
     inject_lang_directive_skills "$dest/skills"
   fi
@@ -210,6 +200,8 @@ install_opencode() {
   if [[ -d "$ROOT/runtimes/opencode/skills" ]]; then
     cp -R "$ROOT/runtimes/opencode/skills/." "$dest/skills/" 2>/dev/null || true
   fi
+
+  sync_specialists "opencode"
 
   if [[ "$JDI_LANG" == "$LANG_PT_BR" ]]; then
     inject_lang_directive_dir "$dest/agents"
@@ -260,6 +252,8 @@ install_junie() {
   cp -R "$ROOT/runtimes/junie/agents/." "$dest/agents/"
   cp -R "$ROOT/runtimes/junie/skills/." "$dest/skills/"
 
+  sync_specialists "junie"
+
   if [[ "$JDI_LANG" == "$LANG_PT_BR" ]]; then
     inject_lang_directive_dir "$dest/agents"
     inject_lang_directive_skills "$dest/skills"
@@ -267,13 +261,6 @@ install_junie() {
 
   if [[ "$SCOPE" == "$SCOPE_PROJECT" ]]; then
     cp "$ROOT/runtimes/junie/AGENTS.md" "$dest/AGENTS.md"
-    # Specialists gerados pelo bootstrap: Junie delega por .junie/agents/
-    if ls "$PWD/.jdi/agents/"jdi-*.md >/dev/null 2>&1; then
-      cp "$PWD/.jdi/agents/"jdi-*.md "$dest/agents/"
-      echo "  -> specialists de .jdi/agents/ copiados pra .junie/agents/ (delegacao Junie)"
-    else
-      echo "  -> apos /jdi-bootstrap, rode 'jdi install junie' de novo pra copiar os specialists"
-    fi
   fi
 
   echo "Junie instalado em: $dest (scope=$SCOPE)"
