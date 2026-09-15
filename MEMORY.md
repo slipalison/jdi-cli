@@ -62,7 +62,8 @@ Priority order: most advanced artifact wins. `ROADMAP.md` carries no status line
 +-- STATE.md             advisory next-step hint                                   UNTRACKED
 +-- VERSION              installed jdi-cli version (written by install/update)     TRACKED
 +-- LANG                 CLI/agent output language (en|pt-BR; written by install/update, read by update to reapply the pt-BR directive)  TRACKED
-+-- agents/              per-project specialists                                   TRACKED
++-- agents/              per-project specialists (SOURCE OF TRUTH; the runtime spawns from the
+|                        generated copy in .claude/agents/ etc. — `jdi-cli sync-specialists`)   TRACKED
 |   +-- jdi-doer-{slug}.md
 |   +-- jdi-reviewer-{slug}.md
 +-- phases/
