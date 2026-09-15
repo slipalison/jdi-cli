@@ -43,7 +43,7 @@ runtime_overrides:
       write: deny
   antigravity:
     triggers_extra:
-      - "verify phase {PHASE_SLUG} delivery"
+      - "verify a phase delivery of {PROJECT_NAME}"
       - "final review of {PROJECT_NAME}"
 ---
 

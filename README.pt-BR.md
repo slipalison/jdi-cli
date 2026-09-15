@@ -314,7 +314,7 @@ O ciclo: o que uma fase APRENDE (warnings, blockers, waivers) sobrevive como no 
 
 O `.jdi/` é commitado no git — ele É o estado compartilhado. O que isso entrega para um time:
 
-- **Um bootstrap serve o time inteiro.** Os especialistas gerados em `.jdi/agents/` são compartilhados pelo repositório; um colega que clona o projeto recebe o doer + reviewer de graça.
+- **Um bootstrap serve o time inteiro.** Os especialistas gerados em `.jdi/agents/` são compartilhados pelo repositório; um colega que clona o projeto recebe o doer + reviewer de graça. As cópias de runtime (`.claude/agents/jdi-doer-*.md` etc. — os arquivos de onde o runtime realmente faz o spawn) são artefatos gerados, commitados junto, por `npx -y jdi-cli sync-specialists`; `install`/`update`, `/jdi-do` e `/jdi-verify` as rematerializam num clone novo, e o `doctor` aponta drift. Nunca edite uma cópia à mão — edite `.jdi/agents/` e rode de novo.
 - **Slugs são a identidade estável das fases entre branches.** Posições renumeram; slugs nunca. Todos os artefatos, escopos de commit e IDs de decisão se ancoram no slug.
 - **ROADMAP sem status = zero conflito de merge no ship.** O `/jdi-ship` escreve `phases/<slug>/SHIPPED.md` em vez de editar o ROADMAP.md — dois desenvolvedores entregando fases diferentes em branches diferentes tocam arquivos disjuntos.
 - **O status é derivado, nunca armazenado.** Qualquer clone responde "onde está a fase X?" apenas pelos artefatos: `SHIPPED.md` → done, `REVIEW.md` → verified, `SUMMARY.md` → executed, `PLAN.md` → planned, `CONTEXT.md` → discussed, nada → pending.
@@ -761,6 +761,7 @@ Os helpers de fase vêm dentro do pacote npm e são expostos como subcomandos de
 | `monitor <arquivo...>` | Estima o uso de orçamento de contexto dos arquivos indicados |
 | `render [--check] [--quiet]` | Regenera as views não versionadas do `.jdi/` (ROADMAP.md, DECISIONS.md, todos.md, tabelas do registry) a partir dos diretórios por entrada — layout v3. `--check`: relata drift/avisos sem escrever (usado pelo doctor/CI) |
 | `migrate-layout [--dry-run] [--force]` | Migração única de um `.jdi/` legado para o layout por entrada, livre de conflitos (v3). Idempotente; dá stage mas não commita |
+| `sync-specialists [runtime\|all] [--check] [--quiet] [--porcelain]` | Materializa os especialistas por projeto (`.jdi/agents/jdi-*.md`) no diretório de agents que cada runtime realmente lê — `.claude/agents/`, `.github/agents/*.agent.md`, `.opencode/agents/`, `.agents/skills/*/SKILL.md`, `.junie/agents/` — convertendo o frontmatter canônico com o mesmo emissor que o `build` usa. Determinístico byte a byte, idempotente, marcador `GENERATED`. `--check`: exit 1 se alguma cópia estiver ausente/desatualizada (doctor, CI e o self-heal do `/jdi-do` / `/jdi-verify`) |
 
 Você raramente roda esses na mão — eles existem para que os comandos funcionem de forma idêntica em bash e PowerShell (o `migrate-layout` é a exceção: você o roda uma vez por projeto legado).
 
@@ -911,7 +912,9 @@ Quando ele perguntar "Specialist already exists. Recreate / Keep / Cancel?":
 5. Commite:
 
    ```bash
+   npx -y jdi-cli sync-specialists          # .claude/agents/ etc. — de onde o runtime faz o spawn
    git add .jdi/agents/ .jdi/specialists.md .jdi/reviewers.md .jdi/registry.md
+   npx -y jdi-cli sync-specialists --porcelain | xargs -r git add
    git commit -m "chore(jdi): add NewStack specialist (manual)"
    ```
 

@@ -264,6 +264,23 @@ function cmdLibZeroArg(baseName, rawArgs) {
   process.exit(code);
 }
 
+// Raw argv for a plumbing helper: everything after the subcommand MINUS the
+// global flags jdi.js consumes itself (--no-color, --lang <x>). The helpers
+// never declare those, so forwarding them broke every helper on Windows
+// (`validate-slug --no-color` -> binder error on `-NoColor`, #33).
+function libArgs() {
+  const raw = process.argv.slice(3);
+  const out = [];
+  for (let i = 0; i < raw.length; i++) {
+    const a = raw[i];
+    if (a === '--no-color') continue;
+    if (a === '--lang') { i++; continue; }
+    if (a.startsWith('--lang=')) continue;
+    out.push(a);
+  }
+  return out;
+}
+
 // Build CLI args from a flag spec, picking the platform-correct flag name.
 // spec: [{ key, win, nix, value? }]. value:true forwards the flag's value.
 function buildFlagArgs(flags, spec) {
@@ -539,6 +556,7 @@ async function cmdHelp() {
   console.log(`  ${c.cyan}monitor${c.reset} ${c.gray}<file...>${c.reset}          ${tr('help.helper.monitor')}`);
   console.log(`  ${c.cyan}render${c.reset} ${c.gray}[--check]${c.reset}          ${tr('help.helper.render')}`);
   console.log(`  ${c.cyan}migrate-layout${c.reset} ${c.gray}[--dry-run]${c.reset}  ${tr('help.helper.migrate_layout')}`);
+  console.log(`  ${c.cyan}sync-specialists${c.reset} ${c.gray}[runtime] [--check]${c.reset}  ${tr('help.helper.sync_specialists')}`);
   console.log('');
 
   console.log(`${c.bold}${tr('help.runtimes_label')}${c.reset}`);
@@ -652,25 +670,28 @@ async function main() {
     // Plumbing helpers for slash commands inside consumer projects — raw argv,
     // no banner, exit code passthrough.
     case 'resolve-phase':
-      cmdResolvePhase(process.argv.slice(3));
+      cmdResolvePhase(libArgs());
       break;
     case 'validate-slug':
-      cmdLibPassthrough('jdi-validate-slug', 'validate-slug <slug> [--check-unique]', process.argv.slice(3));
+      cmdLibPassthrough('jdi-validate-slug', 'validate-slug <slug> [--check-unique]', libArgs());
       break;
     case 'validate-phase':
-      cmdLibPassthrough('jdi-validate-phase', 'validate-phase <slug|position> [--for-pr] [--quiet]', process.argv.slice(3));
+      cmdLibPassthrough('jdi-validate-phase', 'validate-phase <slug|position> [--for-pr] [--quiet]', libArgs());
       break;
     case 'truncate':
-      cmdLibPassthrough('jdi-truncate', 'truncate <file> <max_chars>', process.argv.slice(3));
+      cmdLibPassthrough('jdi-truncate', 'truncate <file> <max_chars>', libArgs());
       break;
     case 'render':
-      cmdLibZeroArg('jdi-render', process.argv.slice(3));
+      cmdLibZeroArg('jdi-render', libArgs());
       break;
     case 'migrate-layout':
-      cmdLibZeroArg('jdi-migrate-layout', process.argv.slice(3));
+      cmdLibZeroArg('jdi-migrate-layout', libArgs());
+      break;
+    case 'sync-specialists':
+      cmdLibZeroArg('jdi-sync-specialists', libArgs());
       break;
     case 'monitor':
-      cmdLibPassthrough('jdi-monitor', 'monitor <file...>', process.argv.slice(3));
+      cmdLibPassthrough('jdi-monitor', 'monitor <file...>', libArgs());
       break;
     case 'help':
     case '--help':

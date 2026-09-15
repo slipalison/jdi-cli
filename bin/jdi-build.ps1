@@ -25,6 +25,10 @@ $Root = Split-Path -Parent $PSScriptRoot
 $Core = Join-Path $Root 'core'
 $Out  = Join-Path $Root 'runtimes'
 
+# Frontmatter parsing + per-runtime emitters live in the shared lib (also
+# used by jdi-sync-specialists.ps1 for .jdi/agents/ -> runtime dirs, #33).
+. (Join-Path $PSScriptRoot 'lib\jdi-agent-emit.ps1')
+
 function Ensure-Dirs {
   $dirs = @(
     "$Out\claude\agents", "$Out\claude\commands", "$Out\claude\skills",
@@ -38,285 +42,41 @@ function Ensure-Dirs {
   }
 }
 
-# Le arquivo e devolve hashtable com:
-#  Frontmatter = string (sem os ---)
-#  Body        = string (corpo apos o frontmatter)
-function Read-MdSource {
-  param([string]$Path)
-  $content = Get-Content -Path $Path -Raw -Encoding UTF8
-  if ($content -match '^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$') {
-    return @{
-      Frontmatter = $Matches[1]
-      Body        = $Matches[2]
-    }
-  }
-  return @{ Frontmatter = ''; Body = $content }
-}
-
-# Escreve UTF-8 SEM BOM (consistente com bin/jdi-build.sh e pwsh 7+).
-# `Set-Content -Encoding UTF8` emite BOM no Windows PowerShell 5.1 - isso gera
-# churn cross-shell gigante em runtimes/ (skills com BOM, commands sem).
-function Write-Utf8NoBom {
-  param([string]$Path, [string]$Content)
-  # Normalize to LF: StringBuilder.AppendLine emits CRLF on Windows, while
-  # jdi-build.sh emits LF. Committed blobs are LF (.gitattributes) - writing
-  # LF here keeps both builders byte-identical in the worktree too.
-  $Content = $Content.Replace("`r`n", "`n")
-  [System.IO.File]::WriteAllText($Path, $Content, [System.Text.UTF8Encoding]::new($false))
-}
-
-# Fecha o sub-bloco atual ($State.CurrentSub) gravando suas linhas em SubBlocks.
-function Close-OverrideSubBlock {
-  param([hashtable]$State)
-  if ($State.CurrentSub) {
-    $State.SubBlocks[$State.CurrentSub] = $State.CurrentSubLines
-    $State.CurrentSub = $null
-    $State.CurrentSubLines = @()
-  }
-}
-
-# Processa uma linha de 4 espacos: par `key: value` (escalar) OU `key:` (abre sub-bloco).
-function Add-OverrideScalarOrSubBlock {
-  param([hashtable]$State, [string]$Key, [string]$Value)
-  Close-OverrideSubBlock -State $State
-  if ([string]::IsNullOrWhiteSpace($Value)) {
-    # sub-bloco abre
-    $State.CurrentSub = $Key
-    $State.CurrentSubLines = @()
-  } else {
-    $State.Scalars[$Key] = $Value
-  }
-}
-
-# Aplica uma linha pertencente ao bloco do runtime alvo ao estado acumulado.
-function Update-OverrideState {
-  param([hashtable]$State, [string]$Line)
-
-  # linhas de 4 espacos: pares key: value, OU key: (sub-bloco)
-  if ($Line -match '^\s{4}(\w[\w-]*):\s*(.*)$') {
-    Add-OverrideScalarOrSubBlock -State $State -Key $Matches[1] -Value $Matches[2]
-  }
-  elseif ($Line -match '^\s{6}\S' -and $State.CurrentSub) {
-    # linha do sub-bloco (6 espacos)
-    $State.CurrentSubLines += ($Line -replace '^\s{4}', '')
-  }
-  elseif ($Line -match '^\s{4}- ' -and $State.CurrentSub) {
-    $State.CurrentSubLines += ($Line -replace '^\s{4}', '')
-  }
-}
-
-# Extrai sub-bloco do frontmatter sob `runtime_overrides.<runtime>:`.
-# Retorna hashtable { key = value } com parsing simples de "key: value" indented.
-function Get-RuntimeOverride {
-  param(
-    [string]$Frontmatter,
-    [string]$Runtime
-  )
-  $state = @{
-    Scalars         = [ordered]@{}
-    SubBlocks       = [ordered]@{}
-    CurrentSub      = $null
-    CurrentSubLines = @()
-  }
-  $lines = $Frontmatter -split "`r?`n"
-  $inOverrides = $false
-  $inRuntime   = $false
-
-  foreach ($line in $lines) {
-    if ($line -match '^runtime_overrides:\s*$') { $inOverrides = $true; continue }
-    if (-not $inOverrides) { continue }
-
-    if ($line -match '^\S') { break }  # saiu do bloco runtime_overrides
-
-    if ($line -match "^\s{2}${Runtime}:\s*$") {
-      $inRuntime = $true
-      continue
-    }
-
-    if ($inRuntime) {
-      if ($line -match '^\s{2}\S') { break }  # outro runtime - fim do bloco
-      Update-OverrideState -State $state -Line $line
-    }
-  }
-
-  # commit ultimo subbloco
-  Close-OverrideSubBlock -State $state
-
-  return @{ Scalars = $state.Scalars; SubBlocks = $state.SubBlocks }
-}
-
-# Pega valor escalar do frontmatter base (ex: description, name, triggers).
-function Get-BaseFrontmatterValue {
-  param(
-    [string]$Frontmatter,
-    [string]$Key
-  )
-  if ($Frontmatter -match "(?m)^${Key}:\s*(.+)$") {
-    return $Matches[1].Trim()
-  }
-  return $null
-}
-
-# Pega bloco multilinha do frontmatter base (ex: triggers: lista).
-function Get-BaseFrontmatterBlock {
-  param(
-    [string]$Frontmatter,
-    [string]$Key
-  )
-  $lines = $Frontmatter -split "`r?`n"
-  $collecting = $false
-  $captured = @()
-  foreach ($line in $lines) {
-    if ($collecting) {
-      if ($line -match '^\S') { break }   # proxima chave top-level
-      if ($line -match '^\s+\S') { $captured += $line; continue }
-    }
-    if ($line -match "^${Key}:\s*$") { $collecting = $true; $captured += $line; continue }
-  }
-  return ($captured -join "`n")
-}
-
-# Builder comum dos agents com frontmatter escalar (name/desc/model/tools).
-# Claude e Copilot so diferem em runtime, destino e label.
-function Build-ScalarAgent {
-  param([string]$SrcPath, [string]$Runtime, [string]$Dst, [string]$Label)
-  $name = [System.IO.Path]::GetFileNameWithoutExtension($SrcPath)
-  $src  = Read-MdSource -Path $SrcPath
-  $desc = Get-BaseFrontmatterValue -Frontmatter $src.Frontmatter -Key 'description'
-  $override = Get-RuntimeOverride -Frontmatter $src.Frontmatter -Runtime $Runtime
-
-  $fm = New-Object System.Text.StringBuilder
-  [void]$fm.AppendLine('---')
-  [void]$fm.AppendLine("name: $name")
-  if ($desc) { [void]$fm.AppendLine("description: $desc") }
-  if ($override.Scalars['model']) { [void]$fm.AppendLine("model: $($override.Scalars['model'])") }
-  if ($override.Scalars['tools']) { [void]$fm.AppendLine("tools: $($override.Scalars['tools'])") }
-  [void]$fm.AppendLine('---')
-
-  Write-Utf8NoBom -Path $Dst -Content ($fm.ToString() + $src.Body)
-  Write-Output "  $Label"
-}
-
 function Build-ClaudeAgent {
   param([string]$SrcPath)
   $name = [System.IO.Path]::GetFileNameWithoutExtension($SrcPath)
-  Build-ScalarAgent -SrcPath $SrcPath -Runtime 'claude' `
-    -Dst (Join-Path "$Out\claude\agents" "$name.md") `
-    -Label "claude/agents/$name.md"
+  Write-AgentFile -Runtime 'claude' -SrcPath $SrcPath -Dst (Join-Path "$Out\claude\agents" "$name.md")
+  Write-Output "  claude/agents/$name.md"
 }
 
 function Build-CopilotAgent {
   param([string]$SrcPath)
   $name = [System.IO.Path]::GetFileNameWithoutExtension($SrcPath)
-  Build-ScalarAgent -SrcPath $SrcPath -Runtime 'copilot' `
-    -Dst (Join-Path "$Out\copilot\agents" "$name.agent.md") `
-    -Label "copilot/agents/$name.agent.md"
+  Write-AgentFile -Runtime 'copilot' -SrcPath $SrcPath -Dst (Join-Path "$Out\copilot\agents" "$name.agent.md")
+  Write-Output "  copilot/agents/$name.agent.md"
 }
 
 function Build-AntigravitySkill {
   param([string]$SrcPath)
   $name = [System.IO.Path]::GetFileNameWithoutExtension($SrcPath)
   $skillDir = Join-Path "$Out\antigravity\skills" $name
-  $dst = Join-Path $skillDir 'SKILL.md'
   New-Item -ItemType Directory -Force -Path "$skillDir\references" | Out-Null
   New-Item -ItemType Directory -Force -Path "$skillDir\scripts" | Out-Null
-
-  $src = Read-MdSource -Path $SrcPath
-  $desc = Get-BaseFrontmatterValue -Frontmatter $src.Frontmatter -Key 'description'
-  $triggersBlock = Get-BaseFrontmatterBlock -Frontmatter $src.Frontmatter -Key 'triggers'
-  $override = Get-RuntimeOverride -Frontmatter $src.Frontmatter -Runtime 'antigravity'
-
-  $fm = New-Object System.Text.StringBuilder
-  [void]$fm.AppendLine('---')
-  [void]$fm.AppendLine("name: $name")
-  if ($desc) { [void]$fm.AppendLine("description: $desc") }
-  if ($triggersBlock) {
-    [void]$fm.AppendLine($triggersBlock)
-    if ($override.SubBlocks['triggers_extra']) {
-      foreach ($l in $override.SubBlocks['triggers_extra']) {
-        [void]$fm.AppendLine($l)
-      }
-    }
-  }
-  [void]$fm.AppendLine('---')
-
-  $content = $fm.ToString() + $src.Body
-  Write-Utf8NoBom -Path $dst -Content $content
+  Write-AgentFile -Runtime 'antigravity' -SrcPath $SrcPath -Dst (Join-Path $skillDir 'SKILL.md')
   Write-Output "  antigravity/skills/$name/SKILL.md"
 }
 
 function Build-OpencodeAgent {
   param([string]$SrcPath)
   $name = [System.IO.Path]::GetFileNameWithoutExtension($SrcPath)
-  $dst  = Join-Path "$Out\opencode\agents" "$name.md"
-
-  $src = Read-MdSource -Path $SrcPath
-  $desc = Get-BaseFrontmatterValue -Frontmatter $src.Frontmatter -Key 'description'
-  $override = Get-RuntimeOverride -Frontmatter $src.Frontmatter -Runtime 'opencode'
-
-  $fm = New-Object System.Text.StringBuilder
-  [void]$fm.AppendLine('---')
-  if ($desc) { [void]$fm.AppendLine("description: $desc") }
-  foreach ($k in @('mode','model','temperature')) {
-    if ($override.Scalars[$k]) {
-      [void]$fm.AppendLine("${k}: $($override.Scalars[$k])")
-    }
-  }
-  if ($override.SubBlocks['permission']) {
-    [void]$fm.AppendLine('permission:')
-    foreach ($l in $override.SubBlocks['permission']) {
-      [void]$fm.AppendLine($l)
-    }
-  }
-  [void]$fm.AppendLine('---')
-
-  $content = $fm.ToString() + $src.Body
-  Write-Utf8NoBom -Path $dst -Content $content
+  Write-AgentFile -Runtime 'opencode' -SrcPath $SrcPath -Dst (Join-Path "$Out\opencode\agents" "$name.md")
   Write-Output "  opencode/agents/$name.md"
 }
 
 function Build-JunieAgent {
-  # Junie subagent (.junie/agents/<n>.md): name + description + tools
-  # allowlist (enforced by Junie) + reasoningLevel. Tools derive from the
-  # claude override filtered to Junie's supported set; Agent/WebFetch/Skill
-  # drop out (Junie delegates natively and has WebSearch only). Model is
-  # never emitted - Junie is LLM-agnostic and the user picks the model.
   param([string]$SrcPath)
   $name = [System.IO.Path]::GetFileNameWithoutExtension($SrcPath)
-  $dst  = Join-Path "$Out\junie\agents" "$name.md"
-
-  $src = Read-MdSource -Path $SrcPath
-  $desc = Get-BaseFrontmatterValue -Frontmatter $src.Frontmatter -Key 'description'
-  $override = Get-RuntimeOverride -Frontmatter $src.Frontmatter -Runtime 'claude'
-
-  $toolsFiltered = ''
-  if ($override.Scalars['tools']) {
-    $allowed = @('Read','Bash','Glob','Grep','Write','Edit','WebSearch','AskUserQuestion')
-    $kept = ($override.Scalars['tools'] -replace '[\[\]]', '') -split ',' |
-      ForEach-Object { $_.Trim() } | Where-Object { $allowed -contains $_ }
-    if ($kept) { $toolsFiltered = ($kept -join ', ') }
-  }
-
-  $level = ''
-  if ($src.Frontmatter -match '(?ms)^runtime_intent:\s*$(.*?)(?=^\S|\z)') {
-    if ($Matches[1] -match '(?m)^\s{2}reasoning:\s*(\S+)') {
-      switch ($Matches[1]) {
-        'deep'   { $level = 'high' }
-        'medium' { $level = 'medium' }
-        'low'    { $level = 'low' }
-      }
-    }
-  }
-
-  $fm = New-Object System.Text.StringBuilder
-  [void]$fm.AppendLine('---')
-  [void]$fm.AppendLine("name: $name")
-  if ($desc) { [void]$fm.AppendLine("description: $desc") }
-  if ($toolsFiltered) { [void]$fm.AppendLine("tools: [$toolsFiltered]") }
-  if ($level) { [void]$fm.AppendLine("reasoningLevel: $level") }
-  [void]$fm.AppendLine('---')
-
-  Write-Utf8NoBom -Path $dst -Content ($fm.ToString() + $src.Body)
+  Write-AgentFile -Runtime 'junie' -SrcPath $SrcPath -Dst (Join-Path "$Out\junie\agents" "$name.md")
   Write-Output "  junie/agents/$name.md"
 }
 

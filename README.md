@@ -311,7 +311,7 @@ The cycle: what a phase LEARNS (warnings, blockers, waivers) survives as ≤5 di
 
 `.jdi/` is committed to git — it IS the shared state. What that buys a team:
 
-- **One bootstrap serves the team.** Specialists generated in `.jdi/agents/` are shared through the repo; a teammate cloning the project gets the doer + reviewer for free.
+- **One bootstrap serves the team.** Specialists generated in `.jdi/agents/` are shared through the repo; a teammate cloning the project gets the doer + reviewer for free. The runtime copies (`.claude/agents/jdi-doer-*.md` etc. — the files the runtime actually spawns from) are generated artifacts committed alongside them by `npx -y jdi-cli sync-specialists`; `install`/`update`, `/jdi-do` and `/jdi-verify` re-materialize them on a fresh clone, and `doctor` flags drift. Never hand-edit a copy — edit `.jdi/agents/` and re-run.
 - **Slugs are the stable identity of phases across branches.** Positions renumber; slugs never do. All artifacts, commit scopes, and decision IDs key off the slug.
 - **ROADMAP without status = zero merge conflicts at ship.** `/jdi-ship` writes `phases/<slug>/SHIPPED.md` instead of editing ROADMAP.md — two developers shipping different phases on different branches touch disjoint files.
 - **Status is derived, never stored.** Any clone answers "where is phase X?" from artifacts alone: `SHIPPED.md` → done, `REVIEW.md` → verified, `SUMMARY.md` → executed, `PLAN.md` → planned, `CONTEXT.md` → discussed, nothing → pending.
@@ -778,6 +778,7 @@ The phase helpers ship inside the npm package and are exposed as CLI subcommands
 | `monitor <file...>` | Estimate context budget usage of the given files |
 | `render [--check] [--quiet]` | Regenerate the untracked `.jdi/` views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs — layout v3. `--check`: report drift/warnings without writing (used by doctor/CI) |
 | `migrate-layout [--dry-run] [--force]` | One-time migration of a legacy `.jdi/` to the conflict-free per-entry layout (v3). Idempotent; stages but does not commit |
+| `sync-specialists [runtime\|all] [--check] [--quiet] [--porcelain]` | Materialize the per-project specialists (`.jdi/agents/jdi-*.md`) into the agent dir each runtime actually reads — `.claude/agents/`, `.github/agents/*.agent.md`, `.opencode/agents/`, `.agents/skills/*/SKILL.md`, `.junie/agents/` — converting the canonical frontmatter with the same emitter `build` uses. Byte-deterministic, idempotent, `GENERATED` marker. `--check`: exit 1 on a missing/stale copy (doctor, CI, and the `/jdi-do` / `/jdi-verify` self-heal) |
 
 You rarely run these by hand — they exist so commands work identically on bash and PowerShell (`migrate-layout` is the exception: you run it once per legacy project).
 
@@ -918,9 +919,11 @@ When asked "Specialist already exists. Recreate / Keep / Cancel?":
    **Slug:** myapp-newstack
    **Stack:** NewStack
    ```
-5. Commit:
+5. Materialize the runtime copies and commit:
    ```bash
+   npx -y jdi-cli sync-specialists          # .claude/agents/ etc. — what the runtime spawns from
    git add .jdi/agents/ .jdi/specialists.md .jdi/reviewers.md .jdi/registry.md
+   npx -y jdi-cli sync-specialists --porcelain | xargs -r git add
    git commit -m "chore(jdi): add NewStack specialist (manual)"
    ```
 

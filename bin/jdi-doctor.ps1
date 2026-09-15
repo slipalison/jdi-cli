@@ -220,6 +220,14 @@ if (Test-Path "$ProjectDir\.jdi") {
     $specCount = (Get-ChildItem -Path "$ProjectDir\.jdi\agents" -Filter "jdi-doer-*.md" -File -ErrorAction SilentlyContinue).Count + (Get-ChildItem -Path "$ProjectDir\.jdi\agents" -Filter "jdi-reviewer-*.md" -File -ErrorAction SilentlyContinue).Count
     if ($specCount -gt 0) {
       Write-OK ".jdi/agents/ com $specCount specialist(s) per-project"
+      # Runtime copies (#33): the runtime spawns from .claude/agents/ etc.,
+      # never from .jdi/agents/ - a missing/stale copy kills /jdi-do.
+      & (Join-Path $PSScriptRoot 'lib\jdi-sync-specialists.ps1') -Check -Quiet
+      if ($LASTEXITCODE -eq 0) {
+        Write-OK 'specialists em sync com os runtime dirs (.claude/agents/, .github/agents/, ...)'
+      } else {
+        Write-WARN 'specialists ausentes/desatualizados nos runtime dirs - rode: npx -y jdi-cli sync-specialists'
+      }
     } else {
       Write-Note '.jdi/agents/ vazio (rode /jdi-bootstrap pra criar specialists)'
     }
@@ -403,8 +411,10 @@ $specPath = Join-Path $ProjectDir '.jdi\specialists.md'
 $revPath  = Join-Path $ProjectDir '.jdi\reviewers.md'
 
 if (Test-Path $specPath) {
-  $doers = (Get-Content $specPath | Select-String -Pattern 'jdi-doer-[a-z0-9-]+' -AllMatches).Matches |
-           ForEach-Object { $_.Value } | Sort-Object -Unique
+  # @(...) keeps a single match an array - a bare string would make $doers[0]
+  # its first character ("Single-stack: j", #33).
+  $doers = @((Get-Content $specPath | Select-String -Pattern 'jdi-doer-[a-z0-9-]+' -AllMatches).Matches |
+           ForEach-Object { $_.Value } | Sort-Object -Unique)
   if ($doers.Count -eq 0) {
     Write-Note 'specialists.md exists but no doer registered'
   } elseif ($doers.Count -eq 1) {

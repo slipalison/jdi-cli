@@ -93,6 +93,7 @@ Does:
    - 6-9 focused questions — 6 base (test framework, build command, test command, coverage min, lint, conventions) + 3 frontend questions when a frontend is detected (dev server command, URL, critical paths). On adopted projects, defaults are pre-filled from the scan
    - Generates `.jdi/agents/jdi-doer-{slug}.md` (from `core/templates/doer-specialist.md`)
    - Generates `.jdi/agents/jdi-reviewer-{slug}.md` (from `core/templates/reviewer-specialist.md`)
+   - Materializes both into the runtime's agent dir (`.claude/agents/`, `.github/agents/`, `.opencode/agents/`, `.agents/skills/`, `.junie/agents/`) via `npx -y jdi-cli sync-specialists` — the runtime spawns from those copies, never from `.jdi/agents/`
    - Injects `<skills_to_load>` (principles + exactly ONE code-design skill resolved from PROJECT.md + frontend skills if applicable)
    - Updates `.jdi/specialists.md` + `.jdi/reviewers.md` + `.jdi/registry.md`
 4. Commit: `chore(jdi): bootstrap specialists for <project_name>`

@@ -12,13 +12,11 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CORE="${ROOT}/core"
 OUT="${ROOT}/runtimes"
 TARGET="${1:-all}"
-# Repeated literals extracted to constants (S1192)
-readonly ANTIGRAVITY="antigravity"
-readonly RT_CLAUDE="claude"
-readonly RT_OPENCODE="opencode"
-readonly RT_JUNIE="junie"
-readonly RT_COPILOT="copilot"
-readonly K_DESC="description"
+# Frontmatter parsing + per-runtime emitters live in the shared lib (also
+# used by jdi-sync-specialists.sh for .jdi/agents/ -> runtime dirs, #33);
+# the runtime-name constants (RT_*, ANTIGRAVITY, K_DESC) come from it too.
+# shellcheck source=lib/jdi-agent-emit.sh
+source "${ROOT}/bin/lib/jdi-agent-emit.sh"
 
 ensure_dirs() {
   mkdir -p "${OUT}/claude/agents" "${OUT}/claude/commands" "${OUT}/claude/skills"
@@ -28,118 +26,17 @@ ensure_dirs() {
   mkdir -p "${OUT}/junie/agents" "${OUT}/junie/skills"
 }
 
-# ---------------------------------------------------------------------------
-# Parsing helpers — frontmatter-bounded, mirror jdi-build.ps1 1:1.
-#
-# The old builders used awk /start/,/end/ ranges whose end pattern also
-# matched the start line (single-line range → empty extraction) and a
-# frontmatter toggle that re-entered on `---` horizontal rules in the body
-# (truncated agents). Every helper below hard-stops at the closing `---`.
-# ---------------------------------------------------------------------------
-
-# Everything after the closing `---` of the frontmatter (body verbatim,
-# including any `---` horizontal rules inside it).
-extract_body() {
-  local file="$1"
-  awk '
-    fm >= 2 { print; next }
-    /^---$/ { fm++ }
-  ' "$file"
-}
-
-# Scalar value of a top-level frontmatter key (e.g. description).
-base_fm_value() {
-  local file="$1" key="$2"
-  awk -v key="$key" '
-    /^---$/ { fm++; if (fm == 2) exit; next }
-    fm == 1 && index($0, key ":") == 1 {
-      sub("^" key ":[[:space:]]*", ""); print; exit
-    }
-  ' "$file"
-}
-
-# Multiline block of a top-level frontmatter key (key line + indented lines).
-base_fm_block() {
-  local file="$1" key="$2"
-  awk -v key="$key" '
-    /^---$/ { fm++; if (fm == 2) exit; next }
-    fm == 1 && $0 == key ":" { b = 1; print; next }
-    b && /^[^ \t]/ { b = 0 }
-    b && /^[[:space:]]+[^ \t]/ { print }
-  ' "$file"
-}
-
-# Scalar under runtime_overrides.<runtime> (4-space keys).
-override_scalar() {
-  local file="$1" rt="$2" key="$3"
-  awk -v rt="$rt" -v key="$key" '
-    /^---$/ { fm++; if (fm == 2) exit; next }
-    fm == 1 && $0 == "  " rt ":" { r = 1; next }
-    r && /^  [a-z_-]+:/ { r = 0 }
-    r && index($0, "    " key ":") == 1 {
-      sub("^    " key ":[[:space:]]*", ""); print; exit
-    }
-  ' "$file"
-}
-
-# Sub-block under runtime_overrides.<runtime>.<subkey>: emits the 6-space
-# child lines re-indented to 2 spaces (same as the ps1 SubBlocks strip).
-override_block() {
-  local file="$1" rt="$2" sub_key="$3"
-  awk -v rt="$rt" -v sub_key="$sub_key" '
-    /^---$/ { fm++; if (fm == 2) exit; next }
-    fm == 1 && $0 == "  " rt ":" { r = 1; next }
-    r && /^  [a-z_-]+:/ { r = 0 }
-    r && $0 == "    " sub_key ":" { b = 1; next }
-    b && /^    [a-z_]+:/ { b = 0 }
-    b && /^[[:space:]]*-[[:space:]]+/ { sub(/^[[:space:]]*/, "  "); print; next }
-    b && /^      / { sub(/^[[:space:]]{6}/, "  "); print }
-  ' "$file"
-}
-
 build_claude_agent() {
   local src="$1"
   local name; name=$(basename "$src" .md)
-  local dst="${OUT}/claude/agents/${name}.md"
-
-  local desc model tools
-  desc=$(base_fm_value "$src" "$K_DESC")
-  model=$(override_scalar "$src" "$RT_CLAUDE" "model")
-  tools=$(override_scalar "$src" "$RT_CLAUDE" "tools")
-
-  {
-    echo "---"
-    echo "name: ${name}"
-    [[ -n "$desc" ]] && echo "description: ${desc}"
-    [[ -n "$model" ]] && echo "model: ${model}"
-    [[ -n "$tools" ]] && echo "tools: ${tools}"
-    echo "---"
-    extract_body "$src"
-  } > "$dst"
-
+  emit_agent "$RT_CLAUDE" "$src" "${OUT}/claude/agents/${name}.md"
   echo "  claude/agents/${name}.md"
 }
 
 build_copilot_agent() {
   local src="$1"
   local name; name=$(basename "$src" .md)
-  local dst="${OUT}/copilot/agents/${name}.agent.md"
-
-  local desc model tools
-  desc=$(base_fm_value "$src" "$K_DESC")
-  model=$(override_scalar "$src" "$RT_COPILOT" "model")
-  tools=$(override_scalar "$src" "$RT_COPILOT" "tools")
-
-  {
-    echo "---"
-    echo "name: ${name}"
-    [[ -n "$desc" ]] && echo "description: ${desc}"
-    [[ -n "$model" ]] && echo "model: ${model}"
-    [[ -n "$tools" ]] && echo "tools: ${tools}"
-    echo "---"
-    extract_body "$src"
-  } > "$dst"
-
+  emit_agent "$RT_COPILOT" "$src" "${OUT}/copilot/agents/${name}.agent.md"
   echo "  copilot/agents/${name}.agent.md"
 }
 
@@ -147,104 +44,22 @@ build_antigravity_skill() {
   local src="$1"
   local name; name=$(basename "$src" .md)
   local skill_dir="${OUT}/antigravity/skills/${name}"
-  local dst="${skill_dir}/SKILL.md"
-
   mkdir -p "$skill_dir/references" "$skill_dir/scripts"
-
-  local desc triggers_block extras
-  desc=$(base_fm_value "$src" "$K_DESC")
-  triggers_block=$(base_fm_block "$src" "triggers")
-  extras=$(override_block "$src" "antigravity" "triggers_extra")
-
-  {
-    echo "---"
-    echo "name: ${name}"
-    [[ -n "$desc" ]] && echo "description: ${desc}"
-    if [[ -n "$triggers_block" ]]; then
-      echo "$triggers_block"
-      [[ -n "$extras" ]] && echo "$extras"
-    fi
-    echo "---"
-    extract_body "$src"
-  } > "$dst"
-
+  emit_agent "$ANTIGRAVITY" "$src" "${skill_dir}/SKILL.md"
   echo "  antigravity/skills/${name}/SKILL.md"
 }
 
 build_opencode_agent() {
   local src="$1"
   local name; name=$(basename "$src" .md)
-  local dst="${OUT}/opencode/agents/${name}.md"
-
-  local desc mode model temperature perm
-  desc=$(base_fm_value "$src" "$K_DESC")
-  mode=$(override_scalar "$src" "$RT_OPENCODE" "mode")
-  model=$(override_scalar "$src" "$RT_OPENCODE" "model")
-  temperature=$(override_scalar "$src" "$RT_OPENCODE" "temperature")
-  perm=$(override_block "$src" "$RT_OPENCODE" "permission")
-
-  {
-    echo "---"
-    [[ -n "$desc" ]] && echo "description: ${desc}"
-    [[ -n "$mode" ]] && echo "mode: ${mode}"
-    [[ -n "$model" ]] && echo "model: ${model}"
-    [[ -n "$temperature" ]] && echo "temperature: ${temperature}"
-    if [[ -n "$perm" ]]; then
-      echo "permission:"
-      echo "$perm"
-    fi
-    echo "---"
-    extract_body "$src"
-  } > "$dst"
-
+  emit_agent "$RT_OPENCODE" "$src" "${OUT}/opencode/agents/${name}.md"
   echo "  opencode/agents/${name}.md"
 }
 
 build_junie_agent() {
-  # Junie subagent (.junie/agents/<n>.md): name + description + tools
-  # allowlist (enforced by Junie) + reasoningLevel. Tools derive from the
-  # claude override filtered to Junie's supported set; Agent/WebFetch/Skill
-  # drop out (Junie delegates natively and has WebSearch only). Model is
-  # never emitted — Junie is LLM-agnostic and the user picks the model.
   local src="$1"
   local name; name=$(basename "$src" .md)
-  local dst="${OUT}/junie/agents/${name}.md"
-
-  local desc tools reasoning tools_filtered level
-  desc=$(base_fm_value "$src" "$K_DESC")
-  tools=$(override_scalar "$src" "$RT_CLAUDE" "tools")
-  reasoning=$(awk '
-    /^---$/ { fm++; if (fm == 2) exit; next }
-    fm == 1 && /^runtime_intent:$/ { r = 1; next }
-    fm == 1 && r && /^[a-z_-]+:/ { r = 0 }
-    fm == 1 && r && /^  reasoning:/ { sub(/^  reasoning:[[:space:]]*/, ""); print; exit }
-  ' "$src")
-
-  tools_filtered=""
-  if [[ -n "$tools" ]]; then
-    tools_filtered=$(echo "$tools" | tr -d '[]' | tr ',' '\n' \
-      | sed 's/^ *//; s/ *$//' \
-      | grep -E '^(Read|Bash|Glob|Grep|Write|Edit|WebSearch|AskUserQuestion)$' \
-      | tr '\n' ',' | sed 's/,$//; s/,/, /g')
-  fi
-
-  case "$reasoning" in
-    deep) level="high" ;;
-    medium) level="medium" ;;
-    low) level="low" ;;
-    *) level="" ;;
-  esac
-
-  {
-    echo "---"
-    echo "name: ${name}"
-    [[ -n "$desc" ]] && echo "description: ${desc}"
-    [[ -n "$tools_filtered" ]] && echo "tools: [${tools_filtered}]"
-    [[ -n "$level" ]] && echo "reasoningLevel: ${level}"
-    echo "---"
-    extract_body "$src"
-  } > "$dst"
-
+  emit_agent "$RT_JUNIE" "$src" "${OUT}/junie/agents/${name}.md"
   echo "  junie/agents/${name}.md"
 }
 

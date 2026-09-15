@@ -5,6 +5,64 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-09-15
+
+Fixes [#33](https://github.com/slipalison/jdi-cli/issues/33): `/jdi-bootstrap`
+wrote the per-project specialists to `.jdi/agents/` and nothing ever put them
+where the runtime looks — Claude Code resolves
+`Agent(subagent_type="jdi-doer-{slug}")` from `.claude/agents/`, Copilot from
+`.github/agents/`, OpenCode from `.opencode/agents/`, Antigravity from
+`.agents/skills/`, Junie from `.junie/agents/`. On 4 of the 5 runtimes the
+do/verify loop died on the first spawn until the user hand-copied and
+hand-flattened the files (Junie got a raw copy with the canonical frontmatter,
+so its tools allowlist was never enforced either).
+
+### Added
+- **`sync-specialists [runtime|all] [--check] [--quiet] [--porcelain]`** —
+  materializes every `.jdi/agents/jdi-*.md` into the agent dir of each
+  installed runtime, converting the canonical frontmatter with the SAME
+  emitter `build` uses for `core/agents/` (`name/description/model/tools` for
+  Claude and Copilot, `mode: subagent` + `permission` for OpenCode, a
+  `triggers` skill for Antigravity, filtered `tools` + `reasoningLevel` for
+  Junie). Byte-deterministic and idempotent (`.sh`/`.ps1` twins identical,
+  Windows PowerShell 5.1 included), `GENERATED` marker right after the
+  frontmatter, pt-BR directive injected in the same position
+  `install --lang pt-BR` uses. `--check` exits 1 on a missing/stale copy;
+  `--porcelain` prints the paths for `git add`. Runtime detection uses the
+  installed core agents (project dir, then user dir); copies always land in
+  the project dir — specialists are project state.
+- **Shared emitter lib `bin/lib/jdi-agent-emit.{sh,ps1}`** — the five
+  per-runtime frontmatter transforms moved out of the builders into one lib
+  sourced by `build`, `sync-specialists` and `install` (pt-BR injector).
+  `runtimes/` output proven byte-identical before/after, on both builders,
+  bash and PowerShell 5.1.
+- **Wired everywhere specialists are created or moved:** `/jdi-bootstrap`
+  (architect S5.7, staged in the S6/S7 commit via `--porcelain`),
+  `install <runtime>` at both scopes (replaces the Junie-only raw copy),
+  `update` (through install), `/jdi-do` / `/jdi-verify` / `/jdi-loop`
+  self-heal a fresh clone or a stale copy before the first spawn, `doctor`
+  section 7 warns on drift, and the `jdi-artifacts-gate` workflow fails a PR
+  that ships a stale copy (only once the pinned CLI has the helper).
+
+### Fixed
+- **Every plumbing helper crashed on Windows when given a global flag** —
+  `jdi.js` forwarded its own `--no-color` / `--lang <x>` to the `.ps1`
+  helpers, whose binder rejected `-NoColor`
+  (`validate-slug auth --no-color`). Global flags are stripped before dispatch.
+- **`doctor` printed `Single-stack: j`** on PowerShell — a single regex match
+  came back as a plain string and `[0]` took its first character; `@()`.
+- **pt-BR directive injector parity** — the PowerShell injector dropped the
+  directive template's trailing blank line (the bash/awk one kept it), so the
+  same `install --lang pt-BR` produced different bytes per shell. Both now
+  follow the awk line semantics; CRLF input normalizes to LF.
+- Specialist templates: the Antigravity `triggers_extra` carried a literal
+  `{PHASE_SLUG}` placeholder that no bootstrap value fills; reworded.
+
+Verified: 43-assert sync battery (bash / pwsh / PowerShell 5.1 byte parity,
+idempotency, drift, porcelain, pt-BR from env / `.jdi/LANG` / inferred, CRLF
+source and CRLF copy) + 32-assert installer/doctor/jdi.js end-to-end; both
+builders byte-identical (`f635c6a7c659666a`).
+
 ## [0.14.0] - 2026-08-19
 
 First community-driven release — the `--lang` feature and the two bash crash

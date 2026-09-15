@@ -45,7 +45,7 @@ runtime_overrides:
       write: allow
   antigravity:
     triggers_extra:
-      - "implement phase {PHASE_SLUG} of {PROJECT_NAME}"
+      - "implement a phase of {PROJECT_NAME}"
       - "execute tasks of the phase"
 ---
 

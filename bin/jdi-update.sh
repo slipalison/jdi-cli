@@ -49,7 +49,7 @@ if [[ -f "$LANG_FILE" ]]; then
   CURRENT_LANG="$(tr -d '[:space:]\357\273\277' < "$LANG_FILE")"
 else
   CURRENT_LANG="en"
-  for probe_dir in .claude/commands .github/prompts .opencode/commands .agents/skills .junie; do
+  for probe_dir in .claude/commands .github/prompts .opencode/commands .agents/skills/jdi-new .junie/skills/jdi-new; do
     if [[ -d "$PROJECT_DIR/$probe_dir" ]] && grep -rqF '<!-- jdi:lang-directive -->' "$PROJECT_DIR/$probe_dir" 2>/dev/null; then
       CURRENT_LANG="pt-BR"
       break

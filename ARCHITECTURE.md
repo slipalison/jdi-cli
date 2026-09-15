@@ -71,6 +71,7 @@ The `bin/lib` helpers are exposed as **CLI subcommands** — slash commands call
 /jdi-new "<description>"          -> PROJECT.md (+ § DoD baseline) + ROADMAP.md + STATE.md (schema v2) + DECISIONS.md + config.json
 /jdi-adopt ["<description>"]      -> same outputs for existing code (adopted: true, D-2 boundary commit, § Existing assets)
 /jdi-bootstrap                    -> .jdi/agents/jdi-doer-{slug} + jdi-reviewer-{slug} (multi-stack: N pairs)
+                                     + runtime copies via `jdi-cli sync-specialists` (.claude/agents/ etc. — what the runtime spawns from)
 /jdi-discuss <slug|position>      -> phases/<slug>/CONTEXT.md (+ § DoD phase-specific)
 /jdi-plan    <slug|position>      -> phases/<slug>/PLAN.md (tasks + waves)
 /jdi-do      <slug|position>      -> atomic commits + phases/<slug>/SUMMARY.md
@@ -126,7 +127,7 @@ Reviewer is **read-only** by design. It only runs gates, never fixes.
 - `jdi-planner` — decomposes the phase into tasks + waves
 - `jdi-architect` — meta. 2 modes: `create` (agents/skills in core/) or `specialist` (per-project doer/reviewer)
 
-**Per-project (generated, in `.jdi/agents/`):**
+**Per-project (generated, in `.jdi/agents/` — source of truth; the runtime reads the generated copy in its own agent dir, kept in sync by `jdi-cli sync-specialists` through the same frontmatter emitter as `build`):**
 - `jdi-doer-{slug}` — executor that ALREADY KNOWS stack/conventions/code-design. No discovery
 - `jdi-reviewer-{slug}` — gates customized to the stack (build/test/coverage/lint/security)
 
