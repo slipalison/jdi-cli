@@ -58,6 +58,14 @@ so its tools allowlist was never enforced either).
 - Specialist templates: the Antigravity `triggers_extra` carried a literal
   `{PHASE_SLUG}` placeholder that no bootstrap value fills; reworded.
 
+### Changed
+- **Release workflow adapts to npm staged publishing** (GA May 2026): the
+  runner moves to Node 22 + npm 11; `npm publish` is tried first and, when
+  the credential is stage-only (`E_STAGE_REQUIRED`), the version is staged
+  with `npm stage publish --provenance` and the job summary prints the 2FA
+  approval steps. Ready for trusted publishing (OIDC) once configured on
+  npmjs.com.
+
 Verified: 43-assert sync battery (bash / pwsh / PowerShell 5.1 byte parity,
 idempotency, drift, porcelain, pt-BR from env / `.jdi/LANG` / inferred, CRLF
 source and CRLF copy) + 32-assert installer/doctor/jdi.js end-to-end; both
