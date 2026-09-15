@@ -65,7 +65,8 @@ jobs:
       - name: Upgrade npm CLI (staged publishing / trusted publishing)
         shell: bash
         run: |
-          npm install -g npm@latest
+          # Pinned (S8543) + --ignore-scripts (S6505); bump deliberately.
+          npm install -g npm@12.0.2 --ignore-scripts
           npm --version
 
       - name: Verify tag matches package.json
