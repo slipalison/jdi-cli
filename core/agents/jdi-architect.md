@@ -477,6 +477,25 @@ if (-not (Test-Path .gitignore) -or -not (Select-String -Path .gitignore -Patter
 
 Gate 7 cache (screenshots, logs, JSON findings, generated spec) must NEVER be committed.
 
+### S5.7: Materialize the runtime copies (`sync-specialists`)
+
+The runtime never reads `.jdi/agents/`: Claude Code resolves
+`Agent(subagent_type="jdi-doer-{slug}")` from `.claude/agents/`, Copilot from
+`.github/agents/*.agent.md`, OpenCode from `.opencode/agents/`, Antigravity
+from `.agents/skills/*/SKILL.md`, Junie from `.junie/agents/`. Without the
+copies the do/verify loop dies on the first spawn. Run the helper — it
+converts the canonical frontmatter with the same emitter `jdi build` uses for
+the core agents and writes one copy per installed runtime (byte-deterministic,
+idempotent, `GENERATED` marker right after the frontmatter):
+
+```bash
+npx -y jdi-cli sync-specialists
+```
+
+The copies are generated artifacts committed alongside `.jdi/agents/` (S6/S7
+stages them). Never hand-edit a copy — edit `.jdi/agents/` and re-run;
+`jdi doctor` and `/jdi-do` flag/repair drift.
+
 ### S6 + S7: Routing + audit trail
 
 **Layout v3** (`.jdi/registry/` dir exists — every project initialized or
@@ -511,6 +530,7 @@ inside this same entry file. Then refresh the views:
 ```bash
 npx -y jdi-cli render
 git add .jdi/agents/ .jdi/registry/
+npx -y jdi-cli sync-specialists --porcelain | xargs -r git add   # runtime copies (S5.7)
 git commit -m "chore(jdi): bootstrap specialists for {project_name}"
 ```
 
@@ -523,6 +543,7 @@ ship? |`), and append the same `## R-{date}-{slug}` block to
 
 ```bash
 git add .jdi/agents/ .jdi/specialists.md .jdi/reviewers.md .jdi/registry.md
+npx -y jdi-cli sync-specialists --porcelain | xargs -r git add   # runtime copies (S5.7)
 git commit -m "chore(jdi): bootstrap specialists for {project_name}"
 ```
 
@@ -533,7 +554,7 @@ rewritten.)
 ### S8: Confirm
 
 ```
-Specialists {project_name}: doer + reviewer created in .jdi/agents/. Routing ok.
+Specialists {project_name}: doer + reviewer created in .jdi/agents/ + runtime copies synced ({runtimes}). Routing ok.
 ```
 
 ### S9.5: Optional Caveman plugin install (any project)

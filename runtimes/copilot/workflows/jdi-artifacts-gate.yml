@@ -115,4 +115,13 @@ jobs:
             npx -y "$JDI_PIN" validate-phase "$slug" --for-pr || FAIL=1
           done
 
+          # Runtime copies of the specialists (.claude/agents/ etc.) must match
+          # .jdi/agents/ — a stale copy is what the agent actually runs (#33).
+          # Only enforced when the pinned CLI ships the helper (0.15.0+).
+          if npx -y "$JDI_PIN" help --no-color 2>/dev/null | grep -q sync-specialists; then
+            echo ""
+            echo "=== sync-specialists --check ==="
+            npx -y "$JDI_PIN" sync-specialists --check || FAIL=1
+          fi
+
           exit $FAIL

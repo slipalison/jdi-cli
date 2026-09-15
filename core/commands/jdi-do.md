@@ -41,6 +41,11 @@ ls .jdi/agents/jdi-doer-*.md 2>/dev/null | head -1 || {
   echo "Doer specialist missing. Run /jdi-bootstrap."
   exit 1
 }
+
+# Runtime copies: Agent(subagent_type=...) resolves from .claude/agents/ (etc.),
+# never from .jdi/agents/. Self-heal a fresh clone or a stale copy before the
+# first spawn (byte-deterministic; no-op when already in sync).
+npx -y jdi-cli sync-specialists --check --quiet || npx -y jdi-cli sync-specialists --quiet
 ```
 
 ### Step 2: Resolve phase

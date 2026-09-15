@@ -51,6 +51,8 @@ test -d .jdi/ || { echo "Not a JDI project. /jdi-new."; exit 1; }
 # Specialists registered
 ls .jdi/agents/jdi-doer-*.md 2>/dev/null | head -1 || { echo "Doer missing. /jdi-bootstrap."; exit 1; }
 ls .jdi/agents/jdi-reviewer-*.md 2>/dev/null | head -1 || { echo "Reviewer missing. /jdi-bootstrap."; exit 1; }
+# Runtime copies (.claude/agents/ etc. — the runtime never spawns from .jdi/agents/): self-heal before the loop
+npx -y jdi-cli sync-specialists --check --quiet || npx -y jdi-cli sync-specialists --quiet
 ```
 
 ### Step 2: Resolve phase

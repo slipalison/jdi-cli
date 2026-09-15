@@ -85,7 +85,7 @@ Does not block. Just reminds. JDI does not manage `.claude/settings.json` or `.o
 
 <gates>
 - pre: `.jdi/PROJECT.md` + `.jdi/ROADMAP.md` exist; dirty tree outside `.jdi/` warns (non-blocking)
-- post: `.jdi/agents/jdi-doer-*.md` and `.jdi/agents/jdi-reviewer-*.md` exist + routing updated + commit + MCP audit checklist shown
+- post: `.jdi/agents/jdi-doer-*.md` and `.jdi/agents/jdi-reviewer-*.md` exist + runtime copies materialized (`npx -y jdi-cli sync-specialists --check` passes — the runtime spawns from `.claude/agents/` etc., never from `.jdi/agents/`) + routing updated + commit + MCP audit checklist shown
 </gates>
 
 <errors>
