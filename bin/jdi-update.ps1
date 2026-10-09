@@ -7,14 +7,14 @@
   - Detecta automaticamente quais runtimes estao instalados no projeto
   - Sobrescreve runtime files (agents, commands, skills) - shipped pelo JDI
   - NUNCA toca state files (PROJECT.md, DECISIONS.md, ROADMAP.md, STATE.md, phases/, registry.md)
-  - Detecta specialists em .jdi/agents/ e pergunta se regenera (template pode ter mudado)
+  - Atualiza os blocos gerenciados (jdi:managed) dos specialists em .jdi/agents/ e aponta `specialists upgrade --adopt` para os gerados antes da 0.17
   - Atualiza .jdi/VERSION com versao nova
 
 .PARAMETER ForceSpecialists
-  Regenera specialists sem perguntar (assume Yes pra regen).
+  Indica /jdi-bootstrap (Recriar) para specialists gerados antes da 0.17.
 
 .PARAMETER SkipSpecialists
-  Nao mexe em specialists mesmo se template mudou.
+  Nao mexe em specialists (nem nos blocos gerenciados jdi:managed).
 
 .PARAMETER DryRun
   Mostra o que seria atualizado, sem aplicar mudanca.
@@ -214,46 +214,48 @@ if ($specialists.Count -gt 0) {
   foreach ($s in $specialists) { Write-Output "  - $($s.Name)" }
   Write-Output ""
 
-  # Heuristica: specialists gerados a partir da 0.16 tem <return_contract> e
-  # nao tem <skills_to_load> (lista que nunca carregava: os specialists nao
-  # tem a ferramenta Skill).
-  $needsRegen = $false
-  foreach ($s in $specialists) {
-    $content = Get-Content $s.FullName -Raw
-    if ($content -match '<skills_to_load>' -or $content -notmatch '<return_contract>') {
-      $needsRegen = $true
-      break
+  # Desde a 0.17 as partes do JDI nos specialists (entradas, regras de
+  # trabalho, retorno curto) sao BLOCOS GERENCIADOS
+  # (<!-- jdi:managed id=... -->): o update troca so esses blocos e mantem
+  # byte a byte tudo o que o projeto escreveu fora deles. Specialists sem
+  # blocos (gerados antes da 0.17) precisam de `specialists upgrade --adopt`
+  # uma vez - mostra a diferenca antes de gravar.
+  $jdiJs = [System.IO.Path]::Combine($Root, 'bin', 'jdi.js')
+  if ($SkipSpecialists) {
+    Write-Output "  Specialists mantidos como estao (-SkipSpecialists)."
+  } else {
+    Push-Location $ProjectDir
+    try {
+      if ($DryRun) {
+        & node $jdiJs specialists upgrade
+      } else {
+        & node $jdiJs specialists upgrade --write
+        & ([System.IO.Path]::Combine($Root, 'bin', 'lib', 'jdi-sync-specialists.ps1')) -Runtime all -Quiet
+      }
+    } finally {
+      Pop-Location
     }
   }
-
-  if ($needsRegen) {
-    Write-Output "Specialists existentes foram gerados antes da 0.16: sem <return_contract>"
-    Write-Output "(retorno curto ao orquestrador) e/ou com <skills_to_load> (nunca carregado)."
-    Write-Output "Regenere com /jdi-bootstrap (Recriar) ou aplique as mudancas da 0.16 a mao"
-    Write-Output "(CHANGELOG: entradas, retorno curto, nada de reler CLAUDE.md/rules)."
+  $legacy = $false
+  foreach ($s in $specialists) {
+    if ((Get-Content $s.FullName -Raw) -notmatch '<!-- jdi:managed id=') { $legacy = $true; break }
+  }
+  if ($legacy) {
     Write-Output ""
-
-    $shouldRegen = $false
+    Write-Output "Specialists gerados antes da 0.17 (sem blocos gerenciados): as entradas"
+    Write-Output "(brief), o retorno curto e as regras novas so chegam a eles com:"
+    Write-Output "  npx -y jdi-cli@$NewVersion specialists upgrade --adopt          # mostra a diferenca"
+    Write-Output "  npx -y jdi-cli@$NewVersion specialists upgrade --adopt --write  # grava"
+    Write-Output "  npx -y jdi-cli@$NewVersion sync-specialists"
+    Write-Output "Tudo fora dos blocos e preservado. Alternativa: /jdi-bootstrap (Recriar)."
     if ($ForceSpecialists) {
-      $shouldRegen = $true
-    } elseif ($SkipSpecialists) {
-      $shouldRegen = $false
-    } elseif (-not [Console]::IsInputRedirected) {
-      $resp = Read-Host "Regenerar specialists? Vai rodar /jdi-bootstrap (Y/n)"
-      $shouldRegen = ($resp -eq '' -or $resp -match '^[YySs]')
-    }
-
-    if ($shouldRegen) {
       Write-Output ""
-      Write-Output "ACAO MANUAL NECESSARIA:"
+      Write-Output "ACAO MANUAL NECESSARIA (-ForceSpecialists):"
       Write-Output "  Abra teu runtime e rode:  /jdi-bootstrap"
       Write-Output "  Architect vai detectar specialists existentes e oferecer 'Recriar'."
-    } else {
-      Write-Output "  Specialists mantidos como estao."
     }
-  } else {
-    Write-Output "Specialists ja estao no formato da 0.16+."
   }
+  Write-Output "  Auditoria: npx -y jdi-cli@$NewVersion specialists lint"
 }
 
 # =========================================================

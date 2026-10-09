@@ -41,75 +41,38 @@ head.
 
 <process>
 
-### Step 1: Pre-flight routing (project-level gaps first)
+### Steps 1-3: Derive the next command (one deterministic call)
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.16.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
-
-```bash
-if [ ! -d .jdi/ ]; then
-  echo "Not a JDI project yet. Run: /jdi-new \"<short description>\" (or /jdi-adopt for an existing repo)."
-  exit 0   # cannot auto-run: new/adopt need your description/confirmation
-fi
-
-if ! ls .jdi/agents/jdi-doer-*.md >/dev/null 2>&1; then
-  TARGET=jdi-bootstrap   # specialists missing → bootstrap is the next step
-fi
-```
-
-### Step 2: Resolve the target phase
+The whole routing — project gaps (no `.jdi/` → /jdi-new or /jdi-adopt; no
+specialists → /jdi-bootstrap), phase resolution (current = first roadmap phase
+without SHIPPED.md), the artifact ladder and the verdict routing — is one CLI
+call. It reads the per-entry dirs directly (no render needed) and never
+STATE.md.
 
 ```bash
-if [ -n "${1:-}" ]; then
-  RESOLVED="$(npx -y jdi-cli@0.16.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
-  eval "$RESOLVED"
-else
-  # current phase = first ROADMAP phase without SHIPPED.md
-  POS=1; FOUND=false
-  while RESOLVED="$(npx -y jdi-cli@0.16.0 resolve-phase "$POS" 2>/dev/null)"; do
-    eval "$RESOLVED"
-    [ -f "$JDI_PHASE_DIR/SHIPPED.md" ] || { FOUND=true; break; }
-    POS=$((POS+1))
-  done
-  [ "$FOUND" = true ] || { echo "All phases shipped. Project delivered. (Add more: /jdi-add-phase)"; exit 0; }
-fi
-PHASE_SLUG="$JDI_PHASE_SLUG"; PHASE_DIR="$JDI_PHASE_DIR"
+NEXT_JSON=$(npx -y jdi-cli@0.18.0 next ${PHASE_ID:+"$PHASE_ID"} ${LOOP_FLAG:+--loop} --json) || exit $?
 ```
 
-### Step 3: Derive status → pick the target command
+`PHASE_ID` = the `phase_id` argument (omit for the current phase);
+`LOOP_FLAG` set when `--loop` was passed (the CLI also honors
+`orchestration.next_execution: "loop"`). The JSON:
 
-Artifact ladder (first match wins), then verdict routing:
+| field | meaning |
+|---|---|
+| `next` | the command to run, e.g. `/jdi-plan user-auth` — `null` when nothing can run |
+| `reason` | why (`specialists missing`, `REVIEW.md has no verdict`, `All phases shipped…`, `Not a JDI project yet…`) |
+| `slug`, `dir`, `status`, `verdict`, `loop` | the derived state, for the message below |
 
-```bash
-# Loop mode: --loop flag OR config.json orchestration.next_execution == "loop"
-LOOP_MODE=false
-for a in "$@"; do [ "$a" = "--loop" ] && LOOP_MODE=true; done
-if [ "$LOOP_MODE" = false ] && [ -f .jdi/config.json ] && command -v jq >/dev/null 2>&1; then
-  [ "$(jq -r '.orchestration.next_execution // "step"' .jdi/config.json)" = "loop" ] && LOOP_MODE=true
-fi
+Ladder (first match wins): SHIPPED.md → done; REVIEW.md → BLOCKED: `jdi-do`
+(fix mode), APPROVED_PENDING_MANUAL: `jdi-confirm-dod`, other verdict:
+`jdi-ship`, no verdict: `jdi-verify`; SUMMARY.md → `jdi-verify`; PLAN.md →
+`jdi-do`; CONTEXT.md → `jdi-plan`; nothing → `jdi-discuss`. Loop mode turns
+`jdi-do`/`jdi-verify` into `jdi-loop`.
 
-if [ -z "${TARGET:-}" ]; then
-  if   [ -f "$PHASE_DIR/SHIPPED.md" ]; then TARGET=""; echo "Phase $PHASE_SLUG already shipped."; exit 0
-  elif [ -f "$PHASE_DIR/REVIEW.md"  ]; then
-    V=$(grep -oE '(Verdict|Veredicto):\*\* (APPROVED|APPROVED_WITH_WARNINGS|APPROVED_PENDING_MANUAL|BLOCKED)' "$PHASE_DIR/REVIEW.md" | awk '{print $2}')
-    if   echo "$V" | grep -qx BLOCKED;                 then TARGET=jdi-do        # fix mode
-    elif echo "$V" | grep -qx APPROVED_PENDING_MANUAL; then TARGET=jdi-confirm-dod
-    elif [ -n "$V" ];                                  then TARGET=jdi-ship
-    else echo "REVIEW.md has no verdict — re-run /jdi-verify $PHASE_SLUG."; TARGET=jdi-verify; fi
-  elif [ -f "$PHASE_DIR/SUMMARY.md" ]; then TARGET=jdi-verify
-  elif [ -f "$PHASE_DIR/PLAN.md"    ]; then TARGET=jdi-do
-  elif [ -f "$PHASE_DIR/CONTEXT.md" ]; then TARGET=jdi-plan
-  else                                      TARGET=jdi-discuss
-  fi
-
-  # Loop mode upgrades the execute/verify states to the bounded ralph loop
-  # (do ↔ verify with caps + LOOP.md audit). Other states are untouched.
-  if [ "$LOOP_MODE" = true ]; then
-    case "$TARGET" in jdi-do|jdi-verify) TARGET=jdi-loop ;; esac
-  fi
-fi
-
-echo "Next step for phase $PHASE_SLUG: /$TARGET $PHASE_SLUG — executing now."
-```
+- `next` is `null` → print `reason` and stop (new/adopt need the user's
+  description; a shipped project needs /jdi-add-phase).
+- Otherwise print `Next step for phase {slug}: {next} — executing now.` and
+  set `TARGET` (command name without `/`) and `PHASE_SLUG` from it.
 
 ### Step 4: Execute the target command's process
 

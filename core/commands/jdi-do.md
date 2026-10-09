@@ -106,16 +106,40 @@ Agent(
   subagent_type="$DOER",
   description="Fix blockers phase $PHASE_SLUG",
   prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, mode=fix_blockers.
-          All tasks completed; REVIEW.md verdict is BLOCKED. Fix the items in
-          REVIEW.md ## Blockers, run tests, commit atomically."
+          Work list: `npx -y {{JDI_CLI}} review blockers $PHASE_SLUG` (not the
+          whole REVIEW.md). Fix, run the targeted tests, commit atomically."
 )
 ```
 
 If no pending tasks and no BLOCKED review → "phase already executed", exit 0.
 
-If `--sequential` or phase has <3 parallel tasks: use sequential execution (1 doer at a time).
+**Size (lite or full):**
 
-Otherwise: wave-based parallel.
+```bash
+SIZE=$(npx -y {{JDI_CLI}} size "$PHASE_SLUG" --json)   # {size, reasons, tasks, doer}
+```
+
+Every spawn pays its system prompt, the specialist and its brief before doing
+anything; for a small phase that fixed cost dominates. `size: "lite"` (at most
+3 tasks, 6 files, 6 automatic DoD rows, one stack, no file in
+`sizing.sensitive_globs`) → ONE doer runs every pending task, in plan order,
+one commit per task. Briefs are still one per task:
+
+```
+for each pending task T-{X}:  BRIEF_TX=$(npx -y {{JDI_CLI}} brief "$PHASE_SLUG" --role doer --task T-{X} --runtime <rt> | cut -d' ' -f1)
+Agent(
+  subagent_type="<doer from SIZE>",
+  description="Execute phase $PHASE_SLUG (lite)",
+  prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, tasks=T-1,T-2,..., briefs=<brief paths, same order>"
+)
+```
+
+Then skip to Step 7 (counts) and Step 8. Lite changes how the work is
+dispatched, never what is checked: verify runs every gate as for a full
+phase.
+
+`size: "full"`: if `--sequential` or phase has <3 parallel tasks: use sequential
+execution (1 doer at a time). Otherwise: wave-based parallel.
 
 ### Step 5: Intra-wave overlap check (safety)
 
@@ -134,6 +158,19 @@ For each wave:
 
 **If parallel (>=2 tasks in wave + no overlap + not --sequential):**
 
+First, one brief per task — the doer's whole starting context (its task
+block, the orchestrator notes, the decisions it cites, the DoD lines that touch
+its files, known errors, learnings), under `budgets.brief_tokens`:
+
+```bash
+<!-- jdi:only claude -->
+BRIEF_TX=$(npx -y {{JDI_CLI}} brief "$PHASE_SLUG" --role doer --task T-{X} --runtime claude | cut -d' ' -f1)
+<!-- jdi:end -->
+<!-- jdi:only copilot,opencode,antigravity,junie -->
+BRIEF_TX=$(npx -y {{JDI_CLI}} brief "$PHASE_SLUG" --role doer --task T-{X} --runtime other | cut -d' ' -f1)
+<!-- jdi:end -->
+```
+
 Sequential dispatch — ONE `Agent()` per message with `run_in_background: true`. Each task resolves its OWN `subagent_type` from task.specialist (multi-stack):
 
 ```
@@ -142,7 +179,7 @@ TASK_SPECIALIST = <task.specialist field from PLAN.md> OR <single doer fallback>
 Agent(
   subagent_type="${TASK_SPECIALIST}",
   description="Execute T-{X} phase $PHASE_SLUG",
-  prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, task=T-{X}, mode=single_task",
+  prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, task=T-{X}, mode=single_task, brief=$BRIEF_TX",
   run_in_background: true
 )
 ```
@@ -150,10 +187,10 @@ Agent(
 Within a wave, multi-stack projects may spawn DIFFERENT specialists in parallel (different file scopes, disjoint `files_modified`).
 
 **Dispatch prompt = the line above, nothing more.** Do not paste plan text,
-reading lists or file contents into it: the doer reads its own task block, and
+reading lists or file contents into it: the doer starts from its brief, and
 every extra line is paid again on each of its turns. Anything the doer must
 know that is not in the plan goes into PLAN.md under `## Orchestrator notes`
-(it reads that section).
+(the brief carries that section).
 
 <!-- jdi:only claude -->
 If `.jdi/config.json` sets `models.doer` to anything other than `inherit`,
@@ -169,7 +206,7 @@ Wait for all to return before next wave.
 
 **If sequential:** same prompt, no `run_in_background`, one at a time.
 
-Doer reads PLAN.md/PROJECT.md/CONTEXT.md on its own — specialist convention.
+The doer reads its brief, and opens an artifact only for what the brief points to.
 
 ### Step 7: After each wave
 
@@ -181,6 +218,28 @@ grep -cE '^\s*- \*\*Status:\*\* completed' "$PHASE_DIR/PLAN.md"
 grep -cE '^\s*- \*\*Status:\*\* blocked' "$PHASE_DIR/PLAN.md"
 grep -cE '^\s*- \*\*Status:\*\* pending' "$PHASE_DIR/PLAN.md"
 ```
+
+**Suite at the end of a NON-FINAL wave** (when `.jdi/stacks/` exists and
+`economy.wave_suite` is not `false`). Doers run only their task's targeted
+test; a break between tasks of the same wave shows up here, outside any
+agent's context, before the next wave builds on it — not after the whole
+phase, in verify. `WAVE_BASE` = `git rev-parse HEAD` taken before the wave:
+
+```bash
+mkdir -p .jdi/cache && : > .jdi/cache/wave-failures.txt
+for S in .jdi/stacks/*.json; do
+  S=$(basename "$S" .json)
+  npx -y {{JDI_CLI}} gates run "$PHASE_SLUG" --stack "$S" --only build,test --changed-since "$WAVE_BASE" >/dev/null \
+    || npx -y {{JDI_CLI}} gates show "$PHASE_SLUG" --stack "$S" --failures >> .jdi/cache/wave-failures.txt
+done
+```
+
+(A stack with nothing changed in its scope is SKIPPED.) A non-empty
+`wave-failures.txt` → ONE
+fresh doer with `mode=fix_wave failures=.jdi/cache/wave-failures.txt`, then the
+loop above once more. Still failing → STOP before the next wave (phase
+`partial`), skip to Step 9. The final wave has no suite here: `/jdi-verify`
+runs it.
 
 Blocked-task rule (every wave except the last is "critical" by construction —
 later waves depend on it):

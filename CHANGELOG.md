@@ -5,6 +5,170 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.0] - 2026-10-09
+
+Token economy, part 3 of 3: spawn only what has something new to judge. On
+the same real project, the DoD critic re-judged every row on every verify
+round through the project reviewer (whose prompt is large), `/jdi-issue`
+forced it each round, every reviewer of a multi-stack project ran again after
+a fix that touched one stack, and a two-task phase paid one full doer spawn
+per task.
+
+### Added
+- **`jdi-dod-critic`** — a small core agent (8th; the soft cap in the README
+  moves to 8) that answers one question per DoD row: does the `Verify:` fail
+  when the criterion is broken? It starts from a brief with only the rows to
+  examine, writes `.jdi/cache/critic/<slug>/findings.json` and returns one
+  line. It replaces the reviewer's critic mode, whose every spawn paid the
+  reviewer's whole prompt.
+- **`critic plan|apply`** — the critic's lean cadence (`economy.critic`:
+  `lean` default, `every_verify`, `off`): a **preflight** once in
+  `/jdi-discuss`, before any code (objective hollow proofs go back to the
+  asker once); then each verify examines only rows never examined, rows whose
+  proof changed (hash of criterion + Verify + Bait + script) and rows found
+  hollow last time. Not re-examined: rows sound at an unchanged proof,
+  bait-checked rows, failing rows (a defect, not a hollow pass); a row whose
+  hollow-proof block the loop already spent is looked at once more (it may
+  have been fixed), can no longer block, and is then carried as a warning.
+  Only CONTEXT rows. Nothing to examine → no spawn. `apply` is the only writer of
+  the `## DoD Critic` segment (tighten-only, fail-open).
+- **`Bait:` field and `dod bait`** — a mutation that breaks the criterion;
+  in a throwaway git worktree at HEAD (under `.jdi/cache/bait/`, never
+  `/tmp`) the Verify must pass, then fail once the Bait is applied: CAUGHT,
+  HOLLOW (objective, folded into the critic segment) or INCONCLUSIVE.
+  Dependency dirs are linked in (`dod.bait_links`, default every
+  `node_modules`). A caught row is not re-run until its proof changes.
+- **`size <phase>`** — `lite` (at most 3 tasks, 6 files, 6 automatic DoD
+  rows, one stack, nothing in `sizing.sensitive_globs`) or `full`. A lite
+  phase runs all its tasks in ONE doer spawn and skips the critic unless
+  `/jdi-issue` turned it on; every gate still runs.
+- **Incremental verify** — `review plan|merge` (multi-stack,
+  `economy.incremental_verify`): the first reviewer (owner of the DoD
+  Checklist) always runs; another is carried — its last segment kept, no
+  spawn, no gates — when nothing in its scope nor in CONTEXT/PLAN changed
+  since its last run and it was not BLOCKED. `/jdi-verify --full` runs
+  everyone.
+- **Stale-review guard** — `review merge` stamps the verified commit in
+  REVIEW.md (`<!-- jdi:verified head=… -->`); `review fresh` and `ship`: code
+  changed after it (outside `.jdi/` and `loop.non_product_globs`) → ship refuses
+  (exit 4) unless `--allow-stale "<reason>"`, recorded in SHIPPED.md.
+  `/jdi-ship` asks; `/jdi-issue` re-verifies.
+- **Suite at the end of a wave** (`economy.wave_suite`) — after each
+  non-final wave of `/jdi-do`, build + tests of the stacks the wave touched
+  run through `gates run --changed-since`, outside the agents; a failure gets
+  ONE `fix_wave` doer (`gates show --failures` is its work list), then stops
+  the phase if it persists. Doers keep running only their targeted test.
+- `config.json`: `economy` (`critic`, `incremental_verify`, `wave_suite`,
+  `sizing`) and `sizing` (`lite_max_tasks`, `lite_max_files`,
+  `lite_max_dod_rows`, `sensitive_globs`).
+
+### Changed
+- **Reviewer judgment-only** (managed `gates_source` block): when the gates
+  JSON is at HEAD, it IS gates 1-4 and the automatic DoD results — the
+  reviewer copies them and does not run build, tests, coverage or lint; its
+  work is gates 5-7, the evidence rows and what a failure means. The
+  `<dod_critic_mode>` section is gone from the template (`specialists lint`
+  flags it as dead text in existing specialists).
+- `/jdi-issue` no longer re-runs the critic over every row each round: it
+  turns the critic on (preflight + lean cadence).
+- Doer template: `tasks=`/`briefs=` (lite) and `mode=fix_wave`.
+- `/jdi-plan` reports the phase size; jdi-solo plays the critic through
+  `critic plan/apply` and runs `dod bait`.
+- `dod-schema`: `Bait:`.
+
+## [0.17.0] - 2026-10-09
+
+Token economy, part 2 of 3: deterministic steps leave the prose. Everything the
+orchestrator used to compute turn by turn — routing, the status screen, the
+roadmap entry, verdicts, the ralph loop's bookkeeping, the gates, the DoD
+checks, shipping — is now one CLI call with a short answer, and every agent
+starts from a capped brief instead of reading whole artifacts. Measured on the
+same real project: the DoD was 64-86% of CONTEXT.md, a 10-minute suite run
+inside a 500k-token reviewer made the next call re-write the whole context, and
+each multi-stack reviewer ran the whole DoD again.
+
+### Added
+- **`brief <phase> --role doer|reviewer|planner|asker|critic`** — the starting
+  context of an agent as one file under `.jdi/cache/briefs/` (its task, the
+  decisions it cites, the DoD lines for its files, gate results, known errors,
+  learnings), capped at `budgets.brief_tokens`; sections are shortened with a
+  pointer before any is dropped. Dispatches pass only its path.
+- **`gates run|show <phase> [--stack s] [--only dod] [--changed-since sha]`** —
+  build, tests (once — inside coverage when the stack says so), coverage and
+  lint per `.jdi/stacks/<name>.json`, plus the automatic DoD rows ONCE for the
+  phase, run in the command's shell, outside any agent's context. Results in
+  `.jdi/cache/gates/<slug>/<stack>.json` with the commit they ran on;
+  reviewers read them. `Verify (evidence):` rows and `evidence_only` commands
+  (E2E with a real login) are never executed — they are judged from evidence.
+  `jdi-cli template stack` shows the format; `/jdi-bootstrap` writes one per
+  reviewer.
+- **`dod parse|lint|extract`**, **`validate-dod`** — the Definition of Done as
+  data. `lint` flags a test runner with a name filter and no count check (exits
+  0 when nothing matches), a positive grep over a directory as the whole proof,
+  an E2E inside an automatic row, long inline commands, missing scripts;
+  `dod.extra_lint` plugs project rules in. `extract` moves long `Verify:` bodies
+  to `verify/dod-N.sh` verbatim (checked with `bash -n`; shipped phases are
+  never rewritten).
+- **`review verdict|blockers`** — worst-case verdict across REVIEW.md segments
+  (exit 2 on silence) with the pending manual rows of the DoD Checklist; the
+  blockers and warnings a fix round needs.
+- **`loop init|record|reset|status`** — the ralph loop's bookkeeping (#62): a
+  `[defect]` blocker always blocks, and so does a gate that failed on the
+  current commit or a BLOCKED review with no readable Blockers list; a
+  `[hollow DoD N]` finding (the Verify passes without proving the criterion)
+  blocks once per row and then ships as a PR warning; no open defect and no
+  product change since the last verify converges (`loop.non_product_globs`);
+  repeated finding hashes in a round are oscillation. Converging on a BLOCKED
+  review records a `## Loop override` in REVIEW.md, so ship reads the same
+  verdict the loop decided. `--autonomous` resets honor
+  `orchestration.max_resets_autonomous`.
+- **`next [phase] [--loop] [--json] [--status]`** — the `/jdi-next` ladder and
+  the whole `/jdi-status` screen, read-only.
+- **`add-phase`** (layout v3) — slug validation, fractional `order`,
+  `created_with: <version>` and the audit decision in one call; `--unique`
+  suffixes a taken slug for unattended intake; `--at` is rejected.
+- **`ship <phase> [--learnings-file f]`** — refuses BLOCKED and pending-manual
+  phases, writes SHIPPED.md (at most 5 learnings), STATE.md and the archive
+  compaction.
+- **`budgets <phase>`** / **`validate-phase --budgets`** — token budgets of the
+  phase artifacts, enforced only for phases created with 0.17+.
+- **`known-errors query|migrate|render|list`** — one known error per file
+  (`.jdi/known-errors/<ID>.md`, with stage, globs and `mechanized_by`);
+  `query` returns only the entries for the given files and stage, capped.
+- **`specialists lint|upgrade [--adopt] [--write]`** — the JDI-owned parts of
+  the specialist templates are managed blocks (`<!-- jdi:managed id=… -->`):
+  `upgrade` replaces only them and keeps the project's text byte for byte;
+  `--adopt` brings specialists generated before 0.17 under management.
+  `jdi update` runs it for managed specialists and points older ones to
+  `--adopt`.
+
+### Changed
+- **Commands call the CLI instead of running shell turn by turn:**
+  `/jdi-next` and `/jdi-status` (one call each), `/jdi-add-phase` (v3),
+  `/jdi-discuss` (asker brief, then `dod extract` + `validate-dod`, with one
+  `fix_dod` re-spawn on ERROR), `/jdi-plan` (planner brief, then DoD and budget
+  checks), `/jdi-do` (one brief per task; fix mode from `review blockers`),
+  `/jdi-verify` (gates run, one brief per reviewer, the first reviewer owns the
+  DoD Checklist, `review verdict`), `/jdi-loop` and `/jdi-issue` (`loop
+  record/reset`), `/jdi-ship` (`jdi-cli ship`), `/jdi-confirm-dod`
+  (`review verdict --json`), jdi-solo (briefs, loop and gates through the CLI;
+  specialists read once per role instead of at every switch).
+- **Specialist templates:** inputs start from the brief; the reviewer uses the
+  gates JSON when its commit matches and tags blockers `[defect]` /
+  `[hollow DoD N]`.
+- **`resolve-phase` is Node** (same `KEY='value'` output and exit codes as the
+  shell resolver).
+- `config.json`: `loop.non_product_globs`, `orchestration.max_resets_autonomous`.
+- `dod-schema`: the machine contract (`Verify (evidence):`, `Stack:`, verify
+  scripts, lint rules).
+
+### Fixed
+- Pending manual DoD rows were counted three ways (whole REVIEW.md, the
+  checklist section, a regex in the command); one function now counts only
+  the `## DoD Checklist` tables.
+- REVIEW.md parsing accepts `### Blockers` under `## Reviewer: x` and numbered
+  lists.
+
 ## [0.16.0] - 2026-10-09
 
 Token economy, part 1 of 3: the safety net, plus every instruction that made

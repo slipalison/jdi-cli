@@ -40,18 +40,19 @@ const CONFIG_DEFAULTS = {
     critic: 'inherit',
   },
   economy: {
-    briefs: true,
-    gates_runner: true,
-    incremental_verify: true,
     critic: 'lean',
+    incremental_verify: true,
+    wave_suite: true,
     sizing: true,
   },
   sizing: {
+    lite_max_tasks: 3,
     lite_max_files: 6,
     lite_max_dod_rows: 6,
     sensitive_globs: [],
   },
   compaction: { archive_after: 5 },
+  loop: { non_product_globs: [] },
 };
 
 function isPlainObject(v) {

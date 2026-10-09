@@ -80,7 +80,7 @@ test('specialist templates: no <skills_to_load> (no Skill tool) and a return con
 });
 
 test('every core agent spawned by a command has a return contract', () => {
-  for (const name of ['jdi-asker', 'jdi-planner']) {
+  for (const name of ['jdi-asker', 'jdi-planner', 'jdi-dod-critic']) {
     const t = read(path.join(ROOT, 'core/agents', `${name}.md`));
     assert.ok(t.includes('<return_contract>'), `${name} lacks <return_contract>`);
   }
@@ -121,4 +121,29 @@ test('runtime blocks are balanced in every source file', () => {
   for (const p of SHIPPED_PROSE) {
     for (const rt of RUNTIMES) assert.doesNotThrow(() => transform(read(p), rt, '0.0.0', rel(p)), `${rel(p)} (${rt})`);
   }
+});
+
+test('commands use the deterministic CLI instead of hand-parsing artifacts', () => {
+  // verdicts: `review verdict` (worst case across segments, exit 2 on silence)
+  assert.deepEqual(violations(COMMANDS, /grep[^\n]*\(Verdict\|Veredicto\)/), []);
+  // the ralph loop's bookkeeping: `loop record/reset`, never a hand-written LOOP.md history
+  assert.deepEqual(violations(COMMANDS, /--- AUTO-RESET[^\n]*>>|echo "- iter /), []);
+  // the v3 roadmap entry: `add-phase` (validation, order, created_with)
+  assert.deepEqual(violations(COMMANDS, /ORDERS=\$\(|NEW_ORDER=/), []);
+});
+
+test('specialist managed blocks: every template block is balanced and named', () => {
+  for (const p of SPECIALIST_TEMPLATES) {
+    const t = read(p);
+    const opens = (t.match(/<!-- jdi:managed id=[a-z_]+ -->/g) || []).length;
+    assert.ok(opens >= 2, `${rel(p)}: expected managed blocks`);
+    assert.equal(opens, (t.match(/<!-- jdi:\/managed -->/g) || []).length, `${rel(p)}: unbalanced jdi:managed`);
+  }
+});
+
+test('the DoD critic is its own small agent: no reviewer critic mode left in templates or commands', () => {
+  assert.deepEqual(violations(COMMANDS, /mode=dod-critic/), []);
+  for (const p of SPECIALIST_TEMPLATES) assert.ok(!read(p).includes('<dod_critic_mode>'), `${rel(p)} still carries <dod_critic_mode>`);
+  const critic = read(path.join(ROOT, 'core/agents/jdi-dod-critic.md'));
+  assert.ok(critic.length < 6000, `jdi-dod-critic.md is ${critic.length} chars — it is spawned every verify round; keep it small`);
 });

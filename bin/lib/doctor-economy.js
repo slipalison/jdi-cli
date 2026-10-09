@@ -77,6 +77,19 @@ function checkSpecialists(root, say) {
   if (!reread.length && !skills.length) say.ok('specialists sem releitura de instrucoes');
 }
 
+// 3b. Specialists under JDI management (0.17+) and gate commands outside them
+function checkManaged(root, say) {
+  const agentsDir = path.join(root, '.jdi', 'agents');
+  if (!fs.existsSync(agentsDir)) return;
+  const specs = fs.readdirSync(agentsDir).filter((n) => /^jdi-(doer|reviewer)-.*\.md$/.test(n));
+  const unmanaged = specs.filter((f) => !fs.readFileSync(path.join(agentsDir, f), 'utf8').includes('<!-- jdi:managed id='));
+  if (unmanaged.length) say.warn(`specialists sem blocos gerenciados (anteriores a 0.17: sem brief nem retorno curto): ${unmanaged.join(', ')} — \`npx -y jdi-cli specialists upgrade --adopt\``);
+  else if (specs.length) say.ok('specialists com blocos gerenciados');
+  const stacksDir = path.join(root, '.jdi', 'stacks');
+  const hasStacks = fs.existsSync(stacksDir) && fs.readdirSync(stacksDir).some((f) => f.endsWith('.json'));
+  if (specs.some((f) => f.startsWith('jdi-reviewer-')) && !hasStacks) say.note('sem .jdi/stacks/: os reviewers rodam build/testes dentro do proprio contexto (caro) — `npx -y jdi-cli template stack` mostra o formato');
+}
+
 // 4. Config with token budgets (pre-0.16 budgets were chars nobody read)
 function checkConfig(root, say) {
   const cfgPath = path.join(root, '.jdi', 'config.json');
@@ -101,7 +114,7 @@ function checks(root) {
     warn: (m) => lines.push(`  WARN  ${m}`),
     note: (m) => lines.push(`  note  ${m}`),
   };
-  for (const check of [checkPinned, checkInstructionBlocks, checkSpecialists, checkConfig, checkWorktrees]) check(root, say);
+  for (const check of [checkPinned, checkInstructionBlocks, checkSpecialists, checkManaged, checkConfig, checkWorktrees]) check(root, say);
   return lines;
 }
 

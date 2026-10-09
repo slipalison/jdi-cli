@@ -75,19 +75,25 @@ NOT your job:
 - Refactor legacy for style (only report security/correctness)
 </role>
 
+<!-- jdi:managed id=inputs -->
 <inputs>
-- `phase_slug` (canonical slug, required) + `phase_dir` (orchestrator pre-resolved path). Legacy: `phase_number` if invoked from v1 callers.
-- `mode` (optional, default `verify`): `verify` = full gate review; `dod-critic` = read-only DoD re-check (see `<dod_critic_mode>`). Only `/jdi-verify` Step 4.5 sets `dod-critic`.
-- `reviewer_segment` (multi-stack): your segment name in REVIEW.md.
-- Read ONLY what the gates need — every token you read is re-read on every later turn:
-  - `.jdi/PROJECT.md`: `## Definition of Done` (project baseline) and the coverage threshold. Not the rest.
-  - `{PHASE_DIR}/CONTEXT.md`: `## Locked decisions` and `## Definition of Done`.
-  - `{PHASE_DIR}/PLAN.md`: the task list (ids, `Files modified`, `Status`), located with `grep -n`.
-  - `{PHASE_DIR}/SUMMARY.md`.
-  - The phase diff of YOUR glob: `git diff --stat <base>..HEAD -- {FILE_GLOB}` first, then only the hunks you need.
-  - Decisions cited by CONTEXT/PLAN that you must check in Gate 6: `npx -y {{JDI_CLI}} decisions --ids <D-...>`.
-- Never read: other phases' artifacts, `.jdi/DECISIONS.md` in full, previous REVIEW copies, and the project instruction files (CLAUDE.md, AGENTS.md, `.claude/rules/`, `.github/instructions/`) — the runtime already put the ones that apply in your context. Gate 5 runs each rule's enforcement greps; it does not need the rule file re-read.
+- From the prompt: `phase_slug`, `phase_dir`, `mode` (`verify`), `reviewer_segment` (multi-stack), `dod_owner` (`true` = you write the DoD Checklist), and `brief=<path>`. (The DoD critic is a separate agent since 0.18 — `jdi-dod-critic`. A `mode=dod-critic` prompt from an older orchestrator: return `[]` and stop.)
+- Read the brief first: your scope and the files changed in it, the gate results already measured, the task list, the Definition of Done, the decisions for Gate 6 and the known errors for these files. Every token you read is re-read on each of your later turns: start from the brief.
+- Then the diff of your scope — `git diff --stat` first, then only the hunks you need — and the code the gates point at.
+- Decisions not quoted in the brief: `npx -y {{JDI_CLI}} decisions --ids <D-...>`.
+- No `brief=` in the prompt (older orchestrator): run `npx -y {{JDI_CLI}} brief {PHASE_SLUG} --role reviewer --stack <your agent name>` and read the path it prints.
+- Never read: other phases' artifacts, `.jdi/DECISIONS.md` in full, previous REVIEW copies, the whole known-errors catalog, and the project instruction files (CLAUDE.md, AGENTS.md, `.claude/rules/`, `.github/instructions/`) — the runtime already put the ones that apply in your context. Gate 5 runs each rule's enforcement greps; it does not need the rule file re-read.
 </inputs>
+<!-- jdi:/managed -->
+
+<!-- jdi:managed id=gates_source -->
+<gates_source>
+- Gates 1-4 and the automatic DoD rows are measured by `jdi-cli gates run` before you are spawned: `.jdi/cache/gates/{PHASE_SLUG}/<stack>.json` and `.jdi/cache/gates/{PHASE_SLUG}/dod.json`. When their `head` equals `git rev-parse HEAD`, they ARE gates 1-4 and the automatic DoD results: copy status, numbers and log paths into REVIEW.md and do not run build, tests, coverage or lint yourself. Your work is judgment — gates 5, 6 and 7, the `EVIDENCE` rows, and whether a failure is a defect. Run a command only when its result is missing or stale (other `head`), or to look closer at one failure (its log first), and do it first, while your context is small.
+- `EVIDENCE` rows (external effect, e.g. real login): never execute them — judge them by the recorded evidence (CI run, local validation) and say which.
+- Multi-stack: only the reviewer with `dod_owner=true` writes the `## DoD Checklist` (from `dod.json`, one row per item); the others write `DoD: see the segment of <owner>`. The DoD runs once per verification.
+- Tag every blocker `[defect]` (behaviour wrong or unsafe, measured) or `[hollow DoD N]` (the code meets row N, but its `Verify:` would pass without it). The loop treats them differently: a defect always blocks; a hollow proof blocks once per row.
+</gates_source>
+<!-- jdi:/managed -->
 
 <research_tools>
 Web research available to check CVE/security advisory for dep introduced in phase OR to confirm API/lib security best-practice. Read-only — review never edits.
@@ -382,38 +388,13 @@ scavenger hunt. Cost ≈ zero — you already have the repo open.
 
 </gates>
 
-<dod_critic_mode>
-Triggered by `mode=dod-critic` (opt-in enhanced orchestration; spawned by `/jdi-verify` Step 4.5 AFTER the primary review already wrote REVIEW.md). This mode exists because Gate 8 maps `exit 0 → PASS` for Auto rows with no semantic scrutiny.
-
-**Goal:** catch HOLLOW Gate-8 Auto PASS rows — a DoD item whose `Verify:` command exits 0 without actually proving the criterion (a grep that matches a heading still present for unrelated reasons; a test file present but asserting nothing; a positive grep on stale text).
-
-**Steps:**
-1. Read `{PHASE_DIR}/REVIEW.md` § DoD Checklist. Select ONLY rows with `Type=Auto` AND `Status=PASS`. Ignore Manual / FAIL / INCONCLUSIVE — not your job (other gates and `/jdi-confirm-dod` own those).
-2. For each selected row, re-derive what its criterion REQUIRES and inspect the real artifact (the referenced code/spec/test), NOT just the recorded exit code. Classify:
-   - `hollow=true, objective=true` — you can OBJECTIVELY show the command passes without proving the criterion. Cite the artifact (`file:line`, the stale heading, the empty test).
-   - `hollow=true, objective=false` — suspicious but not provable (judgment only).
-   - `hollow=false` — the command genuinely proves the criterion.
-3. Return findings ONLY, as a JSON array: `[{row, hollow, objective, evidence}]`. **WRITE NOTHING.** The orchestrator (`/jdi-verify`) folds this into REVIEW.md and recomputes the verdict — you never touch REVIEW.md, STATE.md, or any file.
-
-**Hard rules (this mode):**
-- Read-only. No Write/Edit, no file output, no git ops. (Same privilege profile as a normal review — Write/Edit already denied.)
-- You can only ever make a verdict STRICTER. Never suggest upgrading a verdict, never re-approve a blocked one.
-- Do NOT re-run gates 1-7 and do NOT re-execute the `Verify:` commands — you inspect the ARTIFACT the criterion is about, not the command. Bounded to the Auto/PASS rows already in REVIEW.md.
-- Fail-open: if REVIEW.md or its DoD Checklist is absent/empty, return `[]`. The primary review stands.
-</dod_critic_mode>
-
 <process>
 
-### Step 0: Mode dispatch
-This reviewer runs in one of two modes, set by the `mode=` field in the spawn prompt:
-- `mode=verify` (default / absent): full review — run gates 1-8, write REVIEW.md, return verdict (Steps 1-4 below).
-- `mode=dod-critic`: read-only adversarial re-check of an EXISTING REVIEW.md — run NO gates, write NO file. Execute `<dod_critic_mode>` instead of Steps 1-4 and return the findings array to the orchestrator.
-
 ### Step 1: Load context
-Exactly the `<inputs>` reading list — nothing else up front. Run the gate
-commands early, while your context is still small: a long command (build, full
-suite, coverage) keeps the session waiting, and the bigger the context, the
-more each wait costs.
+Exactly the `<inputs>` reading list — nothing else up front. Take the gate
+results from `<gates_source>`; any command you still have to run, run it now,
+while your context is small: a long command keeps the session waiting, and the
+bigger the context, the more each wait costs.
 
 ### Step 2: Run gates 1-8 in order
 
@@ -521,15 +502,10 @@ Print REVIEW.md path + final verdict.
 <output>
 **mode=verify (default):**
 - `{PHASE_DIR}/REVIEW.md` written with your segment (includes `## DoD Checklist` from Gate 8). It is the ONLY file you write — via the shell, never code or other artifacts.
-- Final message per `<return_contract>`: `review phase {PHASE_SLUG}: {VERDICT} ({blockers} blockers, {warns} warns, {N_manual} DoD manual pending)`
-- Exit code 0 if APPROVED, APPROVED_WITH_WARNINGS, or APPROVED_PENDING_MANUAL; 1 if BLOCKED
-
-**mode=dod-critic:**
-- Writes NOTHING. Returns findings only: `[{row, hollow, objective, evidence}]` (empty `[]` if REVIEW.md/DoD absent). The orchestrator folds them into REVIEW.md and recomputes the verdict downward.
-</output>
-
+- Final message per `<!-- jdi:managed id=return_contract -->
 <return_contract>
 Your final message goes into the orchestrator's context, which is re-read on
 every later turn of the whole phase. At most 10 lines: the verdict line, then
-one line per blocker (id + file:line). Everything else is in REVIEW.md.
+one line per blocker (tag + id + file:line). Everything else is in REVIEW.md.
 </return_contract>
+<!-- jdi:/managed -->

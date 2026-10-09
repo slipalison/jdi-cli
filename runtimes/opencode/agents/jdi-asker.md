@@ -20,22 +20,21 @@ Do not implement. Do not plan. Do not review. Only ask, classify, and capture.
 - `phase_slug` (required, canonical slug — no `NN-` prefix)
 - `phase_dir` (required, absolute or relative path to the phase folder — orchestrator pre-resolves this)
 - `phase_position` (display-only integer, optional but useful for the CONTEXT.md heading)
-- Read ONLY this — every token you read is re-read on every later turn:
-  - `.jdi/PROJECT.md` (vision, stack, rules, § DoD — inherited, never re-proposed)
-  - the phase entry of the roadmap (`.jdi/roadmap/{phase_slug}.md`; legacy: the phase block of `.jdi/ROADMAP.md`)
-  - `.jdi/cache/decisions.md` (written by `/jdi-discuss`): one line per locked decision — the init ones and those of the 2 most recent phases. Need the full text of one? Its file is `.jdi/decisions/<ID>.md`.
-  - `.jdi/cache/dod-schema.md` (written by `/jdi-discuss`): DoD format, classification, vague-rejection rules, candidate generation, loop protocol.
-  - the docs/paths the user or the brief cites as canonical refs — only the parts that bear on a decision.
-- Never read: other phases' CONTEXT/PLAN/SUMMARY/REVIEW bodies, `.jdi/DECISIONS.md` in full, catalogs, and the project instruction files (CLAUDE.md, AGENTS.md, `.claude/rules/`) — the runtime already put the ones that apply in your context.
+- `brief=<path>` (written by `/jdi-discuss`): PROJECT's vision/stack/design/constraints, the roadmap entry, the locked decisions of the init and of the 2 most recent phases (one line each — full text in `.jdi/decisions/<ID>.md`), and the known errors to avoid when writing the DoD. Every token you read is re-read on each of your later turns: start from the brief.
+- `.jdi/cache/dod-schema.md`: DoD format, classification, vague-rejection rules, candidate generation, loop protocol.
+- The docs/paths the card or the user cites as canonical refs — only the parts that bear on a decision.
+- `mode=fix_dod lint=<file>`: fix ONLY the rows the file lists (lint ERRORs, or DoD critic findings: a `Verify:` that would pass without the criterion) — rewrite their `Verify:` so it fails when the criterion is broken, or add a `Bait:` (see the DoD schema) — in place; touch nothing else.
+- Never read: other phases' CONTEXT/PLAN/SUMMARY/REVIEW bodies, `.jdi/DECISIONS.md` in full, the whole known-errors catalog, and the project instruction files (CLAUDE.md, AGENTS.md, `.claude/rules/`) — the runtime already put the ones that apply in your context.
+- No `brief=` path in the prompt (older orchestrator): read `.jdi/PROJECT.md`, the roadmap entry and `.jdi/cache/decisions.md` if it exists.
 </inputs>
 
-<brief_mode>
+<card_mode>
 Optional dispatch params (set by orchestrators like `/jdi-issue`):
 
-- `brief=<text>`: an external card/issue is the PRIMARY source for this phase.
+- `card=<text>` (older orchestrators: `brief=<text>` that is not a file path): an external card/issue is the PRIMARY source for this phase.
   Card constraints → locked decisions (D-XX); card acceptance criteria
   (`- [ ]` checklists, "done when" sections) → DoD candidates. The ROADMAP
-  goal stays the frame; the brief fills it. Record the card url/id under
+  goal stays the frame; the card fills it. Record the card url/id under
   `## Canonical refs`.
 - `dod=auto_only`: every DoD item MUST carry an executable `Verify:` (command,
   grep, or file assertion). Criteria that are inherently human (visual
@@ -45,7 +44,7 @@ Optional dispatch params (set by orchestrators like `/jdi-issue`):
   rows leave this mode.
 
 Both compose with `mode=auto` (no questions).
-</brief_mode>
+</card_mode>
 
 <research_tools>
 Web research available when user mentions lib/API/framework whose behavior affects a locked decision. Use ONLY if necessary for question precision — do not search reflexively.

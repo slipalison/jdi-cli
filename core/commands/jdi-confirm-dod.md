@@ -54,25 +54,16 @@ test -f "$PHASE_DIR/REVIEW.md" || {
 
 ```bash
 # Worst-case across ALL verdict lines (multi-stack REVIEW.md has one per
-# reviewer segment). Accepts legacy pt-BR "Veredicto:" files.
-VERDICTS=$(grep -oE '(Verdict|Veredicto):\*\* (APPROVED|APPROVED_WITH_WARNINGS|APPROVED_PENDING_MANUAL|BLOCKED)' "$PHASE_DIR/REVIEW.md" | awk '{print $2}')
-
-if [ -z "$VERDICTS" ]; then
+# reviewer segment; legacy pt-BR "Veredicto:" accepted) + the Manual rows
+# still MANUAL_REQUIRED in the DoD Checklist table (the table is the single
+# source of truth; this command flips its rows). Exit 2 = no verdict line.
+V_JSON=$(npx -y {{JDI_CLI}} review verdict "$PHASE_SLUG" --json) || {
   echo "No verdict found in $PHASE_DIR/REVIEW.md (corrupt or unrecognized format)."
   echo "Re-run /jdi-verify $PHASE_SLUG."
   exit 1
-fi
-
-if echo "$VERDICTS" | grep -qx 'BLOCKED'; then VERDICT=BLOCKED
-elif echo "$VERDICTS" | grep -qx 'APPROVED_PENDING_MANUAL'; then VERDICT=APPROVED_PENDING_MANUAL
-elif echo "$VERDICTS" | grep -qx 'APPROVED_WITH_WARNINGS'; then VERDICT=APPROVED_WITH_WARNINGS
-else VERDICT=APPROVED
-fi
-
-# Pending = Manual rows still MANUAL_REQUIRED in the DoD Checklist table
-# (the table is the single source of truth; this command flips its rows).
-PENDING_COUNT=$(awk '/^## DoD Checklist/,/^## [^D]/' "$PHASE_DIR/REVIEW.md" | grep -cE 'MANUAL_REQUIRED' || true)
-PENDING_COUNT="${PENDING_COUNT:-0}"
+}
+VERDICT=$(printf '%s' "$V_JSON" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).verdict))")
+PENDING_COUNT=$(printf '%s' "$V_JSON" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).manualPending))")
 
 case "$VERDICT" in
   BLOCKED)

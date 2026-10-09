@@ -30,7 +30,7 @@ After `/jdi-verify` produces verdict `APPROVED_PENDING_MANUAL`, this command wal
 
 ### Step 1: Validation
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.16.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.18.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 ```bash
 test -d .jdi/ || { echo "Not a JDI project."; exit 1; }
 ```
@@ -38,7 +38,7 @@ test -d .jdi/ || { echo "Not a JDI project."; exit 1; }
 ### Step 2: Resolve phase
 
 ```bash
-RESOLVED="$(npx -y jdi-cli@0.16.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+RESOLVED="$(npx -y jdi-cli@0.18.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
 eval "$RESOLVED"
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
@@ -54,25 +54,16 @@ test -f "$PHASE_DIR/REVIEW.md" || {
 
 ```bash
 # Worst-case across ALL verdict lines (multi-stack REVIEW.md has one per
-# reviewer segment). Accepts legacy pt-BR "Veredicto:" files.
-VERDICTS=$(grep -oE '(Verdict|Veredicto):\*\* (APPROVED|APPROVED_WITH_WARNINGS|APPROVED_PENDING_MANUAL|BLOCKED)' "$PHASE_DIR/REVIEW.md" | awk '{print $2}')
-
-if [ -z "$VERDICTS" ]; then
+# reviewer segment; legacy pt-BR "Veredicto:" accepted) + the Manual rows
+# still MANUAL_REQUIRED in the DoD Checklist table (the table is the single
+# source of truth; this command flips its rows). Exit 2 = no verdict line.
+V_JSON=$(npx -y jdi-cli@0.18.0 review verdict "$PHASE_SLUG" --json) || {
   echo "No verdict found in $PHASE_DIR/REVIEW.md (corrupt or unrecognized format)."
   echo "Re-run /jdi-verify $PHASE_SLUG."
   exit 1
-fi
-
-if echo "$VERDICTS" | grep -qx 'BLOCKED'; then VERDICT=BLOCKED
-elif echo "$VERDICTS" | grep -qx 'APPROVED_PENDING_MANUAL'; then VERDICT=APPROVED_PENDING_MANUAL
-elif echo "$VERDICTS" | grep -qx 'APPROVED_WITH_WARNINGS'; then VERDICT=APPROVED_WITH_WARNINGS
-else VERDICT=APPROVED
-fi
-
-# Pending = Manual rows still MANUAL_REQUIRED in the DoD Checklist table
-# (the table is the single source of truth; this command flips its rows).
-PENDING_COUNT=$(awk '/^## DoD Checklist/,/^## [^D]/' "$PHASE_DIR/REVIEW.md" | grep -cE 'MANUAL_REQUIRED' || true)
-PENDING_COUNT="${PENDING_COUNT:-0}"
+}
+VERDICT=$(printf '%s' "$V_JSON" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).verdict))")
+PENDING_COUNT=$(printf '%s' "$V_JSON" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).manualPending))")
 
 case "$VERDICT" in
   BLOCKED)

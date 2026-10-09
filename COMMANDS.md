@@ -6,7 +6,7 @@ Every command that takes a phase accepts a **slug** (`auth-flow`, canonical) OR 
 
 Phase status is never stored — it is **derived from the artifacts** in the phase folder: `SHIPPED.md` → done, `REVIEW.md` → verified, `SUMMARY.md` → executed, `PLAN.md` → planned, `CONTEXT.md` → discussed, nothing → pending. `STATE.md` is an advisory next-step cache for the local clone — untracked (gitignored) since 0.3.0 and regenerated from artifacts when absent; gates check artifacts, not STATE.
 
-Phase helpers (resolver, slug validator, truncate, monitor) ship in the npm package and are invoked by the commands as CLI subcommands — `npx -y jdi-cli resolve-phase|validate-slug|truncate|monitor` (with `resolve-phase --json` for PowerShell). No helper code is copied into your repo.
+Phase helpers ship in the npm package and are invoked by the commands as CLI subcommands — `npx -y jdi-cli@<version> <helper>` (the build pins the version). No helper code is copied into your repo. Since 0.17 every deterministic step is one CLI call with a short answer, instead of shell the orchestrator runs and reads turn by turn: `next` (routing and the status screen), `add-phase`, `brief` (each agent's capped starting context), `gates run` (build/tests/coverage/lint and the DoD, outside any agent's context), `review verdict|blockers`, `loop record|reset`, `dod lint|extract`, `ship`. Full list: README › Plumbing subcommands.
 
 ## Autonomous intake
 
@@ -22,10 +22,10 @@ Phase helpers (resolver, slug validator, truncate, monitor) ship in the npm pack
 
 Does:
 1. **Provider ladder**: GitHub URL via `gh issue view` → tracker URL/ID via the provider's **MCP tools when connected** (searches available tools for linear/jira/atlassian/azure/trello) → pasted text (universal fallback). Extracts title, goal, acceptance criteria
-2. Registers the phase (`add-phase` process; slug derived + validated; `--reason` = card url/id)
+2. Registers the phase (`jdi-cli add-phase --unique` on layout v3 — a taken slug gets `-2`; `--reason` = card url/id)
 3. `discuss --auto` with the card as PRIMARY source (`brief=`): card constraints → locked decisions; card checklists → DoD candidates. **`dod=auto_only`**: every DoD item must carry an executable `Verify:`; inherently-human criteria go to `## Deferred to PR review` (never silent waivers, zero MANUAL_REQUIRED rows)
-4. `plan` + `loop` with ONE declared deviation: at the loop's human gate it auto-continues (`AUTO-RESET` logged in LOOP.md) — all hard caps stay (max 3 resets / 15 iterations → `killed` = FULL STOP, never shipped)
-5. **DoD critic forced on** in every verify (when the runtime spawns sub-agents) regardless of `orchestration.mode` — the critic only tightens
+4. `plan` + `loop` with ONE declared deviation: at the loop's human gate it auto-continues (`jdi-cli loop reset --autonomous`, `AUTO-RESET` logged in LOOP.md) — all hard caps stay (`orchestration.max_resets_autonomous`, default 3 = 15 iterations → `killed` = FULL STOP, never shipped)
+5. **DoD critic on** (`critic=on`, when the runtime spawns sub-agents) regardless of `orchestration.mode` and phase size: a preflight in discuss, before any code, then each verify examines only rows never examined, rows whose proof changed and rows found hollow last time — the critic only tightens
 6. **Warnings get one fix round** (stricter than interactive): one doer pass targeting warnings + re-verify; persisting warnings ship listed under `## Shipped with warnings` in the PR body
 7. `ship --pr` (unless `--no-pr`); PR body gains the card source, deferred items, warnings, verdict + loop stats, `§ Learnings`
 8. One-screen final report: verdict, iterations/auto-resets, PR url, what (if anything) awaits a human
@@ -46,9 +46,7 @@ Does:
 ```
 
 Does:
-1. Pre-flight: no `.jdi/` → points to `/jdi-new` / `/jdi-adopt` (cannot auto-run — they need your input); no specialists → routes to `/jdi-bootstrap`
-2. Resolves the target phase (arg or first unshipped)
-3. Derives status from the artifact ladder, then routes: pending → discuss · discussed → plan · planned → do · executed → verify · verified+BLOCKED → do (fix mode) · verified+PENDING_MANUAL → confirm-dod · verified+APPROVED → ship · shipped → next phase
+1-3. One call — `jdi-cli next [phase] [--loop] --json` — does the pre-flight (no `.jdi/` → points to `/jdi-new` / `/jdi-adopt`, which need your input; no specialists → `/jdi-bootstrap`), resolves the target phase (arg or first unshipped), derives status from the artifact ladder and routes: pending → discuss · discussed → plan · planned → do · executed → verify · verified+BLOCKED → do (fix mode) · verified+PENDING_MANUAL → confirm-dod · verified+APPROVED → ship · shipped → next phase
 4. Reads the INSTALLED command file for the target (`.claude/commands/`, `.github/prompts/`, `.opencode/commands/`, or the Antigravity skill) and follows its `<process>` faithfully — the target command's gates still apply; `/jdi-next` only routes
 5. One step per invocation ("Done. Run /jdi-next again."). For unattended iteration use `/jdi-loop`
 
@@ -119,7 +117,10 @@ Does:
    - **Stage 2 — phase-specific DoD**: 5 candidates derived from decisions + phase-type templates, per-item keep/edit/drop/replace, free-add cap 10
    - Vague items rejected (no `Verify:` field = does not pass)
    - Writes `.jdi/phases/{phase_dir}/CONTEXT.md` with a `## Definition of Done` section
-3. Commit: `docs({slug}): capture phase context` + STATE update commit `chore(state): phase {slug} discussed`
+   - Starts from a brief (`jdi-cli brief --role asker`), never the whole DECISIONS.md
+3. DoD hardening: `jdi-cli dod extract` moves long `Verify:` bodies to `verify/dod-N.sh`; `jdi-cli validate-dod` lints the DoD (tests filtered without a count check, hollow greps, E2E in an automatic row) — an ERROR re-spawns the asker in `fix_dod` mode once
+3b. DoD critic preflight (when the critic is on — `orchestration.mode: "enhanced"` or `/jdi-issue`): `jdi-dod-critic` judges each Verify before any code exists; objective hollow proofs go back to the asker (`fix_dod`) once
+4. Commit: `docs({slug}): capture phase context` (CONTEXT, verify scripts, decisions, todos, known errors)
 
 **Next:** `/jdi-plan <slug>`
 
@@ -133,14 +134,14 @@ Decomposes the phase into executable tasks.
 ```
 
 Does:
-1. Validation: CONTEXT.md exists; context budget warm-up via `npx -y jdi-cli monitor`
-2. Spawns `jdi-planner`:
-   - Reads PROJECT.md + ROADMAP.md + DECISIONS.md + CONTEXT.md
+1. Validation: CONTEXT.md exists
+2. Spawns `jdi-planner` with a brief (`jdi-cli brief --role planner`: goal, locked decisions, DoD by reference, stack/design, routing, learnings, known errors):
    - Decomposes into tasks (max 8) with `files_modified` + `acceptance` + `dependencies` + `test` (+ `specialist` per task on multi-stack — matched by file glob; tasks spanning 2+ globs are split)
    - Groups into waves (parallel within, sequential between)
    - Self-check (every task has files_modified? wave grouping respects deps?)
    - Writes `.jdi/phases/{phase_dir}/PLAN.md`
-3. Commit: `docs({slug}): generate plan ({M} tasks, {W} waves)`
+3. `jdi-cli validate-dod` + `jdi-cli budgets` on the result (budgets enforced for phases created with 0.17+); `jdi-cli size` says how `/jdi-do` will dispatch (lite or full)
+4. Commit: `docs({slug}): generate plan ({M} tasks, {W} waves)`
 
 **Next:** `/jdi-do <slug>`
 
@@ -154,20 +155,22 @@ Executes the phase tasks via the project's doer specialist.
 ```
 
 Does:
-1. Validation: PLAN.md exists + doer registered in `.jdi/specialists.md`; context budget warm-up via `npx -y jdi-cli monitor`
+1. Validation: PLAN.md exists + doer registered in `.jdi/specialists.md`
 2. Resolves doer specialist(s) — single-stack: the one registered doer; multi-stack: each task's `**Specialist:**` field from PLAN.md (fallback: first registered doer)
-3. Reads PLAN.md, identifies pending tasks, groups waves. **Fix mode:** zero pending tasks + REVIEW.md verdict BLOCKED (gate failure after all tasks completed — coverage, lint, …) → dispatches ONE doer in fix mode against the listed blockers instead of exiting; zero pending + no BLOCKED review → "already executed", exit 0
+3. Reads PLAN.md, identifies pending tasks, groups waves; one brief per task (`jdi-cli brief --role doer --task T-N`) — the dispatch carries its path, never file contents. **Fix mode:** zero pending tasks + REVIEW.md verdict BLOCKED (gate failure after all tasks completed — coverage, lint, …) → dispatches ONE doer in fix mode against `jdi-cli review blockers` instead of exiting; zero pending + no BLOCKED review → "already executed", exit 0
+3b. **Lite phase** (`jdi-cli size`: at most 3 tasks, 6 files, 6 automatic DoD rows, one stack, nothing in `sizing.sensitive_globs`): ONE doer runs every task in order, one commit each — the fixed cost of a spawn is paid once. Verify checks it exactly like a full phase
 4. For each wave:
    - Intra-wave overlap check (files_modified disjoint?)
    - If parallel: sequential dispatch (ONE Agent per message with `run_in_background: true`); multi-stack waves may spawn DIFFERENT specialists in parallel (disjoint scopes)
    - If sequential: 1 doer per task in sequence
    - A blocked task in a non-final wave finishes the current wave then STOPS before the next (deps unsatisfiable) — phase marked `partial`
+   - After a non-final wave (with `.jdi/stacks/`, `economy.wave_suite`): build + tests of the stacks the wave touched run through `jdi-cli gates run --changed-since`, outside the agents; a failure gets ONE `fix_wave` doer, then stops the phase if it persists
 5. Doer updates task status in PLAN.md, commits atomically, writes the final SUMMARY.md
 6. Orchestrator's final commit: `chore(state): phase <slug> executed`
 
 **Next:** `/jdi-verify <slug>`
 
-### `/jdi-verify <slug|position>`
+### `/jdi-verify <slug|position> [--full]`
 
 Runs quality gates via the reviewer specialist.
 
@@ -175,6 +178,9 @@ Does:
 1. Validation: SUMMARY.md exists + reviewer registered in `.jdi/reviewers.md`
 2. Resolves reviewer specialist(s) — multi-stack chains ALL reviewers sequentially (never parallel — build/test ports and locks would clash), each scoped to its file glob
 3. **Deletes any previous REVIEW.md** — REVIEW.md is a per-run artifact, recreated from scratch so stale verdicts can never poison the aggregation (git history keeps every prior run)
+2b. **Incremental verify** (multi-stack): `jdi-cli review plan` — the first reviewer (owner of the DoD Checklist) always runs; another one is carried (its last segment kept, no spawn, no gates) when nothing in its scope nor in CONTEXT/PLAN changed since its last run and it was not BLOCKED; `review merge` puts carried segments back and stamps the verified commit. `--full` runs everyone
+3a. **Gates outside the agents' context** (when `.jdi/stacks/` exists): `jdi-cli gates run --only dod` (the automatic DoD rows, ONCE for the phase; `Verify (evidence):` and configured E2E commands are never executed — EVIDENCE) and `gates run --stack <reviewer>` per reviewer (build, tests once, coverage, lint). Results in `.jdi/cache/gates/<slug>/`; reviewers read them instead of waiting on long suites
+3b. One brief per reviewer (`jdi-cli brief --role reviewer --stack <r>`); the first reviewer owns the DoD Checklist (`dod_owner`)
 4. Spawns reviewer(s):
    - Gate 1: Build
    - Gate 2: Tests
@@ -184,8 +190,8 @@ Does:
    - Gate 6: Plan consistency (commits match files_modified)
    - Gate 7: UI Validation (conditional — only if `frontend.has_frontend: true`)
    - Gate 8: Definition of Done — parses `PROJECT.md § DoD` + `CONTEXT.md § DoD`, runs `Verify:` per item, classifies Auto PASS/FAIL and Manual MANUAL_REQUIRED
-5. Optional enhanced DoD critic (only if `config.json orchestration.mode == "enhanced"` and the host can spawn read-only sub-agents): re-examines Auto-PASS DoD rows for hollow gates; can only make the verdict stricter
-6. Reads the **aggregate verdict — worst-case across ALL verdict lines** (multi-stack has one per reviewer segment): BLOCKED > APPROVED_PENDING_MANUAL > APPROVED_WITH_WARNINGS > APPROVED. Legacy pt-BR `Veredicto:` lines are accepted. **Empty/missing verdict = malformed REVIEW.md → abort** (never ship on silence)
+5. DoD proof checks: `jdi-cli dod bait` (rows with a `Bait:` — mechanical, in a throwaway worktree) then, when the critic is on (`orchestration.mode: "enhanced"` or `/jdi-issue`; skipped for a lite phase otherwise), `jdi-dod-critic` on the rows `jdi-cli critic plan` lists (lean cadence; none → no spawn); `jdi-cli critic apply` writes the `## DoD Critic` segment — can only make the verdict stricter
+6. Reads the **aggregate verdict** with `jdi-cli review verdict` — **worst-case across ALL verdict lines** (multi-stack has one per reviewer segment): BLOCKED > APPROVED_PENDING_MANUAL > APPROVED_WITH_WARNINGS > APPROVED. Legacy pt-BR `Veredicto:` lines are accepted. **Empty/missing verdict = malformed REVIEW.md → abort** (never ship on silence)
 7. Reviewer writes `.jdi/phases/{phase_dir}/REVIEW.md` with verdict + `## DoD Checklist` table:
    - APPROVED — all gates PASS, no manual DoD pending
    - APPROVED_WITH_WARNINGS — no blockers, some warns, no manual DoD pending
@@ -233,10 +239,11 @@ Does:
 
 Finalizes the phase, advances to the next. `--pr` opens a pull request via `gh` after the final commit (best-effort: skips silently without gh/remote, or when on the default branch — never fails the ship).
 
-Does:
+Steps 1-3 and 5-7 are one call — `jdi-cli ship <slug> --learnings-file <f>` — whose guards are code, not prose. Does:
 1. Idempotency: if `SHIPPED.md` already exists for the phase → already shipped, exit 0
 2. Validation: REVIEW.md exists + **aggregate verdict** (worst-case across all verdict lines; legacy `Veredicto:` accepted; empty verdict = abort) ∉ `{BLOCKED, APPROVED_PENDING_MANUAL}`
 3. Re-verifies DoD freshness: counts rows still `MANUAL_REQUIRED` in the DoD Checklist — any remaining → abort, suggests `/jdi-confirm-dod`. (`REJECTED` rows are audited waivers and do not block)
+3b. **Stale review guard**: code (anything outside `.jdi/` and `loop.non_product_globs`) changed after the verify commit → asks to re-verify, or ships with the reason recorded in SHIPPED.md (`--allow-stale`); `/jdi-issue` always re-verifies
 4. If WITH_WARNINGS: asks "ship anyway?"
 5. Writes the completion marker `phases/<slug>/SHIPPED.md` (`shipped_at`, `verdict`, `by`) — **team-safe: completion lives in the phase folder, not in ROADMAP.md**, so two developers shipping different phases on different branches produce zero merge conflicts. **ROADMAP.md is not touched** — except on legacy pre-0.2.0 ROADMAPs that still carry `- **Status:**` lines, where this phase's line is updated to `done` best-effort (never added where absent)
 5b. Distills `SHIPPED.md § Learnings` — ≤5 one-line bullets from REVIEW.md warnings/blockers/waived DoD items + SUMMARY.md blocked tasks (section omitted when nothing qualifies). Planner and doer of the next phases read the last 3 and convert recurring items into acceptance criteria
@@ -292,11 +299,11 @@ Does:
    - `killed` → abort (hard cap is final) — **recovery only via `--reset-loop`**: after revisiting PLAN/CONTEXT, confirms, archives the old file as `LOOP.md.killed-{ts}` (audit preserved) and starts fresh
    - `escalated` / `paused` → resuming **CONSUMES A RESET** (`total_resets++`; hitting `max_resets` kills instead) — otherwise abort→re-run would zero the counter for free and bypass the absolute cap
    - `running` → resume at current iter (session-crash case; does NOT consume a reset)
-3. Loop:
-   - Spawns doer (with last REVIEW.md findings + LOOP history as context)
-   - Spawns reviewer (read-only, writes REVIEW.md)
-   - Parses the aggregate verdict (worst-case; legacy `Veredicto:` accepted; empty verdict = abort)
-   - Hashes blockers/warnings -> appends to LOOP.md history
+3. Loop (bookkeeping = `jdi-cli loop init|record|reset`, never hand-written):
+   - Spawns doer (fix mode: `jdi-cli review blockers` is the work list)
+   - Runs `/jdi-verify` Steps 4-5 (gates run, briefs, reviewers — read-only, writes REVIEW.md)
+   - `jdi-cli loop record`: aggregate verdict (worst-case; legacy `Veredicto:` accepted; empty verdict = abort), finding hash, history line, decision as JSON
+   - A `[defect]` (or untagged) blocker, a gate that failed on this commit, or a BLOCKED review with no readable Blockers list always blocks; a `[hollow DoD N]` finding (the Verify passes without proving the criterion) blocks ONCE per DoD row, then becomes a PR warning; no open defect + no product change since the last verify → converged with warnings (a BLOCKED verdict is then rewritten to APPROVED_WITH_WARNINGS with a `## Loop override` section)
    - Verdict APPROVED or APPROVED_WITH_WARNINGS -> converged, exit → `/jdi-ship`
    - Verdict **APPROVED_PENDING_MANUAL** -> exits cleanly routing to **`/jdi-confirm-dod`** (the loop cannot confirm manual DoD items; ship would refuse anyway)
    - Finding hash equal to ANY hash of the **current round** (window since the last RESET/RESUMED marker — catches A/B/A/B period-2 cycles) -> oscillation detected, AskUserQuestion
@@ -334,7 +341,9 @@ Registers a new phase in ROADMAP.md. **Slug-as-ID** — strict validation + uniq
 /jdi-add-phase "Hotfix" --before payments
 ```
 
-Does:
+**Layout v3** (`.jdi/roadmap/`): one call — `jdi-cli add-phase "<name>" --goal … [--before|--after <slug>] [--reason …]` — validates the slug (same rules and exit codes as below), computes the fractional `order` (midpoint on insert; no sibling renumbered), refuses to slot at or before the current phase, writes `.jdi/roadmap/<slug>.md` with `created_with` and the optional audit decision; then `render` + commit. `--at` is rejected.
+
+**Legacy layout** does:
 1. Validation: `.jdi/ROADMAP.md` exists (STATE.md regenerated from artifacts if absent)
 2. Detects `schema_version` (on v1, advises running `/jdi-migrate-phases`)
 3. Derives the slug from `name` (or uses `--slug` if given)
@@ -381,12 +390,12 @@ Slugs of the remaining phases **never change**.
 
 ### `/jdi-status [--stats]`
 
-Read-only snapshot. No agent invoked. Safe anytime.
+Read-only snapshot. No agent invoked, no file written. Safe anytime. One call: `jdi-cli next --status` (`--json` for tooling).
 
 Prints:
-- Project + schema_version
+- Project
 - Current phase (slug + position + name)
-- **Phase status DERIVED from artifacts** (`SHIPPED.md` → done, `REVIEW.md` → verified, `SUMMARY.md` → executed, `PLAN.md` → planned, `CONTEXT.md` → discussed, nothing → pending) alongside the STATE.md hint
+- **Phase status DERIVED from artifacts** (`SHIPPED.md` → done, `REVIEW.md` → verified, `SUMMARY.md` → executed, `PLAN.md` → planned, `CONTEXT.md` → discussed, nothing → pending)
 - Verdict + shipped-phase count (`SHIPPED.md` markers across phases/ and archive/)
 - Last artifact (SHIPPED/REVIEW/SUMMARY/PLAN/CONTEXT) + 1-line headline
 - Ralph loop state + todos backlog count (when present)
