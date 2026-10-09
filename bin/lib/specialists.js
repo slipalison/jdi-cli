@@ -49,6 +49,29 @@ function templateBlocks(role) {
 
 const wrap = (id, body) => `<!-- jdi:managed id=${id} -->\n${body}\n<!-- jdi:/managed -->`;
 
+// Replace the first `open ... close` span (both included) found at or after
+// `from`; null when there is none. Plain index search, no regex.
+function replaceSpan(text, open, close, replacement) {
+  const i = text.indexOf(open);
+  if (i === -1) return null;
+  const j = text.indexOf(close, i + open.length);
+  if (j === -1) return null;
+  return text.slice(0, i) + replacement + text.slice(j + close.length);
+}
+
+// adopt: replace the legacy element with the same tag, or insert after </role>
+function adoptBlock(out, id, body) {
+  const tag = /^<([a-z_]+)>/.exec(body)?.[1];
+  const replaced = tag ? replaceSpan(out, `<${tag}>`, `</${tag}>`, wrap(id, body)) : null;
+  if (replaced !== null) return { text: replaced, change: `replaced <${tag}> with managed ${id}` };
+  const r = out.indexOf('</role>');
+  if (r !== -1) {
+    const end = out[r + 7] === '\n' ? r + 8 : r + 7;
+    return { text: `${out.slice(0, r)}</role>\n\n${wrap(id, body)}\n${out.slice(end)}`, change: `inserted managed ${id}` };
+  }
+  return { text: out.trimEnd() + `\n\n${wrap(id, body)}\n`, change: `appended managed ${id}` };
+}
+
 function upgradeText(text, role, { adopt = false } = {}) {
   const tpl = templateBlocks(role);
   let out = text;
@@ -56,25 +79,13 @@ function upgradeText(text, role, { adopt = false } = {}) {
   const have = blocks(text);
   if (have.size === 0 && !adopt) return { text, changes: [], needsAdopt: true };
   for (const [id, body] of tpl) {
-    if (have.has(id)) {
-      if (have.get(id) !== body) {
-        out = out.replace(new RegExp(`<!-- jdi:managed id=${id} -->\\n[\\s\\S]*?\\n<!-- jdi:/managed -->`), () => wrap(id, body));
-        changes.push(`updated ${id}`);
-      }
-      continue;
-    }
-    // adopt: replace the legacy element with the same tag, or insert after </role>
-    const tag = /^<([a-z_]+)>/.exec(body)?.[1];
-    const legacy = tag ? new RegExp(`<${tag}>[\\s\\S]*?</${tag}>`) : null;
-    if (legacy && legacy.test(out)) {
-      out = out.replace(legacy, () => wrap(id, body));
-      changes.push(`replaced <${tag}> with managed ${id}`);
-    } else if (/<\/role>/.test(out)) {
-      out = out.replace(/<\/role>\n?/, (m) => `${m.endsWith('\n') ? m : m + '\n'}\n${wrap(id, body)}\n`);
-      changes.push(`inserted managed ${id}`);
-    } else {
-      out = out.trimEnd() + `\n\n${wrap(id, body)}\n`;
-      changes.push(`appended managed ${id}`);
+    if (!have.has(id)) {
+      const r = adoptBlock(out, id, body);
+      out = r.text;
+      changes.push(r.change);
+    } else if (have.get(id) !== body) {
+      out = replaceSpan(out, `<!-- jdi:managed id=${id} -->\n`, '\n<!-- jdi:/managed -->', wrap(id, body));
+      changes.push(`updated ${id}`);
     }
   }
   return { text: out, changes, needsAdopt: false };
@@ -127,6 +138,41 @@ function lineDiff(a, b) {
   return out.join('\n');
 }
 
+function lintCmd(root, list) {
+  let errors = 0;
+  for (const f of list) {
+    const fnd = lintText(fs.readFileSync(f, 'utf8'), path.relative(root, f));
+    for (const x of fnd) console.log(`[${x.level.toLowerCase()}] ${x.file}: ${x.msg}`);
+    errors += fnd.filter((x) => x.level === 'ERROR').length;
+    if (!fnd.length) console.log(`[ok] ${path.relative(root, f)}`);
+  }
+  return errors ? 1 : 0;
+}
+
+// One specialist: print what changes; write it when asked. True when changed.
+function upgradeFile(root, f, { write, adopt }) {
+  const before = fs.readFileSync(f, 'utf8');
+  const r = upgradeText(before, roleOf(f), { adopt });
+  const rel = path.relative(root, f);
+  if (r.needsAdopt) console.log(`${rel}: sem blocos gerenciados (anterior a 0.17) — use --adopt`);
+  else if (!r.changes.length) console.log(`${rel}: em dia`);
+  else {
+    console.log(`${rel}: ${r.changes.join('; ')}`);
+    if (write) fs.writeFileSync(f, r.text);
+    else console.log(lineDiff(before, r.text).split('\n').slice(0, 60).join('\n'));
+    return true;
+  }
+  return false;
+}
+
+function upgradeCmd(root, list, rest) {
+  const opts = { write: rest.includes('--write'), adopt: rest.includes('--adopt') };
+  const changed = list.filter((f) => upgradeFile(root, f, opts)).length;
+  if (changed && opts.write) console.log(`Proximo: \`npx -y jdi-cli@${require('../../package.json').version} sync-specialists\` para atualizar as copias do runtime.`);
+  if (changed && !opts.write) console.log('(nada gravado — repita com --write)');
+  return 0;
+}
+
 function main(argv) {
   const [sub, ...rest] = argv;
   const root = process.cwd();
@@ -135,42 +181,8 @@ function main(argv) {
     console.log('no specialists in .jdi/agents/ (run /jdi-bootstrap)');
     return 0;
   }
-  if (sub === 'lint') {
-    let errors = 0;
-    for (const f of list) {
-      const fnd = lintText(fs.readFileSync(f, 'utf8'), path.relative(root, f));
-      for (const x of fnd) console.log(`[${x.level.toLowerCase()}] ${x.file}: ${x.msg}`);
-      errors += fnd.filter((x) => x.level === 'ERROR').length;
-      if (!fnd.length) console.log(`[ok] ${path.relative(root, f)}`);
-    }
-    return errors ? 1 : 0;
-  }
-  if (sub === 'upgrade') {
-    const write = rest.includes('--write');
-    const adopt = rest.includes('--adopt');
-    let changedFiles = 0;
-    for (const f of list) {
-      const role = roleOf(f);
-      const before = fs.readFileSync(f, 'utf8');
-      const r = upgradeText(before, role, { adopt });
-      const rel = path.relative(root, f);
-      if (r.needsAdopt) {
-        console.log(`${rel}: sem blocos gerenciados (anterior a 0.17) — use --adopt`);
-        continue;
-      }
-      if (!r.changes.length) {
-        console.log(`${rel}: em dia`);
-        continue;
-      }
-      changedFiles++;
-      console.log(`${rel}: ${r.changes.join('; ')}`);
-      if (write) fs.writeFileSync(f, r.text);
-      else console.log(lineDiff(before, r.text).split('\n').slice(0, 60).join('\n'));
-    }
-    if (changedFiles && write) console.log(`Proximo: \`npx -y jdi-cli@${require('../../package.json').version} sync-specialists\` para atualizar as copias do runtime.`);
-    if (changedFiles && !write) console.log('(nada gravado — repita com --write)');
-    return 0;
-  }
+  if (sub === 'lint') return lintCmd(root, list);
+  if (sub === 'upgrade') return upgradeCmd(root, list, rest);
   throw new core.JdiError('usage: jdi specialists <lint|upgrade> [--write] [--adopt]', 1);
 }
 

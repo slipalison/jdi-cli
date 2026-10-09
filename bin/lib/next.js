@@ -33,59 +33,65 @@ function derive(phase) {
   return { status: 'pending' };
 }
 
+// First roadmap phase without SHIPPED.md, or null when all are shipped.
+function currentPhase(root) {
+  for (const p of core.listPhases(root)) {
+    const r = core.resolvePhase(String(p.position), root);
+    if (!fs.existsSync(path.join(r.absDir, 'SHIPPED.md'))) return r;
+  }
+  return null;
+}
+
+const BY_VERDICT = { BLOCKED: 'jdi-do', APPROVED_PENDING_MANUAL: 'jdi-confirm-dod' };
+const BY_STATUS = { executed: 'jdi-verify', planned: 'jdi-do', discussed: 'jdi-plan' };
+
+// The command for a derived phase status: [command, reason].
+function commandFor(d) {
+  if (d.status !== 'verified') return [BY_STATUS[d.status] || 'jdi-discuss', ''];
+  if (!d.verdict) return ['jdi-verify', 'REVIEW.md has no verdict'];
+  return [BY_VERDICT[d.verdict] || 'jdi-ship', ''];
+}
+
+function loopStatusOf(phase) {
+  const loopFile = path.join(phase.absDir, 'LOOP.md');
+  if (!fs.existsSync(loopFile)) return null;
+  return (/^status:\s*(\S+)/m.exec(fs.readFileSync(loopFile, 'utf8')) || [])[1];
+}
+
 function next(root = process.cwd(), { id, loop } = {}) {
   if (!fs.existsSync(path.join(root, core.JDI_DIR))) return { next: null, reason: 'Not a JDI project yet: /jdi-new "<short description>" (or /jdi-adopt).' };
-  let phase;
-  if (id) phase = core.resolvePhase(id, root);
-  else {
-    for (const p of core.listPhases(root)) {
-      const r = core.resolvePhase(String(p.position), root);
-      if (!fs.existsSync(path.join(r.absDir, 'SHIPPED.md'))) {
-        phase = r;
-        break;
-      }
-    }
-    if (!phase) return { next: null, reason: 'All phases shipped. Add more with /jdi-add-phase.' };
-  }
+  const phase = id ? core.resolvePhase(id, root) : currentPhase(root);
+  if (!phase) return { next: null, reason: 'All phases shipped. Add more with /jdi-add-phase.' };
   const d = derive(phase);
-  const config = core.loadConfig(root);
-  const loopMode = loop || config.orchestration?.next_execution === 'loop';
-  let cmd;
-  let reason = '';
-  if (!hasSpecialists(root)) {
-    cmd = 'jdi-bootstrap';
-    reason = 'specialists missing';
-  } else if (d.status === 'done') return { slug: phase.slug, position: phase.position, dir: phase.dir, ...d, next: null, reason: `Phase ${phase.slug} already shipped.` };
-  else if (d.status === 'verified') {
-    if (!d.verdict) {
-      cmd = 'jdi-verify';
-      reason = 'REVIEW.md has no verdict';
-    } else if (d.verdict === 'BLOCKED') cmd = 'jdi-do';
-    else if (d.verdict === 'APPROVED_PENDING_MANUAL') cmd = 'jdi-confirm-dod';
-    else cmd = 'jdi-ship';
-  } else if (d.status === 'executed') cmd = 'jdi-verify';
-  else if (d.status === 'planned') cmd = 'jdi-do';
-  else if (d.status === 'discussed') cmd = 'jdi-plan';
-  else cmd = 'jdi-discuss';
+  const where = { slug: phase.slug, position: phase.position, dir: phase.dir, ...d };
+  if (!hasSpecialists(root)) return { ...where, loop: loopStatusOf(phase), next: '/jdi-bootstrap', reason: 'specialists missing' };
+  if (d.status === 'done') return { ...where, next: null, reason: `Phase ${phase.slug} already shipped.` };
+  let [cmd, reason] = commandFor(d);
+  const loopMode = loop || core.loadConfig(root).orchestration?.next_execution === 'loop';
   if (loopMode && (cmd === 'jdi-do' || cmd === 'jdi-verify')) cmd = 'jdi-loop';
-  const loopFile = path.join(phase.absDir, 'LOOP.md');
-  const loopStatus = fs.existsSync(loopFile) ? (/^status:\s*(\S+)/m.exec(fs.readFileSync(loopFile, 'utf8')) || [])[1] : null;
-  return { slug: phase.slug, position: phase.position, dir: phase.dir, ...d, loop: loopStatus, next: cmd === 'jdi-bootstrap' ? '/jdi-bootstrap' : `/${cmd} ${phase.slug}`, reason };
+  return { ...where, loop: loopStatusOf(phase), next: `/${cmd} ${phase.slug}`, reason };
+}
+
+// First non-blank line after the line `heading`, or null.
+function lineAfter(text, heading) {
+  const lines = text.split('\n');
+  const i = lines.findIndex((l) => l.trim() === heading);
+  if (i === -1) return null;
+  return lines.slice(i + 1).find((l) => l.trim()) ?? null;
 }
 
 function projectSlug(root) {
-  const p = core.readIf(path.join(root, core.JDI_DIR, 'PROJECT.md'));
-  const m = /^## Slug\s*\n(?:\s*\n)*\s*(\S+)/m.exec(p || '');
-  if (m) return m[1];
+  const slugLine = lineAfter(core.readIf(path.join(root, core.JDI_DIR, 'PROJECT.md')) || '', '## Slug');
+  if (slugLine) return slugLine.trim().split(/\s/)[0];
   return (/^project_slug:\s*(\S+)/m.exec(core.readIf(path.join(root, core.JDI_DIR, 'STATE.md')) || '') || [])[1] || path.basename(root);
 }
 
 function phaseName(root, phase) {
   const entry = path.join(root, core.JDI_DIR, 'roadmap', `${phase.slug}.md`);
   if (fs.existsSync(entry)) return String(core.readFrontmatter(entry).name || phase.slug);
-  const roadmap = core.readIf(path.join(root, core.JDI_DIR, 'ROADMAP.md')) || '';
-  const m = new RegExp(`^### Phase ${phase.position}:\\s*(.+)$`, 'm').exec(roadmap);
-  return m ? m[1].trim() : phase.slug;
+  const prefix = `### Phase ${phase.position}:`;
+  const line = (core.readIf(path.join(root, core.JDI_DIR, 'ROADMAP.md')) || '').split('\n').find((l) => l.startsWith(prefix));
+  return line ? line.slice(prefix.length).trim() || phase.slug : phase.slug;
 }
 
 function todoCount(root) {
@@ -103,16 +109,22 @@ function headline(file, name) {
     case 'SHIPPED.md':
       return t.split('\n').slice(0, 2).join(' ').trim();
     case 'REVIEW.md':
-      return first(/^\*\*(Veredicto|Verdict):\*\*.*$/m).replace(/\*\*/g, '');
+      return first(/^\*\*(Veredicto|Verdict):\*\*.*$/m).replaceAll('**', '');
     case 'SUMMARY.md':
-      return first(/^\*\*(Status|Tasks):\*\*.*$/m).replace(/\*\*/g, '');
+      return first(/^\*\*(Status|Tasks):\*\*.*$/m).replaceAll('**', '');
     case 'PLAN.md':
       return [first(/Total tasks:\s*\d+/), first(/Waves:\s*\d+/)].filter(Boolean).join(', ');
     case 'CONTEXT.md':
-      return ((/^## Goal\s*\n+(.+)$/m.exec(t) || [])[1] || '').trim();
+      return (lineAfter(t, '## Goal') || '').trim();
     default:
       return '';
   }
+}
+
+// The phase the status screen describes: the current one, else the last.
+function statusPhase(root, n, list) {
+  if (n.slug) return core.resolvePhase(n.slug, root);
+  return list.length ? core.resolvePhase(String(list.length), root) : null;
 }
 
 function status(root = process.cwd(), opts = {}) {
@@ -121,7 +133,7 @@ function status(root = process.cwd(), opts = {}) {
   const list = core.listPhases(root);
   const shipped = list.filter((p) => fs.existsSync(path.join(core.resolvePhase(String(p.position), root).absDir, 'SHIPPED.md'))).length;
   const out = { ...n, project: projectSlug(root), total: list.length, shipped, todos: todoCount(root) };
-  const phase = n.slug ? core.resolvePhase(n.slug, root) : list.length ? core.resolvePhase(String(list.length), root) : null;
+  const phase = statusPhase(root, n, list);
   if (phase) {
     out.slug = phase.slug;
     out.position = phase.position;
@@ -137,24 +149,33 @@ function status(root = process.cwd(), opts = {}) {
   return out;
 }
 
+function artifactLines(s) {
+  if (s.last_artifact) return [`  Last artifact:  ${s.last_artifact.file}`, `                  ${s.last_artifact.headline || ''}`.trimEnd()];
+  return s.slug ? ['  Last artifact:  (none — phase has not started)'] : [];
+}
+
 function renderStatus(s) {
   const bar = '═'.repeat(50);
-  const L = ['', bar, '  JDI status', bar];
-  if (!s.project) return [...L, `  ${s.reason}`, bar].join('\n');
-  L.push(`  Project:        ${s.project}`);
-  if (s.slug) {
-    L.push(`  Phase:          ${s.position}/${s.total} — ${s.name} (slug: ${s.slug})`);
-    L.push(`  Phase status:   ${s.status || 'done'}`);
-    L.push(`  Verdict:        ${s.verdict || '—'}`);
-  }
-  L.push(`  Shipped:        ${s.shipped}/${s.total} phases`, '');
-  if (s.last_artifact) L.push(`  Last artifact:  ${s.last_artifact.file}`, `                  ${s.last_artifact.headline || ''}`.trimEnd());
-  else if (s.slug) L.push('  Last artifact:  (none — phase has not started)');
-  if (s.loop) L.push(`  Ralph loop:     ${s.loop}`);
-  if (s.todos) L.push(`  Todos backlog:  ${s.todos} item(s) in .jdi/todos (captured creep — review at /jdi-discuss)`);
-  L.push('', `  Last commit:    ${s.last_commit}`, `  Commits today:  ${s.commits_today}`, '', bar);
-  L.push(`  Next step:      ${s.next || s.reason}`, bar);
-  return L.join('\n');
+  const head = ['', bar, '  JDI status', bar];
+  if (!s.project) return [...head, `  ${s.reason}`, bar].join('\n');
+  const phase = s.slug ? [`  Phase:          ${s.position}/${s.total} — ${s.name} (slug: ${s.slug})`, `  Phase status:   ${s.status || 'done'}`, `  Verdict:        ${s.verdict || '—'}`] : [];
+  return [
+    ...head,
+    `  Project:        ${s.project}`,
+    ...phase,
+    `  Shipped:        ${s.shipped}/${s.total} phases`,
+    '',
+    ...artifactLines(s),
+    ...(s.loop ? [`  Ralph loop:     ${s.loop}`] : []),
+    ...(s.todos ? [`  Todos backlog:  ${s.todos} item(s) in .jdi/todos (captured creep — review at /jdi-discuss)`] : []),
+    '',
+    `  Last commit:    ${s.last_commit}`,
+    `  Commits today:  ${s.commits_today}`,
+    '',
+    bar,
+    `  Next step:      ${s.next || s.reason}`,
+    bar,
+  ].join('\n');
 }
 
 function main(argv) {
