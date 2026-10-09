@@ -82,7 +82,7 @@ function parseTasks(planText) {
       line: t.line,
       block,
       files,
-      specialist: field(/\*\*Specialist:\*\*\s*([^\s·]+)/),
+      specialist: field(/\*\*Specialist:\*\*\s*([^\s·]+)/).replace(/^`|[`,;.)]+$/g, ''),
       status: field(/\*\*Status:\*\*\s*([^\s·]+)/),
     };
   });
@@ -324,7 +324,19 @@ function build(phase, opts, root = process.cwd()) {
     const changedRows = opts.rows ? opts.rows.split(',').map((x) => Number(x.trim())).filter(Boolean) : null;
     const rows = doc.items.filter((it) => it.type === 'auto' && (!changedRows || changedRows.includes(it.id)));
     b.add('Mode', preflight ? 'PREFLIGHT — before code: for each row, list the mutations its Verify must fail and what it does not cover yet.' : `VERIFY — re-examine only the rows below (${rows.length}); the others were examined at an unchanged Verify or already spent their hollow-proof block.`, 0);
-    b.add(`Rows to examine (${ctxRel})`, rows.map((it) => `- DoD ${it.id}: ${it.criterion.slice(0, 500)}\n  Verify: ${verifyRef(it, ctxRel, 2000)}`).join('\n'), 0);
+    const prev = core.readJson(path.join(root, core.JDI_DIR, 'cache', 'critic', phase.slug, 'state.json'), null)?.rows || {};
+    b.add(
+      `Rows to examine (${ctxRel})`,
+      rows
+        .map((it) => {
+          const p = prev[it.id];
+          const last = p && p.hollow ? `\n  Last examination: hollow${p.objective ? ' (objective)' : ' (suspicion)'} — ${p.evidence}. Check whether the code or test behind the Verify changed since.` : '';
+          return `- DoD ${it.id}: ${it.criterion.slice(0, 500)}\n  Verify: ${verifyRef(it, ctxRel, 2000)}${last}`;
+        })
+        .join('\n'),
+      0,
+    );
+    b.add('Output', `Write \`.jdi/cache/critic/${phase.slug}/findings.json\`: a JSON array with one object per row above — \`{"row": N, "hollow": true|false, "objective": true|false, "evidence": "file:line or the exact reason"}\`. Then return one line.`, 0);
     b.add('Known errors about hollow proofs (judgment only — lint already blocks the mechanized ones)', ke('critic', []), 4);
   } else {
     throw new core.JdiError(`unknown role '${role}' (doer, reviewer, planner, asker, critic)`, 1);

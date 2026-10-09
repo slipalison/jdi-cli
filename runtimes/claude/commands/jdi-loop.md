@@ -41,7 +41,7 @@ Ralph pattern (Huntley + ASDLC):
 
 ### Step 1: Validation
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.17.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.18.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new."; exit 1; }
@@ -52,13 +52,13 @@ test -d .jdi/ || { echo "Not a JDI project. /jdi-new."; exit 1; }
 ls .jdi/agents/jdi-doer-*.md 2>/dev/null | head -1 || { echo "Doer missing. /jdi-bootstrap."; exit 1; }
 ls .jdi/agents/jdi-reviewer-*.md 2>/dev/null | head -1 || { echo "Reviewer missing. /jdi-bootstrap."; exit 1; }
 # Runtime copies (.claude/agents/ etc. — the runtime never spawns from .jdi/agents/): self-heal before the loop
-npx -y jdi-cli@0.17.0 sync-specialists --check --quiet || npx -y jdi-cli@0.17.0 sync-specialists --quiet
+npx -y jdi-cli@0.18.0 sync-specialists --check --quiet || npx -y jdi-cli@0.18.0 sync-specialists --quiet
 ```
 
 ### Step 2: Resolve phase
 
 ```bash
-RESOLVED="$(npx -y jdi-cli@0.17.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+RESOLVED="$(npx -y jdi-cli@0.18.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
 eval "$RESOLVED"
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
@@ -71,8 +71,8 @@ test -f "$PHASE_DIR/PLAN.md" || { echo "PLAN missing for phase $PHASE_SLUG. /jdi
 ### Step 3: Initialize or resume LOOP.md
 
 ```bash
-npx -y jdi-cli@0.17.0 loop init "$PHASE_SLUG" --max-iter "${MAX_ITER:-5}" --max-resets "${MAX_RESETS:-3}" >/dev/null
-STATUS=$(npx -y jdi-cli@0.17.0 loop status "$PHASE_SLUG")   # JSON: status, iter, total_resets, hollow_spent
+npx -y jdi-cli@0.18.0 loop init "$PHASE_SLUG" --max-iter "${MAX_ITER:-5}" --max-resets "${MAX_RESETS:-3}" >/dev/null
+STATUS=$(npx -y jdi-cli@0.18.0 loop status "$PHASE_SLUG")   # JSON: status, iter, total_resets, hollow_spent
 ```
 
 - `status` `converged` → abort: "Phase already converged. /jdi-ship $PHASE_SLUG".
@@ -80,7 +80,7 @@ STATUS=$(npx -y jdi-cli@0.17.0 loop status "$PHASE_SLUG")   # JSON: status, iter
   `--reset-loop` (confirmed via AskUserQuestion): `mv LOOP.md LOOP.md.killed-{ts}`
   (audit preserved) and run `loop init` again. Without the flag, killed is final.
 - `status` `escalated` or `paused` → resuming CONSUMES A RESET:
-  `npx -y jdi-cli@0.17.0 loop reset "$PHASE_SLUG" --reason "resumed from <state>"`
+  `npx -y jdi-cli@0.18.0 loop reset "$PHASE_SLUG" --reason "resumed from <state>"`
   (prints `killed` when the cap is reached → abort). Without this, abort→re-run
   would zero `iter` for free and bypass the absolute hard cap.
 - `status` `running` → resume (crash mid-loop; does NOT consume a reset).
@@ -118,7 +118,7 @@ loop:
   # --- Step B: verify = /jdi-verify Steps 4-5 (gates run, briefs, reviewers) ---
 
   # --- Step C: record the iteration and get the decision ---
-  DECISION=$(npx -y jdi-cli@0.17.0 loop record "$PHASE_SLUG")   # add --autonomous under /jdi-issue
+  DECISION=$(npx -y jdi-cli@0.18.0 loop record "$PHASE_SLUG")   # add --autonomous under /jdi-issue
 ```
 
 Every iteration spawns FRESH agents — never SendMessage new work to the
@@ -133,7 +133,7 @@ previous ones. Each agent returns at most 10 lines; the decision comes from
 | `converged-with-warnings` | Same as `converged`; carry `prWarnings` (hollow-proof findings on rows that already spent their block, or found with no product change) to the ship/PR as `## Shipped with warnings`. When the review said BLOCKED (`reviewOverridden: true`), `loop record` already turned the verdict into APPROVED_WITH_WARNINGS and appended `## Loop override` (reason + findings) to REVIEW.md — commit REVIEW.md together with LOOP.md |
 | `pending-manual` | STATE.md `phase_status: pending_manual_dod`, `next_step: /jdi-confirm-dod $PHASE_SLUG`; commit LOOP.md; exit 0 |
 | `continue` | next iteration (`goto loop`) |
-| `gate` | Human gate (oscillation or iteration cap) — AskUserQuestion: Continue (reset, `max_iter` more) → `npx -y jdi-cli@0.17.0 loop reset "$PHASE_SLUG" --reason "<why>"`; Abort → Step 6; Adjust plan → Step 7. A `killed` answer from `loop reset` → STATE.md `phase_status: blocked`, commit LOOP.md, exit 1 |
+| `gate` | Human gate (oscillation or iteration cap) — AskUserQuestion: Continue (reset, `max_iter` more) → `npx -y jdi-cli@0.18.0 loop reset "$PHASE_SLUG" --reason "<why>"`; Abort → Step 6; Adjust plan → Step 7. A `killed` answer from `loop reset` → STATE.md `phase_status: blocked`, commit LOOP.md, exit 1 |
 
 The decision rules live in the CLI (issue #62): a blocker tagged `[defect]`
 (or untagged) always blocks, and so does a gate that failed on the current
@@ -217,8 +217,11 @@ otherwise inline like Copilot.
 
 **Orchestration mode:** the loop itself IS the standard path — it never adds
 extra fan-out beyond doer/reviewer, so `orchestration.mode` (standard or
-enhanced) requires no branching here. The reviewer's enhanced DoD critic runs
-inside /jdi-verify semantics when configured.
+enhanced) requires no branching here. The DoD critic (`jdi-dod-critic`) runs
+inside /jdi-verify Step 4.5 when it is on, with its lean cadence: a round where
+no DoD proof changed spawns no critic. Inside the loop, verify is incremental
+on multi-stack projects (`review plan`): a reviewer whose scope the fix did
+not touch is carried, not re-spawned.
 </runtime_notes>
 
 <references>

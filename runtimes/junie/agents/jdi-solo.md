@@ -41,7 +41,7 @@ test -d .jdi/ || { echo "ABORT: not a JDI project (/jdi-new + /jdi-bootstrap fir
 ls .jdi/agents/jdi-doer-*.md >/dev/null 2>&1 || { echo "ABORT: no specialists (/jdi-bootstrap first)"; exit 1; }
 
 # 3. jdi-cli helpers reachable (gates depend on them)
-npx -y jdi-cli@0.17.0 --version || { echo "ABORT: jdi-cli unreachable via npx (firewall/allowlist?)"; exit 1; }
+npx -y jdi-cli@0.18.0 --version || { echo "ABORT: jdi-cli unreachable via npx (firewall/allowlist?)"; exit 1; }
 
 # 4. Git hooks active when the repo ships them (the artifact gate)
 test -d .githooks && git config core.hooksPath .githooks || true
@@ -68,7 +68,7 @@ interactive runtime." Never produce code or artifacts without gates.
    silently drop untracked files from their auto-commits — a file that is
    not in the index does not exist.
 4. **Definition of complete is mechanical:**
-   `npx -y jdi-cli@0.17.0 validate-phase <slug> --for-pr` exits 0. No PR before
+   `npx -y jdi-cli@0.18.0 validate-phase <slug> --for-pr` exits 0. No PR before
    that. The 5 artifacts (CONTEXT, PLAN, SUMMARY, REVIEW, SHIPPED) plus a
    non-BLOCKED verdict are the proof the protocol ran.
 5. **Never merge.** Open the PR, report, stop. Killed/escalated work is
@@ -101,8 +101,8 @@ Fresh-context rotation is lost — compensate at every role switch with the
 role's brief, never from memory of an earlier step:
 
 ```bash
-npx -y jdi-cli@0.17.0 brief "$SLUG" --role doer --task T-N --runtime other      # before each task
-npx -y jdi-cli@0.17.0 brief "$SLUG" --role reviewer --stack <reviewer> --runtime other   # before each review
+npx -y jdi-cli@0.18.0 brief "$SLUG" --role doer --task T-N --runtime other      # before each task
+npx -y jdi-cli@0.18.0 brief "$SLUG" --role reviewer --stack <reviewer> --runtime other   # before each review
 ```
 
 Read the path it prints: the task, the decisions it cites, the DoD lines for
@@ -126,18 +126,26 @@ The reviewer's measurable gates run through the gates runner — real exit
 codes, one report per stack, the DoD executed once:
 
 ```bash
-npx -y jdi-cli@0.17.0 gates run "$SLUG" --only dod
-npx -y jdi-cli@0.17.0 gates run "$SLUG" --stack <reviewer>
-npx -y jdi-cli@0.17.0 gates show "$SLUG"
+npx -y jdi-cli@0.18.0 gates run "$SLUG" --only dod
+npx -y jdi-cli@0.18.0 gates run "$SLUG" --stack <reviewer>
+npx -y jdi-cli@0.18.0 gates show "$SLUG"
 ```
 
 ### Deviation 3 — the DoD critic becomes a self-critic pass
-`/jdi-verify` Step 4.5 requires a spawned critic; you cannot spawn. Run a
-reduced self-critic INSIDE the verify step: for every `Type=Auto` DoD row,
-read its result in the gates report (`gates show`) and its script in
-`$PHASE_DIR/verify/dod-N.sh` when it was extracted, and check the command
-actually proves the criterion (not just exits 0). The self-critic can only TIGHTEN
-the verdict, never loosen it. Note `critic: self (solo)` in REVIEW.md.
+`/jdi-verify` Step 4.5 spawns `jdi-dod-critic`; you cannot spawn. Run the
+same steps and play the critic yourself:
+
+```bash
+npx -y jdi-cli@0.18.0 dod bait "$SLUG"                          # mechanical: rows with a Bait:
+npx -y jdi-cli@0.18.0 critic plan "$SLUG" --runtime other       # which rows, and their brief
+# read the brief, judge each listed row (does its Verify fail when the criterion is broken?),
+# write the findings file the plan names: [{"row":N,"hollow":bool,"objective":bool,"evidence":"..."}]
+npx -y jdi-cli@0.18.0 critic apply "$SLUG"                      # folds it into REVIEW.md
+```
+
+The self-critic can only TIGHTEN the verdict, never loosen it — reserve
+`objective` for what you can show (`file:line`). Note `critic: self (solo)` in
+the final report.
 
 ### Deviation 4 — checkpoint commits per artifact
 Commit each artifact as soon as it is written and validated (Conventional
@@ -158,7 +166,7 @@ bypass it.
 ### Deviation 5 — validate before opening the PR
 
 ```bash
-npx -y jdi-cli@0.17.0 validate-phase "$SLUG" --for-pr || { echo "protocol incomplete — fix before PR"; exit 1; }
+npx -y jdi-cli@0.18.0 validate-phase "$SLUG" --for-pr || { echo "protocol incomplete — fix before PR"; exit 1; }
 git status --porcelain -- .jdi/ | grep . && { echo "untracked/dirty .jdi files — add & commit them"; exit 1; }
 ```
 

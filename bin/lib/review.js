@@ -8,6 +8,15 @@
 //                                              items only — the doer's work list in fix
 //                                              mode, instead of the whole review
 //
+// `jdi-cli review plan <phase> --reviewers "<r1> <r2>" [--full]`
+//                                              incremental verify: which reviewers run,
+//                                              which segments are carried (multi-stack)
+// `jdi-cli review merge <phase>`               after the reviewers: puts the carried
+//                                              segments back and stamps the verified
+//                                              commit (`<!-- jdi:verified head=… -->`)
+// `jdi-cli review fresh <phase>`               exit 3 when product files changed after
+//                                              the verify commit (ship refuses)
+//
 // The orchestrator reads verdicts and work lists through here instead of
 // opening REVIEW.md: in a long phase REVIEW.md grows to tens of KB and every
 // byte read by the orchestrator is re-read on each of its later turns.
@@ -66,6 +75,150 @@ function findings(text) {
   };
 }
 
+// --------------------------------------------------------------------------
+// Incremental verify (multi-stack): `review plan` before the reviewers,
+// `review merge` after them.
+// --------------------------------------------------------------------------
+
+const ORCH_SEGMENTS = /^## (DoD Critic|Loop override)\b/;
+
+// Split REVIEW.md into `## Reviewer: <name>` segments (each runs until the
+// next reviewer segment or an orchestrator segment).
+function segments(text) {
+  const lines = text.split('\n');
+  const out = [];
+  let cur = null;
+  for (const l of lines) {
+    const m = /^## Reviewer:\s*(\S+)/.exec(l);
+    if (m) {
+      cur = { name: m[1], lines: [l] };
+      out.push(cur);
+    } else if (ORCH_SEGMENTS.test(l)) cur = null;
+    else if (cur) cur.lines.push(l);
+  }
+  return out.map((x) => ({ name: x.name, text: x.lines.join('\n').trimEnd() }));
+}
+
+function stateFile(root, phase) {
+  return path.join(root, core.JDI_DIR, 'cache', 'review', `${phase.slug}.json`);
+}
+
+function scopeOf(root, name) {
+  const st = core.readJson(path.join(root, core.JDI_DIR, 'stacks', `${name.replace(/^jdi-reviewer-/, '')}.json`), null);
+  if (st && st.file_glob) return [].concat(st.file_glob);
+  const f = path.join(root, core.JDI_DIR, 'agents', `${name}.md`);
+  const g = fs.existsSync(f) ? core.readFrontmatter(f).scope?.file_glob : null;
+  return !g || g === '**/*' ? ['**/*'] : String(g).split(/[,\s]+/).filter(Boolean);
+}
+
+function changedSince(root, sha) {
+  const r = core.git(['diff', '--name-only', `${sha}..HEAD`], root);
+  return r.code === 0 ? r.stdout.split('\n').filter(Boolean) : null;
+}
+
+// Decide which reviewers run. The first reviewer owns the DoD Checklist and
+// always runs; another one is CARRIED (its last segment kept, not re-spawned)
+// only when: incremental verify is on, its last run is recorded at a commit
+// that is an ancestor of HEAD, nothing in its scope nor in the phase's
+// CONTEXT/PLAN changed since, and its segment was not BLOCKED.
+function planReview(phase, reviewers, { full = false } = {}, root = process.cwd()) {
+  const config = core.loadConfig(root);
+  const head = core.git(['rev-parse', 'HEAD'], root).stdout;
+  const reviewFile = path.join(phase.absDir, 'REVIEW.md');
+  const prevText = core.readIf(reviewFile) || '';
+  const prevSegs = new Map(segments(prevText).map((x) => [x.name, x]));
+  const state = core.readJson(stateFile(root, phase), null) || { reviewers: {} };
+  const out = { mode: 'full', run: [], carry: [], reasons: {} };
+  const incremental = !full && config.economy?.incremental_verify !== false && reviewers.length > 1;
+  reviewers.forEach((r, i) => {
+    let why = null;
+    const last = state.reviewers[r];
+    if (!incremental) why = full ? '--full' : reviewers.length > 1 ? 'economy.incremental_verify is false' : 'single reviewer';
+    else if (i === 0) why = 'owns the DoD Checklist';
+    else if (!last || !last.head) why = 'no previous run recorded';
+    else if (core.git(['merge-base', '--is-ancestor', last.head, 'HEAD'], root).code !== 0) why = 'previous run is not an ancestor of HEAD';
+    else if (!prevSegs.has(r)) why = 'previous segment missing from REVIEW.md';
+    else if (verdictOf(prevSegs.get(r).text).verdict === 'BLOCKED') why = 'previous segment was BLOCKED';
+    else {
+      const changed = changedSince(root, last.head);
+      if (changed === null) why = 'cannot diff against the previous run';
+      else {
+        const phaseInputs = changed.filter((f) => f === `${phase.dir}/CONTEXT.md` || f === `${phase.dir}/PLAN.md`);
+        const inScope = changed.filter((f) => !f.startsWith(`${core.JDI_DIR}/`) && core.matchesAny(f, scopeOf(root, r)));
+        if (phaseInputs.length) why = 'CONTEXT/PLAN changed since its last run';
+        else if (inScope.length) why = `${inScope.length} file(s) changed in its scope`;
+      }
+    }
+    if (why) {
+      out.run.push(r);
+      out.reasons[r] = why;
+    } else {
+      out.carry.push(r);
+      out.reasons[r] = `unchanged since ${last.head.slice(0, 10)}`;
+    }
+  });
+  if (out.carry.length) out.mode = 'incremental';
+  // carried segments wait in the cache while the reviewers write a fresh REVIEW.md
+  const carryFile = path.join(root, core.JDI_DIR, 'cache', 'review', `${phase.slug}-carried.md`);
+  const carriedText = out.carry.map((r) => `${prevSegs.get(r).text.replace(/^(## Reviewer:[^\n]*)\n/, `$1\n<!-- jdi:carried from=${state.reviewers[r].head.slice(0, 12)} -->\n`)}`).join('\n\n');
+  if (carriedText) core.writeFileEnsured(carryFile, carriedText + '\n', root);
+  else fs.rmSync(carryFile, { force: true });
+  fs.rmSync(reviewFile, { force: true });
+  for (const r of out.run) state.reviewers[r] = { head };
+  core.writeFileEnsured(stateFile(root, phase), JSON.stringify(state, null, 2) + '\n', root);
+  return out;
+}
+
+const STAMP_RE = /^<!-- jdi:verified head=([0-9a-f]{7,40}) -->\n?/m;
+
+// Records the commit the reviewers verified, so freshness does not depend on
+// which later command committed REVIEW.md (confirm-dod, a loop override).
+function stamp(reviewFile, root) {
+  const head = core.git(['rev-parse', 'HEAD'], root).stdout;
+  if (!head) return null;
+  const text = (core.readIf(reviewFile) || '').replace(STAMP_RE, '');
+  fs.writeFileSync(reviewFile, text.replace(/\s*$/, '\n') + `<!-- jdi:verified head=${head} -->\n`);
+  return head;
+}
+
+function mergeReview(phase, root = process.cwd()) {
+  const carryFile = path.join(root, core.JDI_DIR, 'cache', 'review', `${phase.slug}-carried.md`);
+  const reviewFile = path.join(phase.absDir, 'REVIEW.md');
+  const text = core.readIf(reviewFile);
+  if (text === null) throw new core.JdiError(`${phase.dir}/REVIEW.md not found — the reviewers did not write it`, 2);
+  if (!fs.existsSync(carryFile)) return { carried: 0, verified: stamp(reviewFile, root) };
+  const carried = fs.readFileSync(carryFile, 'utf8');
+  const names = segments(carried).map((x) => x.name);
+  const present = new Set(segments(text).map((x) => x.name));
+  const add = segments(carried).filter((x) => !present.has(x.name));
+  fs.writeFileSync(reviewFile, text.replace(STAMP_RE, '').replace(/\s*$/, '\n\n') + add.map((x) => x.text).join('\n\n') + '\n');
+  fs.rmSync(carryFile, { force: true });
+  return { carried: add.length, reviewers: names, verified: stamp(reviewFile, root) };
+}
+
+// The review must describe the code being shipped: no product file may change
+// after the last commit that touched REVIEW.md (the verify commit). `.jdi/`
+// and `loop.non_product_globs` do not count.
+function staleness(phase, root = process.cwd()) {
+  const rel = `${phase.dir}/REVIEW.md`;
+  const dirty = core.git(['status', '--porcelain', '--', rel], root);
+  if (dirty.code !== 0) return { stale: false, reason: 'not a git repository' };
+  // the stamp written by `review merge` names the verified commit; older
+  // reviews fall back to the last commit that touched REVIEW.md
+  const stamped = STAMP_RE.exec(core.readIf(path.join(phase.absDir, 'REVIEW.md')) || '');
+  let c = stamped ? stamped[1] : null;
+  if (c && core.git(['cat-file', '-e', `${c}^{commit}`], root).code !== 0) c = null;
+  if (!c) {
+    if (dirty.stdout) return { stale: false, reason: 'REVIEW.md not committed yet (verified at HEAD)' };
+    c = core.git(['log', '-1', '--format=%H', '--', rel], root).stdout;
+  }
+  if (!c) return { stale: false, reason: 'REVIEW.md has no commit' };
+  const changed = changedSince(root, c) || [];
+  const ignore = [`${core.JDI_DIR}/**`, ...(core.loadConfig(root).loop?.non_product_globs || [])];
+  const product = changed.filter((f) => !core.matchesAny(f, ignore));
+  return { stale: product.length > 0, since: c, files: product };
+}
+
 function reviewText(phase) {
   const f = path.join(phase.absDir, 'REVIEW.md');
   if (!fs.existsSync(f)) throw new core.JdiError(`${phase.dir}/REVIEW.md not found — run /jdi-verify`, 2);
@@ -77,12 +230,11 @@ function main(argv) {
   const json = rest.includes('--json');
   const mi = rest.indexOf('--max-chars');
   const maxChars = mi === -1 ? 4000 : Number(rest[mi + 1]);
-  const id = rest.find((a, i) => !a.startsWith('--') && rest[i - 1] !== '--max-chars');
-  if (!id) throw new core.JdiError('usage: jdi review <verdict|blockers> <phase> [--json]', 1);
+  const id = rest.find((a, i) => !a.startsWith('--') && !['--max-chars', '--reviewers'].includes(rest[i - 1]));
+  if (!id) throw new core.JdiError('usage: jdi review <verdict|blockers|plan|merge|fresh> <phase> [--json]', 1);
   const phase = core.resolvePhase(id);
-  const text = reviewText(phase);
   if (sub === 'verdict') {
-    const v = verdictOf(text);
+    const v = verdictOf(reviewText(phase));
     if (!v.verdict) {
       console.error('REVIEW.md has no verdict line — malformed review (never ship on silence)');
       return 2;
@@ -90,8 +242,24 @@ function main(argv) {
     process.stdout.write(json ? JSON.stringify(v) + '\n' : `${v.verdict}\n`);
     return 0;
   }
+  if (sub === 'plan') {
+    const ri = rest.indexOf('--reviewers');
+    const reviewers = ri === -1 ? [] : rest[ri + 1].split(/[\s,]+/).filter(Boolean);
+    if (!reviewers.length) throw new core.JdiError('review plan needs --reviewers "<r1> <r2>" (registry order; the first owns the DoD)', 1);
+    process.stdout.write(JSON.stringify(planReview(phase, reviewers, { full: rest.includes('--full') })) + '\n');
+    return 0;
+  }
+  if (sub === 'merge') {
+    process.stdout.write(JSON.stringify(mergeReview(phase)) + '\n');
+    return 0;
+  }
+  if (sub === 'fresh') {
+    const r = staleness(phase);
+    process.stdout.write(JSON.stringify(r) + '\n');
+    return r.stale ? 3 : 0;
+  }
   if (sub === 'blockers') {
-    const f = findings(text);
+    const f = findings(reviewText(phase));
     if (json) {
       process.stdout.write(JSON.stringify(f, null, 2) + '\n');
       return 0;
@@ -115,7 +283,7 @@ function main(argv) {
     process.stdout.write(out.join('\n') + (out.length ? '\n' : 'no blockers or warnings\n'));
     return 0;
   }
-  throw new core.JdiError('usage: jdi review <verdict|blockers> <phase>', 1);
+  throw new core.JdiError('usage: jdi review <verdict|blockers|plan|merge|fresh> <phase>', 1);
 }
 
-module.exports = { main, verdictOf, manualPending, findings, classify, RANK };
+module.exports = { main, verdictOf, manualPending, findings, classify, segments, planReview, mergeReview, staleness, RANK };

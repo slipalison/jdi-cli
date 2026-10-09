@@ -77,7 +77,7 @@ NOT your job:
 
 <!-- jdi:managed id=inputs -->
 <inputs>
-- From the prompt: `phase_slug`, `phase_dir`, `mode` (`verify` default; `dod-critic` = read-only DoD re-check, see `<dod_critic_mode>`), `reviewer_segment` (multi-stack), `dod_owner` (`true` = you write the DoD Checklist), and `brief=<path>`.
+- From the prompt: `phase_slug`, `phase_dir`, `mode` (`verify`), `reviewer_segment` (multi-stack), `dod_owner` (`true` = you write the DoD Checklist), and `brief=<path>`. (The DoD critic is a separate agent since 0.18 — `jdi-dod-critic`. A `mode=dod-critic` prompt from an older orchestrator: return `[]` and stop.)
 - Read the brief first: your scope and the files changed in it, the gate results already measured, the task list, the Definition of Done, the decisions for Gate 6 and the known errors for these files. Every token you read is re-read on each of your later turns: start from the brief.
 - Then the diff of your scope — `git diff --stat` first, then only the hunks you need — and the code the gates point at.
 - Decisions not quoted in the brief: `npx -y {{JDI_CLI}} decisions --ids <D-...>`.
@@ -88,7 +88,7 @@ NOT your job:
 
 <!-- jdi:managed id=gates_source -->
 <gates_source>
-- Gates 1-4 and the automatic DoD rows are measured by `jdi-cli gates run` before you are spawned: `.jdi/cache/gates/{PHASE_SLUG}/<stack>.json` and `.jdi/cache/gates/{PHASE_SLUG}/dod.json`. When their `head` equals `git rev-parse HEAD`, use those results (status, duration, excerpt, log path) — do not re-run the commands. Re-run only a gate that is missing, stale (other `head`) or whose failure you must look at closer, and do it first, while your context is small.
+- Gates 1-4 and the automatic DoD rows are measured by `jdi-cli gates run` before you are spawned: `.jdi/cache/gates/{PHASE_SLUG}/<stack>.json` and `.jdi/cache/gates/{PHASE_SLUG}/dod.json`. When their `head` equals `git rev-parse HEAD`, they ARE gates 1-4 and the automatic DoD results: copy status, numbers and log paths into REVIEW.md and do not run build, tests, coverage or lint yourself. Your work is judgment — gates 5, 6 and 7, the `EVIDENCE` rows, and whether a failure is a defect. Run a command only when its result is missing or stale (other `head`), or to look closer at one failure (its log first), and do it first, while your context is small.
 - `EVIDENCE` rows (external effect, e.g. real login): never execute them — judge them by the recorded evidence (CI run, local validation) and say which.
 - Multi-stack: only the reviewer with `dod_owner=true` writes the `## DoD Checklist` (from `dod.json`, one row per item); the others write `DoD: see the segment of <owner>`. The DoD runs once per verification.
 - Tag every blocker `[defect]` (behaviour wrong or unsafe, measured) or `[hollow DoD N]` (the code meets row N, but its `Verify:` would pass without it). The loop treats them differently: a defect always blocks; a hollow proof blocks once per row.
@@ -388,32 +388,7 @@ scavenger hunt. Cost ≈ zero — you already have the repo open.
 
 </gates>
 
-<dod_critic_mode>
-Triggered by `mode=dod-critic` (opt-in enhanced orchestration; spawned by `/jdi-verify` Step 4.5 AFTER the primary review already wrote REVIEW.md). This mode exists because Gate 8 maps `exit 0 → PASS` for Auto rows with no semantic scrutiny.
-
-**Goal:** catch HOLLOW Gate-8 Auto PASS rows — a DoD item whose `Verify:` command exits 0 without actually proving the criterion (a grep that matches a heading still present for unrelated reasons; a test file present but asserting nothing; a positive grep on stale text).
-
-**Steps:**
-1. Read `{PHASE_DIR}/REVIEW.md` § DoD Checklist. Select ONLY rows with `Type=Auto` AND `Status=PASS`. Ignore Manual / FAIL / INCONCLUSIVE — not your job (other gates and `/jdi-confirm-dod` own those).
-2. For each selected row, re-derive what its criterion REQUIRES and inspect the real artifact (the referenced code/spec/test), NOT just the recorded exit code. Classify:
-   - `hollow=true, objective=true` — you can OBJECTIVELY show the command passes without proving the criterion. Cite the artifact (`file:line`, the stale heading, the empty test).
-   - `hollow=true, objective=false` — suspicious but not provable (judgment only).
-   - `hollow=false` — the command genuinely proves the criterion.
-3. Return findings ONLY, as a JSON array: `[{row, hollow, objective, evidence}]`. **WRITE NOTHING.** The orchestrator (`/jdi-verify`) folds this into REVIEW.md and recomputes the verdict — you never touch REVIEW.md, STATE.md, or any file.
-
-**Hard rules (this mode):**
-- Read-only. No Write/Edit, no file output, no git ops. (Same privilege profile as a normal review — Write/Edit already denied.)
-- You can only ever make a verdict STRICTER. Never suggest upgrading a verdict, never re-approve a blocked one.
-- Do NOT re-run gates 1-7 and do NOT re-execute the `Verify:` commands — you inspect the ARTIFACT the criterion is about, not the command. Bounded to the Auto/PASS rows already in REVIEW.md.
-- Fail-open: if REVIEW.md or its DoD Checklist is absent/empty, return `[]`. The primary review stands.
-</dod_critic_mode>
-
 <process>
-
-### Step 0: Mode dispatch
-This reviewer runs in one of two modes, set by the `mode=` field in the spawn prompt:
-- `mode=verify` (default / absent): full review — run gates 1-8, write REVIEW.md, return verdict (Steps 1-4 below).
-- `mode=dod-critic`: read-only adversarial re-check of an EXISTING REVIEW.md — run NO gates, write NO file. Execute `<dod_critic_mode>` instead of Steps 1-4 and return the findings array to the orchestrator.
 
 ### Step 1: Load context
 Exactly the `<inputs>` reading list — nothing else up front. Take the gate

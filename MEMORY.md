@@ -42,7 +42,7 @@ Priority order: most advanced artifact wins. `ROADMAP.md` carries no status line
 |   +-- {slug}.json
 +-- known-errors/        one known error per file: stage, globs, mechanized_by (0.17+)  TRACKED
 |   +-- {ID}.md          (`jdi-cli known-errors migrate` splits a legacy known-errors.md)
-+-- cache/               briefs/, gates/, learnings, decisions index, dod-schema     UNTRACKED (gitignored)
++-- cache/               briefs/, gates/ (+ bait.json), critic/, review/, learnings, decisions index   UNTRACKED (gitignored)
 +-- roadmap/             SOURCE OF TRUTH: one file per phase              TRACKED
 |   +-- _header.md       view preamble (project title, adopted context)
 |   +-- {slug}.md        frontmatter `order:` (may be fractional) + `name:` + `created_with:` (0.17+, written by `jdi-cli add-phase`); body = Slug/Goal lines
@@ -245,6 +245,18 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
     "reviewer": "inherit",
     "critic": "inherit"
   },
+  "economy": {
+    "critic": "lean",
+    "incremental_verify": true,
+    "wave_suite": true,
+    "sizing": true
+  },
+  "sizing": {
+    "lite_max_tasks": 3,
+    "lite_max_files": 6,
+    "lite_max_dod_rows": 6,
+    "sensitive_globs": []
+  },
   "compaction": {
     "archive_after": 5
   },
@@ -267,6 +279,10 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
 
 **Fields:**
 - `budgets.*_tokens` — size limit per artifact, in TOKENS (`context_tokens` for CONTEXT.md, `plan_tokens`, `summary_tokens`, `review_segment_tokens`, `brief_tokens`, `known_errors_query_tokens`). `verify_inline_chars`: longer `Verify:` bodies go to `{phase_dir}/verify/*.sh`. `enforce`: `warn` or `fail`.
+- `economy.critic` — `lean` (default: preflight once, then only rows never examined, whose proof changed or found hollow last time), `every_verify` (every automatic row each verify), `off`. The critic runs only when it is on for the phase (`orchestration.mode: "enhanced"` or `/jdi-issue`).
+- `economy.incremental_verify` — multi-stack: carry a reviewer whose scope did not change since its last run (the DoD owner always runs).
+- `economy.wave_suite` — build + tests of the touched stacks after each non-final wave of `/jdi-do`, through the gates runner.
+- `economy.sizing` + `sizing.*` — a phase within every `lite_max_*` limit, on one stack and with no file in `sensitive_globs`, runs all its tasks in one doer spawn (`jdi-cli size`). `false` = always full.
 - `loop.non_product_globs` — files that do not count as a product change for the ralph loop's convergence rule (`.jdi/**` never counts). E.g. `["docs/**", "*.md"]`.
 - `orchestration.max_resets_autonomous` — reset cap of the loop under `/jdi-issue` (no human at the gate); reaching it kills the loop.
 - `chars_per_token` — per language, used to estimate tokens. Measured: Claude tokenizes pt-BR JDI artifacts at 2.0-2.4 chars/token (the old "4 chars/token" undercounted twice).

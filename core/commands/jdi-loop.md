@@ -219,8 +219,11 @@ otherwise inline like Copilot.
 
 **Orchestration mode:** the loop itself IS the standard path — it never adds
 extra fan-out beyond doer/reviewer, so `orchestration.mode` (standard or
-enhanced) requires no branching here. The reviewer's enhanced DoD critic runs
-inside /jdi-verify semantics when configured.
+enhanced) requires no branching here. The DoD critic (`jdi-dod-critic`) runs
+inside /jdi-verify Step 4.5 when it is on, with its lean cadence: a round where
+no DoD proof changed spawns no critic. Inside the loop, verify is incremental
+on multi-stack projects (`review plan`): a reviewer whose scope the fix did
+not touch is carried, not re-spawned.
 </runtime_notes>
 
 <references>

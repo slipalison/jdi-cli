@@ -49,6 +49,7 @@ it so the machine reads exactly what you mean:
 | `**Verify:** \`bash .jdi/phases/<slug>/verify/dod-N.sh\`` | Anything longer lives in a script (`jdi-cli dod extract <slug>` moves it there verbatim, no `set -e` added). Agents read the criterion, not the script; only the gates runner executes it. |
 | `**Verify (evidence):**` | External effect (E2E with a real login, deploy, paid API, rate-limited service): never executed by the runner — the reviewer judges the recorded evidence named in `Evidence:`. |
 | `**Stack:** <reviewer>` | Optional. Routes the row to that reviewer's brief in a multi-stack project. |
+| `**Bait:** \`<mutation>\`` | Optional, recommended when the Verify is fast. A command that BREAKS the criterion (e.g. `sed -i 's/return total/return 0/' src/cart.rs`). `jdi-cli dod bait` runs it in a throwaway worktree at HEAD: the Verify must pass before and fail after. A Bait that survives is an objective hollow proof (BLOCKED once); a caught Bait replaces the critic's judgment for that row. Runs on the committed HEAD — uncommitted changes are not there. |
 | `### Deferred to PR review` | Section for criteria no machine can prove in `/jdi-issue` (autonomous) — listed in the PR body, never silently waived. |
 
 Lint rules (ERROR stops `/jdi-discuss` until fixed; WARN is reported):

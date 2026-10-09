@@ -5,11 +5,13 @@
 //   jdi-cli add-phase "<name>" [--slug s] [--goal g] [--reason r]
 //                     [--before <slug> | --after <slug>] [--unique]   (layout v3)
 //   --unique: a taken slug gets -2, -3 … instead of exit 3 (unattended intake)
-//   jdi-cli ship <phase> [--learnings-file <f>] [--no-archive]
+//   jdi-cli ship <phase> [--learnings-file <f>] [--no-archive] [--allow-stale "<reason>"]
 //
 // add-phase stamps `created_with: <version>` in the roadmap entry — the budget
 // rules of 0.17+ apply only to phases created from then on.
-// ship refuses BLOCKED / pending-manual phases, writes SHIPPED.md (learnings:
+// ship refuses BLOCKED / pending-manual phases and a stale review (product
+// files changed after the verify commit; exit 4 — `--allow-stale` records the
+// reason in SHIPPED.md), writes SHIPPED.md (learnings:
 // at most 5 one-line bullets, from the file the command's model wrote), updates
 // the advisory STATE.md and runs the archive compaction (config
 // compaction.archive_after; 0 = off). It prints JSON with the paths to commit.
@@ -119,7 +121,7 @@ function readLearnings(file) {
   return bullets;
 }
 
-function ship(root, phase, { learningsFile, archive = true } = {}) {
+function ship(root, phase, { learningsFile, archive = true, allowStale = null } = {}) {
   const shipped = path.join(phase.absDir, 'SHIPPED.md');
   if (fs.existsSync(shipped)) return { status: 'already-shipped', phase: phase.slug };
   const reviewFile = path.join(phase.absDir, 'REVIEW.md');
@@ -130,9 +132,14 @@ function ship(root, phase, { learningsFile, archive = true } = {}) {
   if (v.verdict === 'BLOCKED') throw new core.JdiError(`phase ${phase.slug} is BLOCKED — fix before ship`, 1);
   const pending = review.manualPending(text);
   if (v.verdict === 'APPROVED_PENDING_MANUAL' || pending > 0) throw new core.JdiError(`${pending || '?'} manual DoD item(s) unconfirmed — /jdi-confirm-dod ${phase.slug}`, 1);
+  const fresh = review.staleness(phase, root);
+  if (fresh.stale && !allowStale) {
+    throw new core.JdiError(`the review is stale: ${fresh.files.length} product file(s) changed after the verify commit ${fresh.since.slice(0, 10)} (${fresh.files.slice(0, 3).join(', ')}${fresh.files.length > 3 ? ', ...' : ''}) — /jdi-verify ${phase.slug}, or ship with --allow-stale "<reason>"`, 4);
+  }
   const learnings = readLearnings(learningsFile);
   const by = core.git(['config', 'user.name'], root).stdout || 'unknown';
   const body = [`shipped_at: ${new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')}`, `verdict: ${v.verdict}`, `by: ${by}`];
+  if (fresh.stale) body.push(`stale_review: ${fresh.files.length} product file(s) changed after ${fresh.since.slice(0, 10)} — ${String(allowStale).replace(/\s+/g, ' ')}`);
   if (learnings.length) body.push('', '## Learnings', ...learnings);
   fs.writeFileSync(shipped, body.join('\n') + '\n');
   const files = [path.relative(root, shipped)];
@@ -170,7 +177,7 @@ function main(cmd, argv) {
     const i = argv.indexOf(n);
     return i === -1 ? undefined : argv[i + 1];
   };
-  const valued = new Set(['--slug', '--goal', '--reason', '--before', '--after', '--learnings-file']);
+  const valued = new Set(['--slug', '--goal', '--reason', '--before', '--after', '--learnings-file', '--allow-stale']);
   const positional = argv.filter((a, i) => !a.startsWith('--') && !valued.has(argv[i - 1]));
   let out;
   if (cmd === 'add-phase') {
@@ -178,7 +185,7 @@ function main(cmd, argv) {
     out = addPhase(root, { name: positional[0], slug: opt('--slug'), goal: opt('--goal'), reason: opt('--reason'), before: opt('--before'), after: opt('--after'), unique: argv.includes('--unique') });
   } else if (cmd === 'ship') {
     if (!positional[0]) throw new core.JdiError('usage: jdi ship <phase> [--learnings-file f] [--no-archive]', 1);
-    out = ship(root, core.resolvePhase(positional[0], root), { learningsFile: opt('--learnings-file'), archive: !argv.includes('--no-archive') });
+    out = ship(root, core.resolvePhase(positional[0], root), { learningsFile: opt('--learnings-file'), archive: !argv.includes('--no-archive'), allowStale: opt('--allow-stale') || null });
   }
   process.stdout.write(JSON.stringify(out) + '\n');
   return 0;

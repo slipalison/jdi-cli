@@ -59,6 +59,19 @@ case "$VERDICT" in
 esac
 ```
 
+The review must describe the code being shipped:
+
+```bash
+npx -y {{JDI_CLI}} review fresh "$PHASE_SLUG" >/dev/null; FRESH_RC=$?   # 3 = product files changed after the verify commit
+```
+
+`FRESH_RC` = 3 → AskUserQuestion: "Code changed after the verify. Re-verify
+(recommended) / Ship anyway (the reason is recorded in SHIPPED.md)".
+Re-verify → stop and point to `/jdi-verify $PHASE_SLUG`. Ship anyway → set
+`ALLOW_STALE="<the user's reason>"`. Autonomous `/jdi-issue` never ships a
+stale review: it re-verifies. (`.jdi/` and `loop.non_product_globs` do not
+count as code.)
+
 (`jdi-cli ship` in Step 5 re-checks all of this and also refuses any DoD
 Checklist row still `MANUAL_REQUIRED`; `REJECTED` rows are audited waivers and
 do not block.)
@@ -95,7 +108,7 @@ pitfalls, waived criteria, systemic warnings) — to
 
 ```bash
 LEARN_ARG=""; [ -f ".jdi/cache/learnings-$PHASE_SLUG.md" ] && LEARN_ARG="--learnings-file .jdi/cache/learnings-$PHASE_SLUG.md"
-SHIP=$(npx -y {{JDI_CLI}} ship "$PHASE_SLUG" $LEARN_ARG) || { echo "Ship refused: $SHIP"; exit 1; }
+SHIP=$(npx -y {{JDI_CLI}} ship "$PHASE_SLUG" $LEARN_ARG ${ALLOW_STALE:+--allow-stale "$ALLOW_STALE"}) || { echo "Ship refused (reason above)."; exit 1; }
 ```
 
 `SHIP` is JSON: writes `$PHASE_DIR/SHIPPED.md` (`shipped_at`, `verdict`, `by`,

@@ -5,6 +5,7 @@
 //   dod parse <CONTEXT.md|phase> [--json]        items: id, type, criterion, verify
 //   dod lint  <CONTEXT.md|phase> [--json]        a.k.a. validate-dod (exit 1 on ERROR)
 //   dod extract <phase> [--dry-run] [--all]      long `Verify:` bodies -> verify/dod-N.sh
+//   dod bait <phase> [--rows 1,2] [--all]        mutation check of rows with `Bait:` (bait.js)
 //
 // Why: in a real project the DoD was 64-86% of CONTEXT.md and the `Verify:`
 // lines alone 48-70% — every agent that read CONTEXT.md paid for scripts only
@@ -83,6 +84,7 @@ function parse(text, file = '<CONTEXT.md>') {
         verifyLine: null,
         source: null,
         stack: null,
+        bait: null,
         hasEvidenceField: false,
       };
       items.push(cur);
@@ -105,6 +107,11 @@ function parse(text, file = '<CONTEXT.md>') {
       cur.source = src[1].trim();
       continue;
     }
+    const bt = /^\s*\*\*Bait:\*\*\s*(.*)$/.exec(l);
+    if (bt) {
+      cur.bait = splitVerify(bt[1].trim()).command.trim() || null;
+      continue;
+    }
     const st = /^\s*\*\*Stack:\*\*\s*(.*)$/.exec(l);
     if (st) {
       cur.stack = st[1].trim();
@@ -120,6 +127,17 @@ function parse(text, file = '<CONTEXT.md>') {
     if (it.verify && /human confirmation required/i.test(it.verify.raw)) it.type = it.type === 'deferred' ? 'deferred' : 'manual';
   }
   return { found: true, items, start: start + 1, end, file };
+}
+
+// Identity of a DoD row's proof: the criterion, the Verify, the Bait and the
+// verify script's bytes. The critic and the bait runner re-examine a row only
+// when this changes (or when its last result was not clean).
+function rowHash(item, root = process.cwd()) {
+  const crypto = require('node:crypto');
+  const h = crypto.createHash('sha256');
+  h.update(`${item.criterion}\n${item.verify ? item.verify.raw : ''}\n${item.evidence ? 'evidence' : ''}\n${item.bait || ''}\n`);
+  if (item.script) h.update(core.readIf(path.join(root, item.script)) || '');
+  return h.digest('hex').slice(0, 16);
 }
 
 // --------------------------------------------------------------------------
@@ -352,6 +370,7 @@ function main(argv) {
     }
     return findings.some((f) => f.level === 'ERROR') ? 1 : 0;
   }
+  if (sub === 'bait') return require('./bait').main(rest);
   if (sub === 'extract') {
     const { phase } = targetFile(args[0], root);
     if (!phase) throw new core.JdiError('dod extract precisa da fase (slug ou posicao), nao de um arquivo', 1);
@@ -363,7 +382,7 @@ function main(argv) {
     }
     return 0;
   }
-  throw new core.JdiError('usage: jdi dod <parse|lint|extract> <CONTEXT.md|phase> [--json] [--dry-run] [--all]', 1);
+  throw new core.JdiError('usage: jdi dod <parse|lint|extract|bait> <CONTEXT.md|phase> [--json] [--dry-run] [--all]', 1);
 }
 
-module.exports = { main, parse, lint, lintCommand, extract, splitVerify };
+module.exports = { main, parse, lint, lintCommand, extract, splitVerify, rowHash };

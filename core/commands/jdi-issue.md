@@ -128,6 +128,7 @@ Follow the installed `/jdi-discuss` process for `$SLUG` with:
 
 ```
 asker dispatch: phase_slug=$SLUG, mode=auto, dod=auto_only, card=<full card text + source url>
+critic=on   (Step 4.6 preflight runs: hollow proofs are fixed before any code)
 ```
 
 - The brief is the PRIMARY source: card constraints → locked decisions; card
@@ -155,10 +156,13 @@ asker dispatch: phase_slug=$SLUG, mode=auto, dod=auto_only, card=<full card text
   with the per-round cap of 5 that is 15 iterations absolute. `killed` is a
   FULL STOP — killed work is never shipped; autonomy ends where proof of
   quality ends. Never edit LOOP.md by hand.
-- **Force the critic**: when following `/jdi-verify` (inside the loop), run
-  Step 4.5 (DoD critic) whenever the runtime can spawn read-only sub-agents —
-  regardless of `orchestration.mode`. No human is watching; the critic is the
-  skeptic in the room. (The critic can only tighten the verdict, never loosen it.)
+- **Critic on** (`critic=on`): when following `/jdi-verify` (inside the loop),
+  Step 4.5 runs whenever the runtime can spawn sub-agents — regardless of
+  `orchestration.mode` and of the phase size. No human is watching; the critic
+  is the skeptic in the room, and it can only tighten the verdict. Its lean
+  cadence still applies: each round it examines only rows never examined,
+  rows whose proof changed and rows found hollow last time — not every row
+  again (`economy.critic: "every_verify"` restores that).
 
 ### Step 6: Warnings get one fix round (stricter than interactive)
 

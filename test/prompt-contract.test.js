@@ -80,7 +80,7 @@ test('specialist templates: no <skills_to_load> (no Skill tool) and a return con
 });
 
 test('every core agent spawned by a command has a return contract', () => {
-  for (const name of ['jdi-asker', 'jdi-planner']) {
+  for (const name of ['jdi-asker', 'jdi-planner', 'jdi-dod-critic']) {
     const t = read(path.join(ROOT, 'core/agents', `${name}.md`));
     assert.ok(t.includes('<return_contract>'), `${name} lacks <return_contract>`);
   }
@@ -139,4 +139,11 @@ test('specialist managed blocks: every template block is balanced and named', ()
     assert.ok(opens >= 2, `${rel(p)}: expected managed blocks`);
     assert.equal(opens, (t.match(/<!-- jdi:\/managed -->/g) || []).length, `${rel(p)}: unbalanced jdi:managed`);
   }
+});
+
+test('the DoD critic is its own small agent: no reviewer critic mode left in templates or commands', () => {
+  assert.deepEqual(violations(COMMANDS, /mode=dod-critic/), []);
+  for (const p of SPECIALIST_TEMPLATES) assert.ok(!read(p).includes('<dod_critic_mode>'), `${rel(p)} still carries <dod_critic_mode>`);
+  const critic = read(path.join(ROOT, 'core/agents/jdi-dod-critic.md'));
+  assert.ok(critic.length < 6000, `jdi-dod-critic.md is ${critic.length} chars — it is spawned every verify round; keep it small`);
 });
