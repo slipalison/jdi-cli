@@ -394,13 +394,22 @@ test('loop: BLOCKED with no readable reasons or a failed gate never converges; a
   assert.equal(jdi(root, ['review', 'verdict', 'alpha']).stdout.trim(), 'APPROVED_WITH_WARNINGS');
 });
 
-test('dod.extra_lint gets the CONTEXT path as data, never as shell text', () => {
+test('dod.extra_lint runs without a shell: the CONTEXT path is one argument, never shell text', () => {
   const { root } = project();
   const dir = path.join(root, '.jdi/phases/x$(touch PWNED)y');
   write(root, '.jdi/phases/x$(touch PWNED)y/CONTEXT.md', CONTEXT);
-  write(root, '.jdi/config.json', JSON.stringify({ dod: { extra_lint: 'printf "%s:3: AVISO PROJ-1 seen\\n" {file}' } }));
+  write(root, 'lint.js', "console.log(process.argv[2] + ':3: AVISO PROJ-2 seen');\n");
   const dod = require('../bin/lib/dod');
-  const found = dod.lint(path.join(dir, 'CONTEXT.md'), { root });
-  assert.ok(found.some((f) => f.rule === 'PROJ-1' && f.level === 'WARN' && f.line === 3), JSON.stringify(found.filter((f) => f.rule === 'PROJ-1')));
+  // array form
+  write(root, '.jdi/config.json', JSON.stringify({ dod: { extra_lint: ['node', '-e', "console.log(process.argv[1] + ':3: AVISO PROJ-1 seen')", '{file}'] } }));
+  let found = dod.lint(path.join(dir, 'CONTEXT.md'), { root });
+  assert.ok(found.some((f) => f.rule === 'PROJ-1' && f.level === 'WARN' && f.line === 3), JSON.stringify(found.filter((f) => f.rule.startsWith('PROJ') || f.rule === 'extra_lint')));
+  // string form, split on spaces
+  write(root, '.jdi/config.json', JSON.stringify({ dod: { extra_lint: 'node lint.js {file}' } }));
+  found = dod.lint(path.join(dir, 'CONTEXT.md'), { root });
+  assert.ok(found.some((f) => f.rule === 'PROJ-2' && f.level === 'WARN'), JSON.stringify(found.filter((f) => f.rule.startsWith('PROJ') || f.rule === 'extra_lint')));
   assert.equal(fs.existsSync(path.join(root, 'PWNED')), false, 'a $(...) in the path ran');
+  // a program that does not exist is an ERROR, not silence
+  write(root, '.jdi/config.json', JSON.stringify({ dod: { extra_lint: 'no-such-program-jdi {file}' } }));
+  assert.ok(dod.lint(path.join(dir, 'CONTEXT.md'), { root }).some((f) => f.rule === 'extra_lint' && f.level === 'ERROR'));
 });

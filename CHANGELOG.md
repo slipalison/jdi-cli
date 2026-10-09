@@ -9,8 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **`dod.extra_lint`**: the CONTEXT.md path was interpolated into a
-  `shell: true` command, so a `$(...)` in the path would run. It now reaches
-  bash as an argument (`{file}` → `"$1"`). Found by Semgrep.
+  `shell: true` command, so a `$(...)` in the path would run (found by
+  Semgrep). It now runs WITHOUT a shell: a program and its arguments (an array,
+  or a string split on spaces — `"bash .jdi/scripts/dod-lint.sh {file}"` keeps
+  working), with `{file}` as one argument. No pipes or redirection in it; put
+  them in a script. (CodeQL `js/shell-command-injection-from-environment`.)
 - **`npm-publish.yml`**: the `workflow_dispatch` tag was pasted into the run
   script; it now comes through `env`.
 
