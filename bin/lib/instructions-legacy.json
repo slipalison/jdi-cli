@@ -1,0 +1,98 @@
+[
+  {
+    "runtime": "claude",
+    "bytes": 3619,
+    "sha256": "8639d9dc743138f10da8456add6d22a5f89f7dfaa046b8bc259b9a82ba07fe98",
+    "commit": "27cb4af"
+  },
+  {
+    "runtime": "claude",
+    "bytes": 3482,
+    "sha256": "86a537e8d0977262be44827e83370ff521c2e9ac03881aee0d2580c1dec03a6c",
+    "commit": "172269c"
+  },
+  {
+    "runtime": "claude",
+    "bytes": 3288,
+    "sha256": "038ba27d87c2d1b1ff82ad752414e826ef9770ba34281971d4758a69dfc4b010",
+    "commit": "ee89d3a"
+  },
+  {
+    "runtime": "copilot",
+    "bytes": 4595,
+    "sha256": "a2aea3363701bdbc5183547eb4376154be738d3b22be279c7a48b051f042fafd",
+    "commit": "c1c6cc2"
+  },
+  {
+    "runtime": "copilot",
+    "bytes": 2947,
+    "sha256": "fb5f987ade16b6da5bade9970d5528a69c48d4941b482fc4078c78c2a43e14f0",
+    "commit": "9841c96"
+  },
+  {
+    "runtime": "copilot",
+    "bytes": 2761,
+    "sha256": "58d90931f4f0346a9cb6f76915b4dc463bf690e3359d707785f68da897d0330e",
+    "commit": "428d014"
+  },
+  {
+    "runtime": "copilot",
+    "bytes": 2741,
+    "sha256": "18fd7fc06ba92c1f80b9656918febf6d213922566914b263aa9f76e40a72cbfe",
+    "commit": "27cb4af"
+  },
+  {
+    "runtime": "copilot",
+    "bytes": 2604,
+    "sha256": "26fe81fc733b0fbf0c76185b54dc2b9bfe745e974dcea19f6b3c1d1f50332e48",
+    "commit": "172269c"
+  },
+  {
+    "runtime": "copilot",
+    "bytes": 2410,
+    "sha256": "d36c7b38c26f41d69e5cc3f4626ff70444236126765ea964af17ffdb3c57c4f9",
+    "commit": "ee89d3a"
+  },
+  {
+    "runtime": "opencode",
+    "bytes": 2977,
+    "sha256": "80a6460971b9aaf829c0e4b4589f1f1bf47f7d01de8e7b2a168979cba0f6363f",
+    "commit": "27cb4af"
+  },
+  {
+    "runtime": "opencode",
+    "bytes": 2840,
+    "sha256": "91f0af87e96bfa5007679acaee59f5bb0974e481f95bef09e4996a35fdb89ec5",
+    "commit": "172269c"
+  },
+  {
+    "runtime": "opencode",
+    "bytes": 2646,
+    "sha256": "ce6500cd38ffdfe018d40ff9465a0daee118ed6abac4dcf92e80824345279618",
+    "commit": "ee89d3a"
+  },
+  {
+    "runtime": "junie",
+    "bytes": 2126,
+    "sha256": "350042f09668835103ca39d8484b940b9825de7bb1cc624eba4fa5be41414199",
+    "commit": "36a0c8e"
+  },
+  {
+    "runtime": "antigravity",
+    "bytes": 2823,
+    "sha256": "470c02575db899df6c71a97245a0ac6d24c9998c677b7c996dd406bafcd7e363",
+    "commit": "27cb4af"
+  },
+  {
+    "runtime": "antigravity",
+    "bytes": 2686,
+    "sha256": "8ba9904e763dd26887bc5c8ba8037d48990a7644eb3ca6c5e0e2e1c82d40cbce",
+    "commit": "172269c"
+  },
+  {
+    "runtime": "antigravity",
+    "bytes": 2492,
+    "sha256": "9ad466975c0191819fb6fc181f58aa2c9dd5f2a3d341a3c4f4fa4c684a9f8dff",
+    "commit": "ee89d3a"
+  }
+]

@@ -236,6 +236,12 @@ function Main {
 
   Build-StandaloneSkills
 
+  # Ultimo passo, igual nos dois builders: blocos por runtime + CLI fixado na
+  # versao do package.json (bin/lib/build-postprocess.js).
+  Write-Output ""
+  & node ([System.IO.Path]::Combine($Root, 'bin', 'lib', 'build-postprocess.js')) $Out
+  if ($LASTEXITCODE -ne 0) { throw "build-postprocess falhou (exit $LASTEXITCODE)" }
+
   Write-Output "`nBuild completo. Veja runtimes/$Target/"
 }
 

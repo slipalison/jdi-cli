@@ -1,0 +1,65 @@
+name: CI
+
+# Pull requests and main: unit tests on Linux and Windows, and the build-drift
+# check — runtimes/ is generated from core/ by two builders (bash and
+# PowerShell) that must produce exactly the committed bytes.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: ["20", "22"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Unit tests
+        run: node test/run.js
+
+  build-drift:
+    name: Build drift (bash + PowerShell)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build with bash
+        run: bash bin/jdi-build.sh
+
+      - name: runtimes/ matches the committed build (bash)
+        run: git diff --exit-code -- runtimes/
+
+      - name: Build with PowerShell
+        shell: pwsh
+        run: ./bin/jdi-build.ps1
+
+      - name: runtimes/ matches the committed build (PowerShell)
+        run: git diff --exit-code -- runtimes/

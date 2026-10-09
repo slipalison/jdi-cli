@@ -38,7 +38,7 @@ No agent invoked. No file mutation. Safe to run anytime.
 
 ### Step 1: Validation
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y {{JDI_CLI}} render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new first."; exit 1; }
@@ -55,7 +55,7 @@ if [ ! -f .jdi/STATE.md ]; then
   echo "STATE.md absent — regenerating advisory cache from phase artifacts."
   PROJECT_SLUG=$(awk '/^## Slug/{getline; while ($0 ~ /^[[:space:]]*$/) getline; print; exit}' .jdi/PROJECT.md)
   POS=1; SLUG=""; FOUND=false
-  while RESOLVED="$(npx -y jdi-cli resolve-phase "$POS" 2>/dev/null)"; do
+  while RESOLVED="$(npx -y {{JDI_CLI}} resolve-phase "$POS" 2>/dev/null)"; do
     eval "$RESOLVED"
     if [ ! -f "$JDI_PHASE_DIR/SHIPPED.md" ]; then SLUG="$JDI_PHASE_SLUG"; FOUND=true; break; fi
     POS=$((POS+1))
@@ -104,7 +104,7 @@ TOTAL=$(grep -cE '^### Phase ' .jdi/ROADMAP.md)
 # Resolve phase (handles slug OR int)
 PHASE_DIR=""; PHASE_NAME=""; PHASE_POSITION=""
 if [ -n "$CURRENT_ID" ]; then
-  if RESOLVED="$(npx -y jdi-cli resolve-phase "$CURRENT_ID" 2>/dev/null)"; then
+  if RESOLVED="$(npx -y {{JDI_CLI}} resolve-phase "$CURRENT_ID" 2>/dev/null)"; then
     eval "$RESOLVED"
     PHASE_DIR="$JDI_PHASE_DIR"
     PHASE_POSITION="$JDI_PHASE_POSITION"

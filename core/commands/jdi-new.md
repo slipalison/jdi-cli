@@ -94,33 +94,19 @@ grep -q '## Definition of Done' .jdi/PROJECT.md || { echo "PROJECT.md missing §
 
 ### Step 4: Create config.json (token/context budget)
 
-If `.jdi/config.json` does not yet exist, write the default below. Defaults (200k context, 60/70% warn/critical, coverage 80%) cover 95% of cases. User edits if running a 1M-window model or wanting tighter thresholds.
+If `.jdi/config.json` does not exist yet, write the default from the single
+canonical source shipped in the package (`templates-jdi-folder/config.json`,
+#57), and record the JDI version this project runs:
 
-```json
-{
-  "$schema_version": "1.2",
-  "context_window": 200000,
-  "thresholds": {
-    "warn_pct": 60,
-    "critical_pct": 70
-  },
-  "budgets": {
-    "max_context_chars": 6000,
-    "max_plan_chars": 12000,
-    "max_summary_chars": 8192
-  },
-  "compaction": {
-    "archive_after": 5
-  },
-  "orchestration": {
-    "mode": "standard",
-    "source": "default"
-  },
-  "coverage_min": 80
-}
+```bash
+[ -f .jdi/config.json ] || npx -y {{JDI_CLI}} template config --out .jdi/config.json
+printf '%s' '{{JDI_VERSION}}' > .jdi/VERSION
 ```
 
-Canonical reference for the default also lives in `templates-jdi-folder/config.json` (shipped by npm package) — for users wanting to regenerate manually.
+The default covers: token budgets per artifact (`budgets`, measured in tokens
+with `chars_per_token` per language),
+model per role (`models`, `inherit` = the session's model), compaction and
+coverage. Edit by hand afterwards when needed.
 
 #### Step 4b: Enhanced orchestration opt-in (host-neutral capability flag)
 
@@ -137,6 +123,13 @@ Determine the value **once, here, in this top-level command turn** — host capa
    ```
    Options: `[Enhanced — use extra agents when available]` / `[Standard — single-agent always (default)]`
 3. Write the chosen `mode` into the `orchestration` block; set `source` to `"user"` (or keep `"detected"` if the user accepts the detected default without changing it). **Never** store a token budget here — this is a boolean capability switch, not an accounting ledger.
+
+#### Step 4c: Commit the config
+
+```bash
+git add .jdi/config.json .jdi/VERSION
+git diff --cached --quiet || git commit -m "chore(jdi): config and version"
+```
 
 ### Step 5: Confirm
 

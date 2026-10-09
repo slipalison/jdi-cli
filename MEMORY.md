@@ -216,16 +216,28 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
 
 ```json
 {
-  "$schema_version": "1.2",
-  "context_window": 200000,
-  "thresholds": {
-    "warn_pct": 60,
-    "critical_pct": 70
-  },
+  "$schema_version": "1.3",
   "budgets": {
-    "max_context_chars": 6000,
-    "max_plan_chars": 12000,
-    "max_summary_chars": 8192
+    "context_tokens": 10000,
+    "plan_tokens": 12000,
+    "summary_tokens": 3000,
+    "review_segment_tokens": 6000,
+    "brief_tokens": 6000,
+    "known_errors_query_tokens": 2000,
+    "verify_inline_chars": 300,
+    "phase_extra_file_kb": 50,
+    "enforce": "warn"
+  },
+  "chars_per_token": {
+    "pt-BR": 2.2,
+    "en": 3.2
+  },
+  "models": {
+    "asker": "inherit",
+    "planner": "inherit",
+    "doer": "inherit",
+    "reviewer": "inherit",
+    "critic": "inherit"
   },
   "compaction": {
     "archive_after": 5
@@ -234,22 +246,25 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
     "mode": "standard",
     "source": "default"
   },
+  "gate": {
+    "code_globs": ["src/**"]
+  },
   "coverage_min": 80
 }
 ```
 
-**Who edits:** `/jdi-new` writes it directly via Write if absent (default inlined in the command prompt). `templates-jdi-folder/config.json` is the canonical reference for the default, shipped by the npm package. User edits manually afterwards. Commands only read.
+**Who edits:** `/jdi-new` and `/jdi-adopt` write it from the single canonical file (`npx -y jdi-cli template config`, i.e. `templates-jdi-folder/config.json`) if absent, and commit it. User edits manually afterwards. Commands only read.
 
 **Fields:**
-- `context_window` — window of the model in use. 200k = default (Claude Sonnet/Opus). 1_000_000 for 1M-window models.
-- `thresholds.warn_pct` — when the orchestrator warns "context heating up". Default 60%.
-- `thresholds.critical_pct` — when the orchestrator suggests starting the next phase in a fresh session. Default 70% (fracture zone, based on context-rot research).
-- `budgets.max_*_chars` — caps used by commands when truncating artifacts before inlining. Heuristic: ~4 chars/token.
-- `compaction.archive_after` — phases older than this delta from the current position move to `.jdi/archive/` (executed by `/jdi-ship`).
+- `budgets.*_tokens` — size limit per artifact, in TOKENS (`context_tokens` for CONTEXT.md, `plan_tokens`, `summary_tokens`, `review_segment_tokens`, `brief_tokens`, `known_errors_query_tokens`). `verify_inline_chars`: longer `Verify:` bodies go to `{phase_dir}/verify/*.sh`. `enforce`: `warn` or `fail`.
+- `chars_per_token` — per language, used to estimate tokens. Measured: Claude tokenizes pt-BR JDI artifacts at 2.0-2.4 chars/token (the old "4 chars/token" undercounted twice).
+- `models.<role>` — `asker`, `planner`, `doer`, `reviewer`, `critic`: `inherit` (the session's model) or a model the user chose; the commands pass it as the Agent `model` parameter where the runtime supports it. Tokens do not change with the model; the price per token does.
+- `compaction.archive_after` — phases older than this delta from the current position move to `.jdi/archive/` (executed by `/jdi-ship`). `0` disables it.
 - `coverage_min` — overridable per PROJECT.md. Reviewer uses it.
 - `orchestration.mode` — `standard` (default) or `enhanced`. Host-neutral flag: when `enhanced` AND the host can orchestrate sub-agents, commands MAY run optional multi-agent layers (advisory critics); otherwise they degrade to the standard path. Off-path is byte-identical. Capability boolean, NOT a token ledger.
 - `orchestration.next_execution` — `step` (default) or `loop`. With `loop`, `/jdi-next` routes the execute/verify states (`planned`, `executed`, `verified+BLOCKED`) to `/jdi-loop` instead of single `do`/`verify` steps. Per-project opt-in — ralph presumes a trustworthy test suite. Absent = `step`.
 - `orchestration.source` — `default` | `user` | `detected`. Provenance/audit only, never drives behavior.
+- Removed in 1.3: `context_window` and `thresholds` (no command can see the session size from a file — the rule is one orchestration session per phase).
 
 **Lifespan:** life of the project. Versioned in git.
 
@@ -638,9 +653,9 @@ Hard rule — reference in `ARCHITECTURE.md > Read-depth scaling`. Summary here 
 | 2+ phases back | Do not read body. List/`head` only |
 | `.jdi/archive/` | Treat as a distant phase. Do not read body |
 
-PROJECT.md, ROADMAP.md, DECISIONS.md, config.json: full read **always allowed** — they are short by design and stable (good prompt-cache prefix candidates).
+PROJECT.md and config.json: read by section. DECISIONS.md is a growing view: read decisions through `jdi-cli decisions --ids/--recent/--index`, never whole. Files read by an agent are not a prompt-cache prefix for the next agent — each spawn pays for its own reads.
 
 Exceptions:
-- `jdi-asker` reads up to 2 previous CONTEXT.md files (agent rule)
+- `jdi-asker` reads the decisions index (init + 2 most recent phases), not previous CONTEXT.md bodies
 - `/jdi-verify` reads the previous phase's PLAN.md if a current task references a `D-XX` from that phase (traceability)
-- `jdi-planner` and the doer read `## Learnings` from SHIPPED.md of the up-to-3 most recently shipped phases (≤10 lines each — cross-phase feedback, cheap by design)
+- `jdi-planner` and the doer read `## Learnings` of the 3 most recently shipped phases through `jdi-cli learnings --last 3` (ordered by `shipped_at`, capped)

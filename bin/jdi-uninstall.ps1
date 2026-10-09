@@ -123,6 +123,23 @@ function Remove-UniversalSkills {
 }
 
 # Remove um arquivo unico apos confirmacao, se ele existir.
+# Instruction files (CLAUDE.md, AGENTS.md, ...): with the JDI managed block
+# (0.16.0+) only the block is removed - the project's rules stay, and the file
+# is deleted only when nothing else is left. Files from <= 0.15.x (no markers)
+# keep the old behavior: remove the whole file only after confirmation.
+function Uninstall-Instructions {
+  param([string]$Path, [string]$Label)
+  if (-not (Test-Path $Path)) { return }
+  $text = [System.IO.File]::ReadAllText($Path)
+  if ($text.Contains('<!-- JDI:BEGIN')) {
+    if ($DryRun) { Write-Output "  [dry-run] removeria o bloco JDI de: $Label"; return }
+    $helper = [System.IO.Path]::Combine((Split-Path -Parent $PSScriptRoot), 'bin', 'lib', 'instructions.js')
+    & node $helper strip $Path
+  } elseif (Confirm-Action "Remover $Label? (pode ter sido editado)") {
+    Remove-Item-Safe $Path $Label
+  }
+}
+
 function Remove-FileWithConfirm {
   param(
     [string]$Path,
@@ -170,9 +187,7 @@ function Uninstall-Claude {
       Remove-Item-Safe (Join-Path $t.Dir "hooks\$h") "hooks/$h"
     }
     if ($t.Scope -eq 'project') {
-      Remove-FileWithConfirm -Path (Join-Path $ProjectDir 'CLAUDE.md') `
-        -Label "CLAUDE.md" `
-        -Prompt "Remover CLAUDE.md? (pode ter sido editado)"
+      Uninstall-Instructions -Path (Join-Path $ProjectDir 'CLAUDE.md') -Label "CLAUDE.md"
     }
   }
 }
@@ -190,9 +205,7 @@ function Uninstall-Copilot {
       }
     }
     Remove-UniversalSkills -BaseDir $t.Dir
-    Remove-FileWithConfirm -Path (Join-Path $t.Dir 'copilot-instructions.md') `
-      -Label ".github/copilot-instructions.md" `
-      -Prompt "Remover .github/copilot-instructions.md? (pode ter sido editado)"
+    Uninstall-Instructions -Path (Join-Path $t.Dir 'copilot-instructions.md') -Label ".github/copilot-instructions.md"
   }
 }
 
@@ -210,9 +223,7 @@ function Uninstall-Antigravity {
     }
     Remove-UniversalSkills -BaseDir $t.Dir
     if ($t.Scope -eq 'project') {
-      Remove-FileWithConfirm -Path (Join-Path $t.Dir 'agents.md') `
-        -Label "agents.md" `
-        -Prompt "Remover $($t.Dir)/agents.md (Antigravity)? (pode ter sido editado)"
+      Uninstall-Instructions -Path (Join-Path $t.Dir 'agents.md') -Label "$($t.Dir)/agents.md (Antigravity)"
       Remove-FileWithConfirm -Path (Join-Path $ProjectDir 'agents.md') `
         -Label "agents.md (root, 1.x)" `
         -Prompt "Remover agents.md legado do root (Antigravity 1.x)? (pode ter sido editado)"
@@ -238,9 +249,7 @@ function Uninstall-Opencode {
     Remove-PrefixedFiles -BaseDir $t.Dir -SubDir 'commands' -Filter 'jdi-*.md'
     Remove-UniversalSkills -BaseDir $t.Dir
     if ($t.Scope -eq 'project') {
-      Remove-FileWithConfirm -Path (Join-Path $ProjectDir 'AGENTS.md') `
-        -Label "AGENTS.md" `
-        -Prompt "Remover AGENTS.md (OpenCode)? (pode ter sido editado)"
+      Uninstall-Instructions -Path (Join-Path $ProjectDir 'AGENTS.md') -Label "AGENTS.md (OpenCode)"
       Remove-FileWithConfirm -Path (Join-Path $t.Dir 'opencode.jsonc') `
         -Label ".opencode/opencode.jsonc" `
         -Prompt "Remover .opencode/opencode.jsonc? (pode ter config customizada)"
@@ -283,9 +292,7 @@ function Uninstall-Junie {
     }
     Remove-UniversalSkills -BaseDir $t.Dir
     if ($t.Scope -eq 'project') {
-      Remove-FileWithConfirm -Path (Join-Path $t.Dir 'AGENTS.md') `
-        -Label ".junie/AGENTS.md" `
-        -Prompt "Remover .junie/AGENTS.md? (pode ter sido editado)"
+      Uninstall-Instructions -Path (Join-Path $t.Dir 'AGENTS.md') -Label ".junie/AGENTS.md"
     }
   }
 }

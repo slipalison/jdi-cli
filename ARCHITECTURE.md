@@ -225,34 +225,30 @@ Multi-developer coordination rests on five invariants:
 
 ## Read-depth scaling (token budget)
 
-Hard rule: **read-depth scales with distance from the current phase**. The orchestrator and agents do not read arbitrary phase bodies — they read what is needed.
+Hard rule: **each agent reads only what its step needs, and every read is paid
+again on each later turn of that agent.** Files read by one agent are NOT a
+cache prefix for the next one (measured: a fresh spawn shares ~2-3k cached
+tokens with earlier ones; the rest is written to the cache again), so "long-term
+files are short and cached" is not a reason to read them whole.
 
-| Distance | File | Allowed read |
+| Who | Reads | Never reads |
 |---|---|---|
-| `current_phase` | CONTEXT, PLAN, SUMMARY, REVIEW of the phase | Full body (up to `config.json` budget) |
-| `current_phase - 1` | previous SUMMARY.md, REVIEW.md | **Frontmatter + verdict only.** Never the body. |
-| `<= current_phase - 2` | old phases | **Do not read.** Existence via `ls`. Metadata via `head -10`. |
-
-**Documented exceptions:**
-- `/jdi-verify N` may read `PLAN.md` of phase `N-1` if the current task references a D-XX from that phase (traceability)
-- `/jdi-discuss N` (asker) reads up to **2 previous CONTEXT.md files** (rule already in `core/agents/jdi-asker.md`)
-- `jdi-researcher` reads PROJECT/ROADMAP in full — they are short by design (PROJECT cap 80 lines, ROADMAP is a summary)
-- `jdi-planner` and the doer read `## Learnings` from the SHIPPED.md of the up-to-3 most recently shipped phases (≤10 lines each): cross-phase failure feedback at a few hundred tokens — one avoided ralph iteration repays it ~30×
-
-**Why:**
-- Phase 8 does not need the body of phase 1's SUMMARY. The frontmatter already carries `status` + `verdict`.
-- Context rot: Anthropic/Chroma 2025 research confirms — recall degrades with tokens, even inside the limit.
-- Cache hits go up: immutable files (PROJECT, DECISIONS) become a stable prefix.
+| doer | its task block in PLAN.md, CONTEXT § Locked decisions + the DoD lines for its files, `learnings --last 3`, `decisions --ids` | other tasks, other phases, whole DECISIONS.md |
+| reviewer | PROJECT § DoD, CONTEXT § decisions + DoD, PLAN task list, SUMMARY, the diff of its glob, `decisions --ids` for Gate 6 | other phases, previous REVIEW copies |
+| asker | PROJECT, its roadmap entry, `.jdi/cache/decisions.md` (index of init + 2 most recent phases), `.jdi/cache/dod-schema.md` | old CONTEXT.md bodies, whole DECISIONS.md |
+| planner | CONTEXT, PROJECT § Stack/Code Design, `.jdi/specialists.md`, `.jdi/cache/learnings.md`, code ranges | specialist bodies, old PLAN.md files |
+| everyone | — | instruction files the runtime injects (CLAUDE.md, AGENTS.md, rules) |
 
 **How to apply (orchestrator):**
-- Before a `Read` on a previous phase's file: check the distance via STATE.md
-- Use `head -20` instead of `cat` when you only want frontmatter
-- Archived phases (`.jdi/archive/`): treat as `<= current - 2`. Do not read the body.
-- For large files in the current phase, truncate before inlining into a prompt:
-  ```bash
-  npx -y jdi-cli truncate .jdi/phases/auth-flow/PLAN.md 12000   # cap in chars
-  ```
-  The helper preserves frontmatter, headings, and the first line of each section. The rest becomes a pointer.
+- Dispatch prompts carry ids (`phase_slug`, `task`, `mode`), never content.
+- Agents return at most 10 lines; read verdicts and counts with grep.
+- New work = new agent. Parallel cards = one session per worktree. One phase =
+  one orchestration session.
+- Budgets per artifact live in `.jdi/config.json` `budgets` (tokens, with
+  `chars_per_token` per language). Long `Verify:` bodies go to
+  `{phase_dir}/verify/*.sh`, so CONTEXT.md stays small for every reader.
+- `npx jdi-cli cost --targets` measures all of this from the local Claude Code
+  transcripts.
 
 ## Memory
 

@@ -73,6 +73,15 @@ inject_lang_directive_skills() {
   done
 }
 
+# Instruction files (CLAUDE.md, AGENTS.md, copilot-instructions.md, agents.md)
+# carry the JDI part as a MANAGED BLOCK: only that block is replaced, the
+# project's own rules around it are preserved byte for byte (<= 0.15.x copied
+# the whole file over them). Same Node helper as install.ps1.
+merge_instructions() {
+  local src="$1" dest="$2" rt="$3"
+  node "$ROOT/bin/lib/instructions.js" merge "$src" "$dest" "$rt"
+}
+
 install_claude() {
   local dest
   if [[ "$SCOPE" == "user" ]]; then
@@ -97,7 +106,7 @@ install_claude() {
   fi
 
   if [[ "$SCOPE" == "$SCOPE_PROJECT" ]]; then
-    cp "$ROOT/runtimes/claude/CLAUDE.md" "$PWD/CLAUDE.md"
+    merge_instructions "$ROOT/runtimes/claude/CLAUDE.md" "$PWD/CLAUDE.md" claude
     if [[ -f "$ROOT/runtimes/claude/settings.example.json" ]]; then
       mkdir -p "$dest"
       cp -n "$ROOT/runtimes/claude/settings.example.json" "$dest/settings.example.json"
@@ -116,7 +125,7 @@ install_copilot() {
   # Skills servem as 3 superficies: Copilot CLI (que NAO le .github/prompts/),
   # VS Code agent mode e o coding agent do github.com
   cp -R "$ROOT/runtimes/copilot/skills/." "$dest/skills/"
-  cp "$ROOT/runtimes/copilot/copilot-instructions.md" "$dest/copilot-instructions.md"
+  merge_instructions "$ROOT/runtimes/copilot/copilot-instructions.md" "$dest/copilot-instructions.md" copilot
 
   sync_specialists "copilot"
 
@@ -169,7 +178,7 @@ install_antigravity() {
   fi
 
   if [[ "$SCOPE" == "$SCOPE_PROJECT" ]]; then
-    cp "$ROOT/runtimes/antigravity/agents.md" "$dest/agents.md"
+    merge_instructions "$ROOT/runtimes/antigravity/agents.md" "$dest/agents.md" antigravity
   fi
 
   echo "Antigravity 2.0 instalado em: $dest/skills (scope=$SCOPE)"
@@ -210,7 +219,7 @@ install_opencode() {
   fi
 
   if [[ "$SCOPE" == "$SCOPE_PROJECT" ]]; then
-    cp "$ROOT/runtimes/opencode/AGENTS.md" "$PWD/AGENTS.md"
+    merge_instructions "$ROOT/runtimes/opencode/AGENTS.md" "$PWD/AGENTS.md" opencode
     if [[ ! -f "$dest/opencode.jsonc" ]]; then
       cp "$ROOT/runtimes/opencode/opencode.example.jsonc" "$dest/opencode.jsonc"
       echo "  -> revise $dest/opencode.jsonc (gerado a partir do exemplo)"
@@ -260,7 +269,7 @@ install_junie() {
   fi
 
   if [[ "$SCOPE" == "$SCOPE_PROJECT" ]]; then
-    cp "$ROOT/runtimes/junie/AGENTS.md" "$dest/AGENTS.md"
+    merge_instructions "$ROOT/runtimes/junie/AGENTS.md" "$dest/AGENTS.md" junie
   fi
 
   echo "Junie instalado em: $dest (scope=$SCOPE)"

@@ -31,7 +31,7 @@ Generates PLAN.md for the given phase. Decomposes into tasks (max 8), groups int
 
 ### Step 1: Validation
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.16.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. Run /jdi-new."; exit 1; }
 test -f .jdi/PROJECT.md || { echo "PROJECT.md missing."; exit 1; }
@@ -40,7 +40,7 @@ test -f .jdi/PROJECT.md || { echo "PROJECT.md missing."; exit 1; }
 ### Step 2: Resolve phase
 
 ```bash
-RESOLVED="$(npx -y jdi-cli resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+RESOLVED="$(npx -y jdi-cli@0.16.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
 eval "$RESOLVED"
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
@@ -49,7 +49,7 @@ PHASE_POSITION="$JDI_PHASE_POSITION"
 
 PowerShell:
 ```powershell
-$r = npx -y jdi-cli resolve-phase $args[0] --json | ConvertFrom-Json
+$r = npx -y jdi-cli@0.16.0 resolve-phase $args[0] --json | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) { Write-Error "Phase '$($args[0])' not found."; exit $LASTEXITCODE }
 $phaseSlug = $r.slug; $phaseDir = $r.dir; $phasePosition = $r.position
 ```
@@ -59,11 +59,9 @@ $phaseSlug = $r.slug; $phaseDir = $r.dir; $phasePosition = $r.position
 ```bash
 test -f "$PHASE_DIR/CONTEXT.md" || { echo "CONTEXT.md missing. Run /jdi-discuss $PHASE_SLUG"; exit 1; }
 
-# Context budget warm-up (does not block)
-npx -y jdi-cli monitor .jdi/PROJECT.md .jdi/DECISIONS.md "$PHASE_DIR/CONTEXT.md" || true
+# Cross-phase learnings for the planner: last 3 shipped phases, by ship date
+npx -y jdi-cli@0.16.0 learnings --last 3 --out .jdi/cache/learnings.md
 ```
-
-PowerShell: `npx -y jdi-cli monitor .jdi/PROJECT.md .jdi/DECISIONS.md "$phaseDir/CONTEXT.md"`.
 
 ### Step 4: Spawn planner
 Invoke `jdi-planner` with:
@@ -71,15 +69,21 @@ Invoke `jdi-planner` with:
 - `phase_dir=$PHASE_DIR`
 - `phase_position=$PHASE_POSITION`
 
-Wait.
 
-### Step 5: Verify
+Wait. The planner returns a short status (return contract); do not open
+PLAN.md just to repeat it.
+
+### Step 5: Verify + commit
+The planner has no shell — this command commits.
 ```bash
 test -f "$PHASE_DIR/PLAN.md" || { echo "PLAN.md not created"; exit 1; }
+git add "$PHASE_DIR/PLAN.md"; git add .jdi/STATE.md 2>/dev/null || true
+git diff --cached --quiet || git commit -m "docs($PHASE_SLUG): generate plan"
 ```
+Update `.jdi/STATE.md`: `current_phase_slug: $PHASE_SLUG`, `phase_status: planned`, `next_step: /jdi-do $PHASE_SLUG`.
 
 ### Step 6: Confirm
-Show plan summary + suggest `/jdi-do $PHASE_SLUG`.
+Relay the planner's status line + suggest `/jdi-do $PHASE_SLUG`.
 
 </process>
 

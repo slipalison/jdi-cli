@@ -40,9 +40,34 @@ reviewing the pull request.
 
 <process>
 
+### Step 0: Rules for the whole chain (token economy)
+
+The orchestrator's context is re-read on EVERY one of its turns for the whole
+phase, and every agent re-reads its own context on each of its turns. These
+rules keep both small without skipping any gate:
+
+1. **Dispatch prompts carry ids, not content**: `phase_slug`, `phase_dir`,
+   `task`/`mode`, plus at most a few lines. Never paste plan text, reading
+   lists or file contents — each agent reads its own inputs. Anything an agent
+   must know that is not in the artifacts goes into PLAN.md
+   `## Orchestrator notes`.
+2. **Agents return at most 10 lines** (their return contract) and the details
+   stay in the files. Do not `cat`/Read a full artifact just to relay it; read
+   verdict lines and counts mechanically (grep).
+3. **New work = new agent.** Never send a new task to an agent that already
+   returned. A fresh agent with a short handoff file is cheaper than a resumed
+   one dragging its whole context (and paying it again once the prompt cache
+   expired).
+4. **Parallel cards = one session per worktree.** Run each chain in its own
+   session opened inside that worktree. Never point an agent at a sibling
+   checkout from here: the runtime loads that checkout's instruction files
+   again for every agent that reads a file there.
+5. **One phase, one session.** After Step 8, this session is done — the next
+   card starts in a new session (`/clear`), resuming from `.jdi/` alone.
+
 ### Step 1: Validation
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y {{JDI_CLI}} render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new (or /jdi-adopt) + /jdi-bootstrap first."; exit 1; }
@@ -81,7 +106,7 @@ Extract: **title**, **goal** (1-line distillation), **acceptance criteria**
 
 ```bash
 SLUG=$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' | cut -c1-40)
-npx -y jdi-cli validate-slug "$SLUG" --check-unique || SLUG="${SLUG}-2"
+npx -y {{JDI_CLI}} validate-slug "$SLUG" --check-unique || SLUG="${SLUG}-2"
 ```
 
 Follow the INSTALLED `/jdi-add-phase` process with
@@ -161,8 +186,13 @@ PR body additions in autonomous mode (on top of ship's standard body):
   Shipped:   {yes | NO — killed at iteration {i}, see LOOP.md}
   PR:        {url | skipped (--no-pr) | not opened (no ship)}
   Human:     review the PR — deferred items: {N}
+  Next:      start a NEW session for the next card (/clear) — state is in .jdi/
 ══════════════════════════════════════════
 ```
+
+If the chain stopped before the PR (killed loop, missing input), write
+`$PHASE_DIR/HANDOFF.md` (where it stopped, the exact next command, open
+questions — at most 30 lines) so a fresh session resumes without this one.
 
 </process>
 

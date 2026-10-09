@@ -38,7 +38,7 @@ Examples:
 
 ### Step 1: Validation
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.16.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 
 ```bash
 test -d .jdi/ || { echo "Not a JDI project."; exit 1; }
@@ -48,7 +48,7 @@ test -f .jdi/ROADMAP.md || { echo "ROADMAP.md missing."; exit 1; }
 # absent (fresh clone): current phase = first ROADMAP phase without SHIPPED.md
 if [ ! -f .jdi/STATE.md ]; then
   POS=1
-  while RESOLVED="$(npx -y jdi-cli resolve-phase "$POS" 2>/dev/null)"; do
+  while RESOLVED="$(npx -y jdi-cli@0.16.0 resolve-phase "$POS" 2>/dev/null)"; do
     eval "$RESOLVED"
     [ -f "$JDI_PHASE_DIR/SHIPPED.md" ] || break
     POS=$((POS+1))
@@ -64,7 +64,7 @@ PowerShell mirrors via `Test-Path`. Same `$args` parsing.
 ### Step 2: Resolve phase
 
 ```bash
-RESOLVED="$(npx -y jdi-cli resolve-phase "$1")" || {
+RESOLVED="$(npx -y jdi-cli@0.16.0 resolve-phase "$1")" || {
   echo "Phase '$1' not found in ROADMAP."
   exit 1
 }
@@ -78,7 +78,7 @@ PHASE_FOLDER_EXISTS="$JDI_PHASE_FOLDER_EXISTS"
 
 PowerShell:
 ```powershell
-$r = npx -y jdi-cli resolve-phase $args[0] --json | ConvertFrom-Json
+$r = npx -y jdi-cli@0.16.0 resolve-phase $args[0] --json | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) { Write-Error "Phase '$($args[0])' not found in ROADMAP."; exit $LASTEXITCODE }
 $phaseSlug = $r.slug; $phaseDir = $r.dir; $phasePosition = $r.position; $phaseFolderExists = $r.folder_exists
 ```
@@ -217,7 +217,7 @@ D-{YYYY-MM-DD}-{slug}-rm: Phase '{slug}' removed via /jdi-remove-phase. Artifact
 Refresh views + commit:
 
 ```bash
-npx -y jdi-cli render
+npx -y jdi-cli@0.16.0 render
 git add .jdi/roadmap/ .jdi/decisions/
 git add .jdi/archive/ 2>/dev/null || true
 git commit -m "chore(jdi): remove phase $PHASE_SLUG"
@@ -264,7 +264,7 @@ Note: slugs of remaining phases are not changed. Display positions renumbered.
 
 <gates>
 - pre: `.jdi/ROADMAP.md` exists (STATE.md regenerated from artifacts if absent)
-- pre: phase resolves via `npx -y jdi-cli resolve-phase`
+- pre: phase resolves via `npx -y jdi-cli@0.16.0 resolve-phase`
 - pre: phase is not the current phase, not past, status != `done`
 - pre: `--force` provided if phase has artifacts
 - post: ROADMAP.md section removed + `total_phases` recomputed + artifacts archived (if any) + DECISIONS.md appended + atomic commit

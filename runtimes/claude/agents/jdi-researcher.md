@@ -24,7 +24,7 @@ NOT your job:
 - Free-form argument: project idea (e.g. "TODO app .NET 10 + React 19")
 - `auto=true` (optional — from `/jdi-new --auto`/`--yolo`): fully autonomous mode, see <auto_mode>
 - (optional) Read current directory if code exists
-- Required reference: `core/templates/dod-schema.md` (DoD format, classification rules, vague-rejection rules, candidate generation, loop protocol)
+- Required reference: the DoD schema — `npx -y jdi-cli@0.16.0 template dod-schema` (DoD format, classification rules, vague-rejection rules, candidate generation, loop protocol)
 </inputs>
 
 <auto_mode>
@@ -141,7 +141,7 @@ Don't go deep. Max 2 lookups. If ctx7 unavailable, skip.
 
 ### Step 3.5: Project-wide Definition of Done baseline
 
-Read `core/templates/dod-schema.md` rules before starting. Follow the loop protocol section exactly. This step captures the universal DoD baseline that every phase will inherit.
+Read the DoD schema (`npx -y jdi-cli@0.16.0 template dod-schema`) before starting. Follow the loop protocol section exactly. This step captures the universal DoD baseline that every phase will inherit.
 
 **Step 3.5.1 — Generate 5 candidates** using the researcher-specific priority from the schema (Priority 3 default for `/jdi-new`):
 
@@ -318,7 +318,7 @@ name: {feature N name}
 
 Rules:
 - Filename = canonical slug (no `NN-` prefix) = phase identity. Validate each
-  with `npx -y jdi-cli validate-slug "{slug}" --check-unique`.
+  with `npx -y jdi-cli@0.16.0 validate-slug "{slug}" --check-unique`.
 - `order:` is a plain number (1, 2, ... N here). It may become fractional
   later — `/jdi-add-phase --before/--after` inserts between neighbors without
   renumbering sibling files. Display position = rank when sorted by order.
@@ -391,7 +391,7 @@ Generate the views (ROADMAP.md, DECISIONS.md, ...) at their usual paths so
 every reader keeps working:
 
 ```bash
-npx -y jdi-cli render
+npx -y jdi-cli@0.16.0 render
 ```
 
 ### Step 8: Commit
@@ -422,7 +422,7 @@ Next: /jdi-bootstrap
 - Slug auto-generated: lowercase, kebab-case, no accents
 - Never create phases without user features — empty phases = scope creep
 - Step 3.5 (DoD baseline) is REQUIRED — every project ships with a DoD baseline
-- Every DoD item MUST have explicit `Verify:` — items without it are rejected per `dod-schema.md`
+- Every DoD item MUST have explicit `Verify:` — items without it are rejected per the DoD schema
 - Vague items rejected before append — never written to PROJECT.md
 - Hard cap: 8 items in PROJECT.md § DoD (project-wide invariants only)
 - PROJECT.md max 80 lines — count includes DoD section. If close to limit, prefer fewer DoD items (move per-phase concerns to /jdi-discuss).
@@ -435,11 +435,11 @@ Next: /jdi-bootstrap
 </fallbacks>
 
 <output>
-- `.jdi/PROJECT.md` (includes `## Definition of Done` section with Auto-verifiable and Manual subsections per `core/templates/dod-schema.md`)
+- `.jdi/PROJECT.md` (includes `## Definition of Done` section with Auto-verifiable and Manual subsections per the DoD schema)
 - `.jdi/roadmap/` — `_header.md` + one `{slug}.md` per phase (conflict-free layout v3)
 - `.jdi/decisions/D-1.md` (code design locked)
 - `.jdi/STATE.md` (untracked advisory cache)
-- `.jdi/ROADMAP.md`, `.jdi/DECISIONS.md` — rendered views (untracked, `npx -y jdi-cli render`)
+- `.jdi/ROADMAP.md`, `.jdi/DECISIONS.md` — rendered views (untracked, `npx -y jdi-cli@0.16.0 render`)
 - `.jdi/phases/`, `.jdi/agents/`, `.jdi/todos/`, `.jdi/registry/` dirs
 - `.gitattributes` (root: line endings only — no merge=union; the layout is the conflict-freedom mechanism)
 - `.gitignore` entries for STATE.md and the 7 rendered views

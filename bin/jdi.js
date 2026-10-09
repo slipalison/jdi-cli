@@ -281,6 +281,20 @@ function libArgs() {
   return out;
 }
 
+// Node helpers live in bin/lib/<name>.js and export main(argv) -> exit code.
+// Errors carrying a numeric `code` (JdiError) keep it as the exit code.
+function runNodeHelper(name, rawArgs) {
+  const mod = require(path.join(PKG_ROOT, 'bin', 'lib', `${name}.js`));
+  let code;
+  try {
+    code = mod.main(rawArgs);
+  } catch (err) {
+    console.error(`ERROR: ${err?.message || err}`);
+    code = Number.isInteger(err?.code) ? err.code : 1;
+  }
+  process.exit(code ?? 0);
+}
+
 // Build CLI args from a flag spec, picking the platform-correct flag name.
 // spec: [{ key, win, nix, value? }]. value:true forwards the flag's value.
 function buildFlagArgs(flags, spec) {
@@ -557,6 +571,10 @@ async function cmdHelp() {
   console.log(`  ${c.cyan}render${c.reset} ${c.gray}[--check]${c.reset}          ${tr('help.helper.render')}`);
   console.log(`  ${c.cyan}migrate-layout${c.reset} ${c.gray}[--dry-run]${c.reset}  ${tr('help.helper.migrate_layout')}`);
   console.log(`  ${c.cyan}sync-specialists${c.reset} ${c.gray}[runtime] [--check]${c.reset}  ${tr('help.helper.sync_specialists')}`);
+  console.log(`  ${c.cyan}cost${c.reset} ${c.gray}[--targets] [--json] [--since d]${c.reset}  ${tr('help.helper.cost')}`);
+  console.log(`  ${c.cyan}template${c.reset} ${c.gray}<name> [--out f] | --list${c.reset}  ${tr('help.helper.template')}`);
+  console.log(`  ${c.cyan}learnings${c.reset} ${c.gray}[--last N] [--out f]${c.reset}  ${tr('help.helper.learnings')}`);
+  console.log(`  ${c.cyan}decisions${c.reset} ${c.gray}[--index|--ids|--phase|--recent N]${c.reset}  ${tr('help.helper.decisions')}`);
   console.log('');
 
   console.log(`${c.bold}${tr('help.runtimes_label')}${c.reset}`);
@@ -692,6 +710,14 @@ async function main() {
       break;
     case 'monitor':
       cmdLibPassthrough('jdi-monitor', 'monitor <file...>', libArgs());
+      break;
+    // Node helpers (single implementation for every platform — no .sh/.ps1
+    // twins to drift apart, #48).
+    case 'cost':
+    case 'template':
+    case 'learnings':
+    case 'decisions':
+      runNodeHelper(parsed.cmd, libArgs());
       break;
     case 'help':
     case '--help':

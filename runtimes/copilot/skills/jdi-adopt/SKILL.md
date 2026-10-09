@@ -105,31 +105,19 @@ if (-not (Select-String -Path .jdi/DECISIONS.md -Pattern '^D-2 ' -Quiet)) {
 
 ### Step 4: Create config.json (token/context budget)
 
-If `.jdi/config.json` does not yet exist, write default identical to `/jdi-new`:
+If `.jdi/config.json` does not exist yet, write the default from the single
+canonical source shipped in the package (`templates-jdi-folder/config.json`,
+#57), and record the JDI version this project runs:
 
-```json
-{
-  "$schema_version": "1.2",
-  "context_window": 200000,
-  "thresholds": {
-    "warn_pct": 60,
-    "critical_pct": 70
-  },
-  "budgets": {
-    "max_context_chars": 6000,
-    "max_plan_chars": 12000,
-    "max_summary_chars": 8192
-  },
-  "compaction": {
-    "archive_after": 5
-  },
-  "orchestration": {
-    "mode": "standard",
-    "source": "default"
-  },
-  "coverage_min": 80
-}
+```bash
+[ -f .jdi/config.json ] || npx -y jdi-cli@0.16.0 template config --out .jdi/config.json
+printf '%s' '0.16.0' > .jdi/VERSION
 ```
+
+The default covers: token budgets per artifact (`budgets`, measured in tokens
+with `chars_per_token` per language),
+model per role (`models`, `inherit` = the session's model), compaction and
+coverage. Edit by hand afterwards when needed.
 
 #### Step 4b: Enhanced orchestration opt-in (host-neutral capability flag)
 
@@ -138,6 +126,13 @@ Identical to `/jdi-new` Step 4b. `orchestration.mode` lets later commands use op
 1. **Default:** if this session runs under an enhanced / high-effort multi-agent orchestration mode, pre-select `enhanced` (`source: "detected"`); else `standard`.
 2. **Confirm** (AskUserQuestion; fallback: numbered prompt): "Enable enhanced multi-agent orchestration when your assistant supports it? Adds opt-in advisory critics (e.g. a DoD re-check at /jdi-verify); standard path unchanged when unavailable." Options: `[Enhanced — use extra agents when available]` / `[Standard — single-agent always (default)]`.
 3. Write `mode` into the `orchestration` block; set `source` to `"user"` (or keep `"detected"`). Never store a token budget — boolean capability switch, not a ledger.
+
+#### Step 4c: Commit the config
+
+```bash
+git add .jdi/config.json .jdi/VERSION
+git diff --cached --quiet || git commit -m "chore(jdi): config and version"
+```
 
 ### Step 5: Confirm
 

@@ -30,7 +30,7 @@ Executes all tasks of the given phase. Reads PLAN.md, groups into waves, dispatc
 
 ### Step 1: Validation
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.16.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new."; exit 1; }
 # STATE.md is an untracked advisory cache — absence is normal on a fresh clone
@@ -45,13 +45,13 @@ ls .jdi/agents/jdi-doer-*.md 2>/dev/null | head -1 || {
 # Runtime copies: Agent(subagent_type=...) resolves from .claude/agents/ (etc.),
 # never from .jdi/agents/. Self-heal a fresh clone or a stale copy before the
 # first spawn (byte-deterministic; no-op when already in sync).
-npx -y jdi-cli sync-specialists --check --quiet || npx -y jdi-cli sync-specialists --quiet
+npx -y jdi-cli@0.16.0 sync-specialists --check --quiet || npx -y jdi-cli@0.16.0 sync-specialists --quiet
 ```
 
 ### Step 2: Resolve phase
 
 ```bash
-RESOLVED="$(npx -y jdi-cli resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+RESOLVED="$(npx -y jdi-cli@0.16.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
 eval "$RESOLVED"
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
@@ -60,8 +60,6 @@ PHASE_POSITION="$JDI_PHASE_POSITION"
 # Verify PLAN.md exists
 test -f "$PHASE_DIR/PLAN.md" || { echo "PLAN.md missing for phase $PHASE_SLUG. Run /jdi-plan $PHASE_SLUG."; exit 1; }
 
-# Context budget warm-up
-npx -y jdi-cli monitor .jdi/PROJECT.md .jdi/DECISIONS.md "$PHASE_DIR/PLAN.md" "$PHASE_DIR/CONTEXT.md" || true
 ```
 
 ### Step 3: Resolve doer specialist(s)
@@ -151,6 +149,13 @@ Agent(
 
 Within a wave, multi-stack projects may spawn DIFFERENT specialists in parallel (different file scopes, disjoint `files_modified`).
 
+**Dispatch prompt = the line above, nothing more.** Do not paste plan text,
+reading lists or file contents into it: the doer reads its own task block, and
+every extra line is paid again on each of its turns. Anything the doer must
+know that is not in the plan goes into PLAN.md under `## Orchestrator notes`
+(it reads that section).
+
+
 Wait for all to return before next wave.
 
 **If sequential:** same prompt, no `run_in_background`, one at a time.
@@ -159,10 +164,14 @@ Doer reads PLAN.md/PROJECT.md/CONTEXT.md on its own — specialist convention.
 
 ### Step 7: After each wave
 
-Read updated PLAN.md (doer updates status). Count:
-- completed
-- blocked
-- pending
+Count the task statuses mechanically — do not re-read PLAN.md or SUMMARY.md
+(the doers' return lines already say what happened):
+
+```bash
+grep -cE '^\s*- \*\*Status:\*\* completed' "$PHASE_DIR/PLAN.md"
+grep -cE '^\s*- \*\*Status:\*\* blocked' "$PHASE_DIR/PLAN.md"
+grep -cE '^\s*- \*\*Status:\*\* pending' "$PHASE_DIR/PLAN.md"
+```
 
 Blocked-task rule (every wave except the last is "critical" by construction —
 later waves depend on it):

@@ -41,7 +41,7 @@ Ralph pattern (Huntley + ASDLC):
 
 ### Step 1: Validation
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.16.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new."; exit 1; }
@@ -52,13 +52,13 @@ test -d .jdi/ || { echo "Not a JDI project. /jdi-new."; exit 1; }
 ls .jdi/agents/jdi-doer-*.md 2>/dev/null | head -1 || { echo "Doer missing. /jdi-bootstrap."; exit 1; }
 ls .jdi/agents/jdi-reviewer-*.md 2>/dev/null | head -1 || { echo "Reviewer missing. /jdi-bootstrap."; exit 1; }
 # Runtime copies (.claude/agents/ etc. — the runtime never spawns from .jdi/agents/): self-heal before the loop
-npx -y jdi-cli sync-specialists --check --quiet || npx -y jdi-cli sync-specialists --quiet
+npx -y jdi-cli@0.16.0 sync-specialists --check --quiet || npx -y jdi-cli@0.16.0 sync-specialists --quiet
 ```
 
 ### Step 2: Resolve phase
 
 ```bash
-RESOLVED="$(npx -y jdi-cli resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+RESOLVED="$(npx -y jdi-cli@0.16.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
 eval "$RESOLVED"
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
@@ -146,6 +146,11 @@ loop:
     description="Loop iter {iter} reviewer phase $PHASE_SLUG",
     prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, mode=verify, iter={iter}"
   )
+
+  # Dispatch prompts are exactly the lines above (ids, no content). Each agent
+  # returns at most 10 lines; the verdict is read from REVIEW.md by grep below,
+  # never by reading the whole review into this context. Every iteration
+  # spawns FRESH agents — never SendMessage new work to the previous ones.
 
   # --- Step C: parse verdict ---
   REVIEW_FILE="$PHASE_DIR/REVIEW.md"
@@ -333,6 +338,8 @@ Next: /jdi-ship $PHASE_SLUG
 <runtime_notes>
 
 **Claude Code:** full loop as specified — sequential Agent() spawns per iter, fresh context each.
+`.jdi/config.json` `models.doer` / `models.reviewer` other than `inherit` are
+passed as the Agent `model` parameter.
 
 **Copilot:** subagent spawning has no reliable completion signal. Run the loop
 body inline instead: execute /jdi-do steps, then /jdi-verify steps, in this

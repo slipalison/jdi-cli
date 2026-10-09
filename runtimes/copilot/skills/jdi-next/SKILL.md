@@ -43,7 +43,7 @@ head.
 
 ### Step 1: Pre-flight routing (project-level gaps first)
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.16.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 
 ```bash
 if [ ! -d .jdi/ ]; then
@@ -60,12 +60,12 @@ fi
 
 ```bash
 if [ -n "${1:-}" ]; then
-  RESOLVED="$(npx -y jdi-cli resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+  RESOLVED="$(npx -y jdi-cli@0.16.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
   eval "$RESOLVED"
 else
   # current phase = first ROADMAP phase without SHIPPED.md
   POS=1; FOUND=false
-  while RESOLVED="$(npx -y jdi-cli resolve-phase "$POS" 2>/dev/null)"; do
+  while RESOLVED="$(npx -y jdi-cli@0.16.0 resolve-phase "$POS" 2>/dev/null)"; do
     eval "$RESOLVED"
     [ -f "$JDI_PHASE_DIR/SHIPPED.md" ] || { FOUND=true; break; }
     POS=$((POS+1))

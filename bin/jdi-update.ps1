@@ -214,20 +214,23 @@ if ($specialists.Count -gt 0) {
   foreach ($s in $specialists) { Write-Output "  - $($s.Name)" }
   Write-Output ""
 
-  # Detecta se template/skills mudaram - heuristica: skills_to_load presente?
+  # Heuristica: specialists gerados a partir da 0.16 tem <return_contract> e
+  # nao tem <skills_to_load> (lista que nunca carregava: os specialists nao
+  # tem a ferramenta Skill).
   $needsRegen = $false
   foreach ($s in $specialists) {
     $content = Get-Content $s.FullName -Raw
-    if ($content -notmatch '<skills_to_load>') {
+    if ($content -match '<skills_to_load>' -or $content -notmatch '<return_contract>') {
       $needsRegen = $true
       break
     }
   }
 
   if ($needsRegen) {
-    Write-Output "Specialists existentes NAO tem <skills_to_load> - foram gerados antes da 1.2.1."
-    Write-Output "Pra ativar skills universais (DRY/KISS/YAGNI/SOLID/Clean Code) via eager loading,"
-    Write-Output "specialists precisam ser regenerados."
+    Write-Output "Specialists existentes foram gerados antes da 0.16: sem <return_contract>"
+    Write-Output "(retorno curto ao orquestrador) e/ou com <skills_to_load> (nunca carregado)."
+    Write-Output "Regenere com /jdi-bootstrap (Recriar) ou aplique as mudancas da 0.16 a mao"
+    Write-Output "(CHANGELOG: entradas, retorno curto, nada de reler CLAUDE.md/rules)."
     Write-Output ""
 
     $shouldRegen = $false
@@ -235,7 +238,7 @@ if ($specialists.Count -gt 0) {
       $shouldRegen = $true
     } elseif ($SkipSpecialists) {
       $shouldRegen = $false
-    } else {
+    } elseif (-not [Console]::IsInputRedirected) {
       $resp = Read-Host "Regenerar specialists? Vai rodar /jdi-bootstrap (Y/n)"
       $shouldRegen = ($resp -eq '' -or $resp -match '^[YySs]')
     }
@@ -245,12 +248,11 @@ if ($specialists.Count -gt 0) {
       Write-Output "ACAO MANUAL NECESSARIA:"
       Write-Output "  Abra teu runtime e rode:  /jdi-bootstrap"
       Write-Output "  Architect vai detectar specialists existentes e oferecer 'Recriar'."
-      Write-Output "  Os specialists novos terao <skills_to_load> com as 5 universais wired."
     } else {
-      Write-Output "  Specialists mantidos como estao - skills universais ficam em modo discoverable only."
+      Write-Output "  Specialists mantidos como estao."
     }
   } else {
-    Write-Output "Specialists ja tem <skills_to_load> - up to date."
+    Write-Output "Specialists ja estao no formato da 0.16+."
   }
 }
 

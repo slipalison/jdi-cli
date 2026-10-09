@@ -29,7 +29,7 @@ Verifies the phase was delivered correctly. Runs gates defined in the project's 
 
 ### Step 1: Validation
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.16.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 ```bash
 test -d .jdi/ || { echo "Not a JDI project."; exit 1; }
 
@@ -42,13 +42,13 @@ ls .jdi/agents/jdi-reviewer-*.md 2>/dev/null | head -1 || {
 # Runtime copies: Agent(subagent_type=...) resolves from .claude/agents/ (etc.),
 # never from .jdi/agents/. Self-heal a fresh clone or a stale copy before the
 # first spawn (byte-deterministic; no-op when already in sync).
-npx -y jdi-cli sync-specialists --check --quiet || npx -y jdi-cli sync-specialists --quiet
+npx -y jdi-cli@0.16.0 sync-specialists --check --quiet || npx -y jdi-cli@0.16.0 sync-specialists --quiet
 ```
 
 ### Step 2: Resolve phase
 
 ```bash
-RESOLVED="$(npx -y jdi-cli resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+RESOLVED="$(npx -y jdi-cli@0.16.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
 eval "$RESOLVED"
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
@@ -60,8 +60,6 @@ test -f "$PHASE_DIR/SUMMARY.md" || {
   exit 1
 }
 
-# Context budget warm-up
-npx -y jdi-cli monitor .jdi/PROJECT.md .jdi/DECISIONS.md "$PHASE_DIR/PLAN.md" "$PHASE_DIR/SUMMARY.md" || true
 ```
 
 ### Step 3: Resolve reviewer specialist(s)
@@ -109,7 +107,12 @@ for REVIEWER in $REVIEWERS:
 
 Each reviewer scopes its gates to its `file_glob` (from frontmatter `scope.file_glob`). Coverage threshold enforced only on files matching the glob.
 
-Reviewers are read-only. Wait for completion before next.
+Reviewers are read-only (they write only their REVIEW.md segment). Wait for
+completion before next. Each returns a short verdict line (return contract):
+do not open REVIEW.md to repeat it — Step 5 reads the verdicts mechanically.
+The dispatch prompt is the line above, nothing more: no reading lists, no
+plan text.
+
 
 ### Step 4.5: Enhanced DoD critic (opt-in, capability-gated)
 

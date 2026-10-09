@@ -1,14 +1,26 @@
 {
-  "$schema_version": "1.2",
-  "context_window": 200000,
-  "thresholds": {
-    "warn_pct": 60,
-    "critical_pct": 70
-  },
+  "$schema_version": "1.3",
   "budgets": {
-    "max_context_chars": 6000,
-    "max_plan_chars": 12000,
-    "max_summary_chars": 8192
+    "context_tokens": 10000,
+    "plan_tokens": 12000,
+    "summary_tokens": 3000,
+    "review_segment_tokens": 6000,
+    "brief_tokens": 6000,
+    "known_errors_query_tokens": 2000,
+    "verify_inline_chars": 300,
+    "phase_extra_file_kb": 50,
+    "enforce": "warn"
+  },
+  "chars_per_token": {
+    "pt-BR": 2.2,
+    "en": 3.2
+  },
+  "models": {
+    "asker": "inherit",
+    "planner": "inherit",
+    "doer": "inherit",
+    "reviewer": "inherit",
+    "critic": "inherit"
   },
   "compaction": {
     "archive_after": 5

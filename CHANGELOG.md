@@ -5,6 +5,122 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0] - 2026-10-09
+
+Token economy, part 1 of 3: the safety net, plus every instruction that made
+agents pay for the same context twice. Measured on a real multi-phase project
+(15k API calls): agents read 110-350k tokens before their first useful action,
+re-read instruction files the runtime had already injected, and the
+orchestrator session crossed phases until its context passed 900k tokens. This
+release fixes what is wrong in the prose and adds the instruments to measure
+the next two.
+
+### Added
+- **`cost [--targets] [--json] [--since d] [--project dir]`** — where a
+  project's tokens went, from the Claude Code transcripts on this machine
+  (`~/.claude/projects/`): weighted tokens per role and phase (input 1x, cache
+  read 0.1x, cache write 1.25x/2x, output 5x), context at each agent's first
+  useful action, cache rewrites by cause (long command, resume, idle),
+  instruction files re-read or loaded twice, other phases' artifacts read.
+  `--targets` checks the token-economy targets and exits 2 on a miss. Local
+  only; it prints numbers and paths, never message content.
+- **`template <name> [--out f]`** — the templates ship in the package and are
+  read through the CLI (`dod-schema`, `doer-specialist`,
+  `reviewer-specialist`, `config`, ...). Consumer projects have no `core/`
+  directory, so the `core/templates/...` paths in the agents never resolved
+  there (#37: the architect's specialist gate and the DoD schema reference).
+- **`learnings [--last N]`** — `## Learnings` of the N most recently shipped
+  phases, ordered by `shipped_at`. The planner's `ls .jdi/phases/*/SHIPPED.md
+  | tail -40` ordered by folder name and returned old phases.
+- **`decisions [--index|--ids|--phase|--recent N]`** — locked decisions
+  without loading the whole `DECISIONS.md` view (it passes 100 KB in a
+  long-lived project).
+- **Managed instruction block.** `CLAUDE.md`, `.github/copilot-instructions.md`,
+  `AGENTS.md`, `.junie/AGENTS.md` and `.agents/agents.md` get the JDI part
+  between `<!-- JDI:BEGIN -->` / `<!-- JDI:END -->`. `install`/`update` replace
+  only the block and preserve every other byte — up to 0.15.x they copied the
+  whole file over the project's own rules. Files that start with a block JDI
+  shipped before are migrated in place (exact sha256 prefix match); anything
+  else gets the block prepended, never guessed. `uninstall` removes only the
+  block. The five files are generated from ONE source
+  (`core/templates/instructions.md`, #54) and dropped from ~3.6 KB of stale
+  text to ~1 KB.
+- **Pinned CLI.** The build turns `{{JDI_CLI}}` into `jdi-cli@<version>` in
+  every command, agent and skill: installed commands always call the exact CLI
+  they were built with — never a stale npx cache, never a newer release with
+  different helpers. `/jdi-new` and `/jdi-adopt` write `.jdi/VERSION`.
+- **Runtime blocks** (`<!-- jdi:only claude -->` ... `<!-- jdi:end -->`) in the
+  sources, resolved by the build: a fact measured on one runtime is stated
+  only there. Both builders call the same Node post-processor
+  (`bin/lib/build-postprocess.js`), so their output stays byte-identical.
+- **`doctor` section 14 — token economy:** unpinned commands, version drift,
+  legacy instruction block, specialists that re-read instruction files or
+  carry `<skills_to_load>`, char-based budgets, worktrees.
+- **Tests and CI.** `node test/run.js` (built-in `node:test`, zero deps):
+  build post-processing, instruction merge, phase resolution, cost analysis,
+  helpers, and a **prompt contract** that fails when the shipped prose
+  reintroduces an unpinned CLI, a re-read of injected instructions, a
+  `core/templates/` path, a dead command, a cache-prefix claim, a shell step
+  in an agent without a shell, or an unfenced brownfield paragraph.
+  `.github/workflows/ci.yml` runs it on Linux and Windows plus a build-drift
+  check with both builders.
+
+### Changed
+- **Specialist templates read only what the task needs.** The doer reads its
+  own task block, the CONTEXT decisions and DoD criteria for its files,
+  `learnings --last 3`, and `decisions --ids` for anything else — no more full
+  PROJECT/DECISIONS/CONTEXT/PLAN per task. It runs the task's targeted test;
+  the full suite, coverage and E2E run once in `/jdi-verify` (a long command
+  keeps a large context waiting and, after the cache expires, paying for it
+  again). The reviewer runs its gate commands early, while its context is
+  small, and takes decisions by id for Gate 6.
+- **Return contract.** Doer, reviewer, asker and planner end with at most 10
+  lines; details stay in the files. The commands read verdicts and counts with
+  grep instead of opening the artifacts.
+- **Orchestration rules** in `/jdi-issue`, `/jdi-do`, `/jdi-verify`,
+  `/jdi-loop`: dispatch prompts carry ids, not content (notes go to PLAN.md
+  `## Orchestrator notes`); new work = new agent, never a resumed one; parallel
+  cards = one session per worktree; one phase = one orchestration session
+  (`/jdi-ship` and `/jdi-issue` end by saying so; a stopped chain leaves
+  `HANDOFF.md`).
+- **Model per role** in `.jdi/config.json` `models` (`inherit` by default),
+  asked once by the architect and passed as the Agent `model` parameter at
+  dispatch. The architect no longer leaves the specialists' model to chance.
+- **`config.json` 1.3**: budgets in tokens (`context_tokens`, `plan_tokens`,
+  `summary_tokens`, ...) with `chars_per_token` per language (pt-BR 2.2,
+  measured; the old 4 chars/token heuristic undercounted twice), `models`.
+  `/jdi-new` and `/jdi-adopt` write it from the single canonical file (#57)
+  and commit it. `context_window`/`thresholds` are gone: nothing can see the
+  session size from a file.
+- **The asker** reads a decisions index (`.jdi/cache/decisions.md`) and the
+  DoD schema (`.jdi/cache/dod-schema.md`), both written by `/jdi-discuss` —
+  not the whole decision history and the two previous CONTEXT.md files. Long
+  `Verify:` bodies go to `{phase_dir}/verify/*.sh`.
+- **The planner** reads CONTEXT, PROJECT's stack/design and the routing
+  table — not the specialist bodies, not other phases' plans. `/jdi-plan`
+  writes `.jdi/cache/learnings.md` before and commits PLAN.md after (the
+  planner has no shell; its own `git commit` step could never run).
+- **The architect** fences brownfield-only text (`<!-- jdi:adopted -->`) and
+  deletes it for greenfield projects (no more "If false=true"), writes a short
+  digest of the code-design and quality skills into the specialists instead of
+  a `<skills_to_load>` list they cannot load, and reads templates through the
+  CLI.
+- `.jdi/cache/` (derived files) is added to `.gitignore` by any helper that
+  writes there.
+
+### Fixed
+- `/jdi-discuss` committed the untracked views on layout v3 — decisions and
+  todos were never committed (#39). It now renders and stages
+  `.jdi/decisions/` and `.jdi/todos/`.
+- `update` no longer asks to regenerate specialists for missing
+  `<skills_to_load>`; it flags specialists without `<return_contract>` or with
+  `<skills_to_load>`, and never blocks on a prompt without a terminal.
+
+### Removed
+- `monitor` calls from the commands (it summed the size of a few files and
+  pointed to a `/jdi-thread` command that does not exist). The subcommand
+  stays, deprecated.
+
 ## [0.15.0] - 2026-09-15
 
 Fixes [#33](https://github.com/slipalison/jdi-cli/issues/33): `/jdi-bootstrap`
