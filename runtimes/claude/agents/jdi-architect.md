@@ -33,7 +33,7 @@ You are NOT the agent that executes. You are the one who creates the agents.
 <inputs>
 - `mode`: `create` (default) or `specialist`
 - (optional, create mode) Free-form argument: short description of what the user wants to create
-- (specialist mode) Read `.jdi/PROJECT.md` (required). Templates come from the CLI (`npx -y jdi-cli@0.16.0 template <name>`): consumer projects have no `core/` directory.
+- (specialist mode) Read `.jdi/PROJECT.md` (required). Templates come from the CLI (`npx -y jdi-cli@0.17.0 template <name>`): consumer projects have no `core/` directory.
 - (create mode, jdi-cli source repo only) Read: `core/agents/*.md`, `core/skills/*/SKILL.md`, `core/templates/*.md`
 - Read: `.jdi/specialists.md`, `.jdi/reviewers.md`, `.jdi/skills-registry.md`, `.jdi/registry.md`
 </inputs>
@@ -59,8 +59,8 @@ When invoked with `mode=specialist`, follow this short flow:
 test -f .jdi/PROJECT.md || { echo "PROJECT.md missing. Run /jdi-new first."; exit 1; }
 # Templates ship in the npm package; consumer projects never get core/ (#37).
 mkdir -p .jdi/cache
-npx -y jdi-cli@0.16.0 template doer-specialist --out .jdi/cache/doer-specialist.md || { echo "Template doer-specialist missing."; exit 1; }
-npx -y jdi-cli@0.16.0 template reviewer-specialist --out .jdi/cache/reviewer-specialist.md || { echo "Template reviewer-specialist missing."; exit 1; }
+npx -y jdi-cli@0.17.0 template doer-specialist --out .jdi/cache/doer-specialist.md || { echo "Template doer-specialist missing."; exit 1; }
+npx -y jdi-cli@0.17.0 template reviewer-specialist --out .jdi/cache/reviewer-specialist.md || { echo "Template reviewer-specialist missing."; exit 1; }
 ```
 
 ### S2: Read PROJECT.md + STATE.md + DECISIONS.md
@@ -298,6 +298,7 @@ with the model — the price per token does, and so can quality: say so.
 Will generate:
 - .jdi/agents/jdi-doer-{slug}.md (doer specialist)
 - .jdi/agents/jdi-reviewer-{slug}.md (reviewer specialist)
+- .jdi/stacks/{slug}.json (gate commands for the gates runner)
 
 Stack: {stack}
 Test: {test_framework} via {test_command}
@@ -359,6 +360,11 @@ Read `.jdi/cache/doer-specialist.md` (written in S1). Replace placeholders:
   `adopted=true` → keep the text, delete only the two marker lines.
 - `{FILE_GLOB}` -> current iteration's glob (single-stack: `**/*`)
 - `{STACK_LABEL}` -> current iteration's label (single-stack: same as `{STACK}`)
+- Managed blocks: text between `<!-- jdi:managed id=… -->` and
+  `<!-- jdi:/managed -->` is JDI's (inputs, work rules, return contract).
+  Copy it VERBATIM, markers included — never put project text inside, never
+  rephrase it. `jdi-cli specialists upgrade` replaces exactly these blocks on
+  later JDI versions; everything outside them is the project's and is kept.
 
 **Specialist slug derivation:**
 - Single-stack (`specialist_count == 1`): `slug = {project_slug}`
@@ -400,6 +406,35 @@ For each `{X_COMMAND}` (build/test/coverage/lint), also generate `{X_COMMAND_PS}
 Most `.NET CLI` / `pnpm` / `npm` commands run identically in bash and PowerShell. The difference is in pipes/redirects.
 
 Write to `.jdi/agents/jdi-reviewer-{slug}.md`.
+
+### S5.4: Gate commands for the gates runner (`.jdi/stacks/{slug}.json`)
+
+One JSON per reviewer: `/jdi-verify` runs build, tests, coverage, lint and the
+automatic DoD rows through `jdi-cli gates run` in its own shell, outside the
+reviewer's context, and the reviewer reads the results instead of waiting on a
+long suite. Format: `npx -y jdi-cli@0.17.0 template stack`. Write
+`.jdi/stacks/{slug}.json` (same `{slug}` as the specialist):
+
+```json
+{
+  "$schema_version": "1",
+  "name": "{slug}",
+  "agent": "jdi-reviewer-{slug}",
+  "file_glob": ["{FILE_GLOB}"],
+  "shell": "bash",
+  "env": {},
+  "path_prepend": [],
+  "gates": { "build": "<SQ2>", "test": "<SQ3>", "coverage": "<COVERAGE_COMMAND>", "lint": "<SQ5>" },
+  "coverage_runs_tests": <true when the coverage command runs the whole suite>,
+  "lint_blocks": <true when SQ6 / the conventions make lint failures blocking>,
+  "timeout_min": 30,
+  "evidence_only": [<E2E / real-login commands, e.g. "npm run e2e" — never executed by the runner>]
+}
+```
+
+Omit a gate the project does not have (no linter → no `lint` key) instead of
+writing `true`. Bash commands only — the runner uses `shell`; on a Windows-only
+project set `"shell": "pwsh"` and use the `{X_COMMAND_PS}` forms.
 
 ### S5.5: Code-design and quality rules, inline (no skills)
 
@@ -454,7 +489,7 @@ the core agents and writes one copy per installed runtime (byte-deterministic,
 idempotent, `GENERATED` marker right after the frontmatter):
 
 ```bash
-npx -y jdi-cli@0.16.0 sync-specialists
+npx -y jdi-cli@0.17.0 sync-specialists
 ```
 
 The copies are generated artifacts committed alongside `.jdi/agents/` (S6/S7
@@ -493,9 +528,9 @@ Single-stack default glob: `**/*` (catch-all). Multi-stack: one
 inside this same entry file. Then refresh the views:
 
 ```bash
-npx -y jdi-cli@0.16.0 render
-git add .jdi/agents/ .jdi/registry/
-npx -y jdi-cli@0.16.0 sync-specialists --porcelain | xargs -r git add   # runtime copies (S5.7)
+npx -y jdi-cli@0.17.0 render
+git add .jdi/agents/ .jdi/stacks/ .jdi/registry/
+npx -y jdi-cli@0.17.0 sync-specialists --porcelain | xargs -r git add   # runtime copies (S5.7)
 git commit -m "chore(jdi): bootstrap specialists for {project_name}"
 ```
 
@@ -507,8 +542,8 @@ ship? |`), and append the same `## R-{date}-{slug}` block to
 `.jdi/registry.md`. Then:
 
 ```bash
-git add .jdi/agents/ .jdi/specialists.md .jdi/reviewers.md .jdi/registry.md
-npx -y jdi-cli@0.16.0 sync-specialists --porcelain | xargs -r git add   # runtime copies (S5.7)
+git add .jdi/agents/ .jdi/stacks/ .jdi/specialists.md .jdi/reviewers.md .jdi/registry.md
+npx -y jdi-cli@0.17.0 sync-specialists --porcelain | xargs -r git add   # runtime copies (S5.7)
 git commit -m "chore(jdi): bootstrap specialists for {project_name}"
 ```
 
@@ -534,7 +569,7 @@ for long sessions where context budget matters. Default repo:
 > "Install Caveman plugin (~75% token savings via compressed output style)?
 >  - **Pros:** less tokens per response, longer sessions before compaction.
 >  - **Cons:** terse output style (fragments, no articles); not for all users.
->  - **Idempotent:** safe to run later via `npx -y jdi-cli@0.16.0 install-caveman`."
+>  - **Idempotent:** safe to run later via `npx -y jdi-cli@0.17.0 install-caveman`."
 >
 > Options:
 > - [Yes, install now (user scope)]
@@ -548,14 +583,14 @@ If "Yes (project)": invoke with `--scope project`.
 ```bash
 PW_SCRIPT="$(npm root)/jdi-cli/bin/jdi-install-caveman.sh"
 [ -f "$PW_SCRIPT" ] || PW_SCRIPT="$(npm root -g)/jdi-cli/bin/jdi-install-caveman.sh"
-[ -f "$PW_SCRIPT" ] && bash "$PW_SCRIPT" --scope ${SCOPE:-user} || echo "  [warn] jdi-install-caveman not found. Run: npx -y jdi-cli@0.16.0 install-caveman"
+[ -f "$PW_SCRIPT" ] && bash "$PW_SCRIPT" --scope ${SCOPE:-user} || echo "  [warn] jdi-install-caveman not found. Run: npx -y jdi-cli@0.17.0 install-caveman"
 ```
 
 **PowerShell:**
 ```powershell
 $Script = Join-Path (npm root) 'jdi-cli\bin\jdi-install-caveman.ps1'
 if (-not (Test-Path $Script)) { $Script = Join-Path (npm root -g) 'jdi-cli\bin\jdi-install-caveman.ps1' }
-if (Test-Path $Script) { & $Script -Scope ($Scope ?? 'user') } else { Write-Warning "jdi-install-caveman not found. Run: npx -y jdi-cli@0.16.0 install-caveman" }
+if (Test-Path $Script) { & $Script -Scope ($Scope ?? 'user') } else { Write-Warning "jdi-install-caveman not found. Run: npx -y jdi-cli@0.17.0 install-caveman" }
 ```
 
 If "Skip", append to `.jdi/STATE.md`:
@@ -572,7 +607,7 @@ Only run if `frontend.has_frontend: true` in PROJECT.md. Otherwise skip.
 > "Install Playwright + MCP server for live browser interaction during dev?
 >  - **Pros:** LLM can drive a real browser via MCP (navigate, click, screenshot). Gate 7 frontend-validator skill also benefits.
 >  - **Cons:** ~250MB browser download + 1 dep added (`@playwright/test`).
->  - **Idempotent:** safe to run later via `npx -y jdi-cli@0.16.0 install-playwright`."
+>  - **Idempotent:** safe to run later via `npx -y jdi-cli@0.17.0 install-playwright`."
 >
 > Options:
 > - [Yes, install now (recommended)]
@@ -586,7 +621,7 @@ JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/.
 # Or, if running inside a project that has jdi installed via npx:
 PW_SCRIPT="$(npm root)/jdi-cli/bin/jdi-install-playwright.sh"
 [ -f "$PW_SCRIPT" ] || PW_SCRIPT="$(npm root -g)/jdi-cli/bin/jdi-install-playwright.sh"
-[ -f "$PW_SCRIPT" ] && bash "$PW_SCRIPT" || echo "  [warn] jdi-install-playwright not found in node_modules. Run: npx -y jdi-cli@0.16.0 install-playwright"
+[ -f "$PW_SCRIPT" ] && bash "$PW_SCRIPT" || echo "  [warn] jdi-install-playwright not found in node_modules. Run: npx -y jdi-cli@0.17.0 install-playwright"
 ```
 
 **PowerShell:**
@@ -596,7 +631,7 @@ if (-not (Test-Path $PWScript)) { $PWScript = Join-Path (npm root -g) 'jdi-cli\b
 if (Test-Path $PWScript) {
   & $PWScript
 } else {
-  Write-Warning "jdi-install-playwright not found. Run: npx -y jdi-cli@0.16.0 install-playwright"
+  Write-Warning "jdi-install-playwright not found. Run: npx -y jdi-cli@0.17.0 install-playwright"
 }
 ```
 
@@ -607,7 +642,7 @@ If "Skip", append to `.jdi/STATE.md`:
 playwright_mcp: skipped_at_bootstrap
 ```
 
-User can run `npx -y jdi-cli@0.16.0 install-playwright` anytime later.
+User can run `npx -y jdi-cli@0.17.0 install-playwright` anytime later.
 
 ---
 
@@ -836,7 +871,7 @@ apply to this `{type}`):
 <!-- /jdi:skills -->
 ```
 
-Then `npx -y jdi-cli@0.16.0 render` to refresh the views.
+Then `npx -y jdi-cli@0.17.0 render` to refresh the views.
 
 **Legacy layout**: append the rows directly — `.jdi/specialists.md`
 (`| {language} | jdi-{name} | {trigger description} |`), `.jdi/reviewers.md`

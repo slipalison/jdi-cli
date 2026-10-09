@@ -4,12 +4,13 @@
 # - Detecta runtimes instalados no projeto
 # - Sobrescreve runtime files (agents, commands, skills) - shipped pelo JDI
 # - NUNCA toca state files (.jdi/PROJECT.md, DECISIONS.md, etc)
-# - Detecta specialists e pergunta se regenera
+# - Atualiza os blocos gerenciados dos specialists (jdi:managed) e aponta
+#   `specialists upgrade --adopt` para os gerados antes da 0.17
 # - Atualiza .jdi/VERSION
 #
 # Flags:
-#   --force-specialists  Regenera specialists sem perguntar
-#   --skip-specialists   Nao mexe em specialists
+#   --force-specialists  Indica /jdi-bootstrap (Recriar) para specialists antigos
+#   --skip-specialists   Nao mexe em specialists (nem nos blocos gerenciados)
 #   --dry-run            Mostra o que faria
 
 set -euo pipefail
@@ -216,45 +217,40 @@ if [[ ${#specialists[@]} -gt 0 ]]; then
   for s in "${specialists[@]}"; do echo "  - $(basename "$s")"; done
   echo
 
-  # Heuristica: specialists gerados a partir da 0.16 tem <return_contract> e
-  # nao tem <skills_to_load> (lista que nunca carregava: os specialists nao
-  # tem a ferramenta Skill).
-  needs_regen=0
+  # Desde a 0.17 as partes do JDI nos specialists (entradas, regras de
+  # trabalho, retorno curto) sao BLOCOS GERENCIADOS
+  # (<!-- jdi:managed id=... -->): o update troca so esses blocos e mantem
+  # byte a byte tudo o que o projeto escreveu fora deles. Specialists sem
+  # blocos (gerados antes da 0.17) precisam de `specialists upgrade --adopt`
+  # uma vez — mostra a diferenca antes de gravar.
+  if [[ $SKIP_SPECIALISTS -eq 1 ]]; then
+    echo "  Specialists mantidos como estao (--skip-specialists)."
+  elif [[ $DRY_RUN -eq 1 ]]; then
+    (cd "$PROJECT_DIR" && node "$ROOT/bin/jdi.js" specialists upgrade) || true
+  else
+    (cd "$PROJECT_DIR" && node "$ROOT/bin/jdi.js" specialists upgrade --write) || true
+    (cd "$PROJECT_DIR" && JDI_LANG="$JDI_LANG" bash "$ROOT/bin/lib/jdi-sync-specialists.sh" all --quiet) || true
+  fi
+  legacy=0
   for s in "${specialists[@]}"; do
-    if grep -q '<skills_to_load>' "$s" || ! grep -q '<return_contract>' "$s"; then
-      needs_regen=1
-      break
-    fi
+    grep -q '<!-- jdi:managed id=' "$s" || { legacy=1; break; }
   done
-
-  if [[ $needs_regen -eq 1 ]]; then
-    echo "Specialists existentes foram gerados antes da 0.16: sem <return_contract>"
-    echo "(retorno curto ao orquestrador) e/ou com <skills_to_load> (nunca carregado)."
-    echo "Regenere com /jdi-bootstrap (Recriar) ou aplique as mudancas da 0.16 a mao"
-    echo "(CHANGELOG: entradas, retorno curto, nada de reler CLAUDE.md/rules)."
+  if [[ $legacy -eq 1 ]]; then
     echo
-
-    should_regen=0
+    echo "Specialists gerados antes da 0.17 (sem blocos gerenciados): as entradas"
+    echo "(brief), o retorno curto e as regras novas so chegam a eles com:"
+    echo "  npx -y jdi-cli@$NEW_VERSION specialists upgrade --adopt          # mostra a diferenca"
+    echo "  npx -y jdi-cli@$NEW_VERSION specialists upgrade --adopt --write  # grava"
+    echo "  npx -y jdi-cli@$NEW_VERSION sync-specialists"
+    echo "Tudo fora dos blocos e preservado. Alternativa: /jdi-bootstrap (Recriar)."
     if [[ $FORCE_SPECIALISTS -eq 1 ]]; then
-      should_regen=1
-    elif [[ $SKIP_SPECIALISTS -eq 1 ]]; then
-      should_regen=0
-    elif [[ -t 0 ]]; then
-      read -r -p "Regenerar specialists? Vai rodar /jdi-bootstrap (Y/n) " resp
-      if [[ -z "$resp" || "$resp" =~ ^[YySs] ]]; then should_regen=1; fi
-    fi
-
-    if [[ $should_regen -eq 1 ]]; then
       echo
-      echo "ACAO MANUAL NECESSARIA:"
+      echo "ACAO MANUAL NECESSARIA (--force-specialists):"
       echo "  Abra teu runtime e rode:  /jdi-bootstrap"
       echo "  Architect vai detectar specialists existentes e oferecer 'Recriar'."
-    else
-      echo "  Specialists mantidos como estao."
     fi
-  else
-    echo "Specialists ja estao no formato da 0.16+."
   fi
+  echo "  Auditoria: npx -y jdi-cli@$NEW_VERSION specialists lint"
 fi
 
 # =========================================================

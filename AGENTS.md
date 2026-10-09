@@ -177,8 +177,8 @@
 **Selected by:** the coding agent's engine when an issue is delegated (its description is the attractor; the other six agents carry anti-selection disclaimers), or explicitly via the custom-agent dropdown / `/agent jdi-solo`.
 
 **Solo deviations (declared in the agent body):**
-- Every `Agent()` dispatch runs inline — doer/reviewer steps are executed THROUGH the per-project specialist files (`.jdi/agents/jdi-doer-{slug}.md` / `jdi-reviewer-{slug}.md`), re-read at every role switch (they carry the project's how-to-develop-and-test context)
-- `/jdi-loop` caps intact with AUTO-RESET at human gates (per `/jdi-issue`); killed loop = full stop, never shipped
+- Every `Agent()` dispatch runs inline — doer/reviewer steps are executed THROUGH the per-project specialist files (`.jdi/agents/jdi-doer-{slug}.md` / `jdi-reviewer-{slug}.md`, read in full the first time each role is played, again only after a context compaction); every role switch starts from that role's brief (`jdi-cli brief --role doer --task T-N` / `--role reviewer --stack <r>`)
+- `/jdi-loop` caps intact, bookkeeping through `jdi-cli loop record` / `loop reset --autonomous` at human gates (per `/jdi-issue`); gates through `jdi-cli gates run`; killed loop = full stop, never shipped
 - DoD critic (verify Step 4.5) becomes a tighten-only self-critic pass
 - Checkpoint commit per artifact + explicit `git add` + `git ls-files --error-unmatch` verification (delegated harnesses drop untracked files from auto-commits)
 - Budget squeeze: never skip artifacts — reduce code scope, mark tasks blocked, report honestly
@@ -191,6 +191,12 @@
 
 ## Per-project (in `.jdi/agents/`)
 
+The JDI-owned parts of each specialist (inputs, work rules, return contract) sit
+between `<!-- jdi:managed id=… -->` and `<!-- jdi:/managed -->`. `jdi update`
+refreshes only those blocks; everything the project wrote outside them stays
+byte for byte. Specialists generated before 0.17 come under management once
+with `jdi-cli specialists upgrade --adopt [--write]`.
+
 ### `jdi-doer-{slug}` (model: `.jdi/config.json` `models.doer`, default inherit)
 
 **Role:** Executor that ALREADY KNOWS the project's stack/code-design/conventions.
@@ -200,8 +206,8 @@
 **Philosophy:** 1 focused specialist that already knows the stack, instead of separate executor + code-fixer + doc-writer.
 
 **Inputs:**
-- `phase_id`, `task`
-- Reads only its task block (PLAN.md), the CONTEXT decisions and DoD lines for its files, `jdi-cli learnings --last 3`, and `jdi-cli decisions --ids` for anything else — never other phases or the whole decision history
+- `phase_slug`, `task` (or `mode=fix_blockers`), `brief=<path>`
+- Starts from its brief (`jdi-cli brief --role doer --task T-N`): its task block, orchestrator notes, the decisions the task cites, the DoD lines for its files, known errors for its files and stage, the last learnings — capped, with a pointer for what was left out. Fix mode: `jdi-cli review blockers`. Never other phases or the whole decision history
 - Write on the paths in its task's `files_modified`
 
 **Outputs:**
@@ -228,8 +234,9 @@
 **Philosophy:** 1 focused reviewer per stack, instead of separate code-reviewer + security-auditor + integration-checker + verifier.
 
 **Inputs:**
-- `phase_id`
-- Read on PROJECT.md § DoD, CONTEXT § decisions + DoD, PLAN.md task list, SUMMARY.md, the diff of its glob, `jdi-cli decisions --ids` for Gate 6
+- `phase_slug`, `mode`, `reviewer_segment` (multi-stack), `dod_owner`, `brief=<path>`
+- Starts from its brief (`jdi-cli brief --role reviewer --stack <r>`): scope and changed files, the gate results already measured by `jdi-cli gates run` (used when their `head` matches; otherwise it runs the gates itself), the task list, the DoD rows of its stack, decisions for Gate 6, known errors; then the diff of its glob
+- Tags each blocker `[defect]` or `[hollow DoD N]` (the Verify passes without proving the criterion) — the ralph loop treats them differently
 
 **Outputs:**
 - `.jdi/phases/<slug>/REVIEW.md` with verdict (multi-stack: each reviewer appends its own segment; aggregate = worst case)

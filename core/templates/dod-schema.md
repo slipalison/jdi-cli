@@ -37,6 +37,35 @@ Each item is one bullet with REQUIRED sub-fields.
 
 Items without `Verify:` are INVALID and must be rejected at capture time.
 
+### Machine contract (checked by `jdi-cli validate-dod <phase>`)
+
+The DoD is parsed by the CLI (`jdi-cli dod parse`), linted before the plan,
+and its automatic rows are executed once per verify by the gates runner. Write
+it so the machine reads exactly what you mean:
+
+| Field / form | Meaning |
+|---|---|
+| `**Verify:** \`<command>\`` | One shell command in backticks, at most `budgets.verify_inline_chars` (300) characters. Its exit status is the result. |
+| `**Verify:** \`bash .jdi/phases/<slug>/verify/dod-N.sh\`` | Anything longer lives in a script (`jdi-cli dod extract <slug>` moves it there verbatim, no `set -e` added). Agents read the criterion, not the script; only the gates runner executes it. |
+| `**Verify (evidence):**` | External effect (E2E with a real login, deploy, paid API, rate-limited service): never executed by the runner — the reviewer judges the recorded evidence named in `Evidence:`. |
+| `**Stack:** <reviewer>` | Optional. Routes the row to that reviewer's brief in a multi-stack project. |
+| `### Deferred to PR review` | Section for criteria no machine can prove in `/jdi-issue` (autonomous) — listed in the PR body, never silently waived. |
+
+Lint rules (ERROR stops `/jdi-discuss` until fixed; WARN is reported):
+
+| Rule | Level | What it catches |
+|---|---|---|
+| DOD-S0 | ERROR | no `## Definition of Done` |
+| DOD-S1 | ERROR / WARN | auto item without `Verify:` / manual item without `Evidence:` |
+| DOD-S2 | WARN (ERROR with `budgets.enforce: "fail"`) | inline `Verify:` over the character limit — extract it |
+| DOD-S3 | ERROR | `Verify:` calls a `verify/dod-N.sh` that does not exist |
+| DOD-L1 | ERROR | test runner with a name filter and no count check — exits 0 when zero tests match; require "N passed" with N >= 1 |
+| DOD-L2 | WARN | a positive grep over a directory/glob as the whole proof — passes if the text exists anywhere |
+| DOD-L3 | WARN | E2E / real login inside an automatic `Verify:` — mark it `Verify (evidence):` |
+
+Project-specific rules plug in through `.jdi/config.json` `dod.extra_lint`
+(a command; `{file}` is replaced by the CONTEXT.md path).
+
 ## Classification rules (auto vs manual)
 
 When the asker/researcher receives or proposes an item, classify automatically using these signals:

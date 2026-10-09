@@ -59,8 +59,15 @@ $phaseSlug = $r.slug; $phaseDir = $r.dir; $phasePosition = $r.position
 ```bash
 test -f "$PHASE_DIR/CONTEXT.md" || { echo "CONTEXT.md missing. Run /jdi-discuss $PHASE_SLUG"; exit 1; }
 
-# Cross-phase learnings for the planner: last 3 shipped phases, by ship date
-npx -y {{JDI_CLI}} learnings --last 3 --out .jdi/cache/learnings.md
+# The planner starts from a brief: goal, locked decisions, DoD criteria,
+# stack/design, routing table, learnings of the last 3 shipped phases (by ship
+# date) and the known errors to plan around — not the whole history.
+<!-- jdi:only claude -->
+BRIEF=$(npx -y {{JDI_CLI}} brief "$PHASE_SLUG" --role planner --runtime claude | cut -d' ' -f1)
+<!-- jdi:end -->
+<!-- jdi:only copilot,opencode,antigravity,junie -->
+BRIEF=$(npx -y {{JDI_CLI}} brief "$PHASE_SLUG" --role planner --runtime other | cut -d' ' -f1)
+<!-- jdi:end -->
 ```
 
 ### Step 4: Spawn planner
@@ -68,6 +75,7 @@ Invoke `jdi-planner` with:
 - `phase_slug=$PHASE_SLUG`
 - `phase_dir=$PHASE_DIR`
 - `phase_position=$PHASE_POSITION`
+- `brief=$BRIEF`
 
 <!-- jdi:only claude -->
 If `.jdi/config.json` sets `models.planner` to anything other than `inherit`,
@@ -81,6 +89,9 @@ PLAN.md just to repeat it.
 The planner has no shell — this command commits.
 ```bash
 test -f "$PHASE_DIR/PLAN.md" || { echo "PLAN.md not created"; exit 1; }
+# The plan may have tightened the DoD: lint again (cheap), size check (warn).
+npx -y {{JDI_CLI}} validate-dod "$PHASE_SLUG" || echo "warn: DoD lint ERROR after plan — fix the flagged Verify lines before /jdi-do"
+npx -y {{JDI_CLI}} budgets "$PHASE_SLUG" || true
 git add "$PHASE_DIR/PLAN.md"; git add .jdi/STATE.md 2>/dev/null || true
 git diff --cached --quiet || git commit -m "docs($PHASE_SLUG): generate plan"
 ```

@@ -74,20 +74,25 @@ Spawned by: `/jdi-do {PHASE_SLUG}` (or legacy `/jdi-do {N}`)
 <!-- jdi:/adopted -->
 </role>
 
+<!-- jdi:managed id=inputs -->
 <inputs>
-- `phase_slug` (canonical slug, required) + `phase_dir` (orchestrator pre-resolved path) + `task` (`T-N`, or `mode=fix_blockers`). Legacy: `phase_number` if invoked from v1 callers.
-- Read ONLY what the task needs — every token you read is re-read on every later turn of this session:
-  - `{PHASE_DIR}/PLAN.md`: YOUR task block (`#### T-N`) and the orchestrator notes at the end of the plan, if any. Locate with `grep -n`, read the range. Not the other tasks.
-  - `{PHASE_DIR}/CONTEXT.md`: `## Locked decisions` and the `## Definition of Done` criteria that name your task's files. A `Verify:` body only when your task must make that check pass.
-  - Fix mode: only `## Blockers` and `## Warnings` of `{PHASE_DIR}/REVIEW.md`, and the finding hashes of `{PHASE_DIR}/LOOP.md` `## History` (ralph mode).
-  - Learnings: `npx -y {{JDI_CLI}} learnings --last 3` (the most recently shipped phases, capped). Treat them as known pitfalls.
-  - Decisions cited by your task that are not in CONTEXT.md: `npx -y {{JDI_CLI}} decisions --ids <D-...>`. Never the whole `.jdi/DECISIONS.md`.
-- Never read: other phases' artifacts, `.jdi/DECISIONS.md` in full, catalogs or logs not named by your task, and the project instruction files (CLAUDE.md, AGENTS.md, `.claude/rules/`, `.github/instructions/`) — the runtime already put the ones that apply in your context.
-- Write on:
-  - code (paths in YOUR task's `files_modified`)
-  - `{PHASE_DIR}/SUMMARY.md` (one line per task)
-  - `{PHASE_DIR}/PLAN.md` (your task's `Status:` line only)
+- From the prompt: `phase_slug`, `phase_dir`, `task` (`T-N`) or `mode=fix_blockers`, and `brief=<path>`.
+- Read the brief first: your task block, the orchestrator notes, the decisions your task cites, the Definition of Done lines that touch your files, known errors and learnings — under a token cap, with a pointer for everything it left out. Every token you read is re-read on each of your later turns: start from the brief.
+- Open an artifact only for what the brief points to, and say why in your return.
+- Fix mode: `npx -y {{JDI_CLI}} review blockers {PHASE_SLUG}` is your work list — not the whole REVIEW.md. Ralph mode adds the finding hashes of `{PHASE_DIR}/LOOP.md` `## History` (failed approaches).
+- No `brief=` in the prompt (older orchestrator): run `npx -y {{JDI_CLI}} brief {PHASE_SLUG} --role doer --task <T-N>` and read the path it prints.
+- Never read: other phases' artifacts, `.jdi/DECISIONS.md` in full, the whole known-errors catalog, and the project instruction files (CLAUDE.md, AGENTS.md, `.claude/rules/`, `.github/instructions/`) — the runtime already put the ones that apply in your context.
+- Write on: code (your task's `files_modified`), `{PHASE_DIR}/SUMMARY.md` (one line per task), `{PHASE_DIR}/PLAN.md` (your task's `Status:` line only).
 </inputs>
+<!-- jdi:/managed -->
+
+<!-- jdi:managed id=work_rules -->
+<work_rules>
+- Find code with `grep -n`, then read only the range you need — never whole large files.
+- Run lint and the task's targeted test only. Never the full suite, coverage or E2E: the verify step runs them once for the phase. A long command keeps this whole session waiting, and once the prompt cache expires the whole context is paid again.
+- Do not paste logs or test output into SUMMARY.md: one line per task, pointing to files.
+</work_rules>
+<!-- jdi:/managed -->
 
 <research_tools>
 Web research available to resolve specific technical doubts (API/syntax/lib error) during implementation. NOT for exploring alternative designs — code-design is already LOCKED.
@@ -200,35 +205,11 @@ task, never pasted logs or test output — point to files instead.
 ```
 
 ### Step 4: Return to orchestrator
-Follow `<return_contract>`.
-
-</process>
-
-<rules>
-- Never skip hooks via `--no-verify`
-- Never touch files outside PLAN's `files_modified` without flag
-- Never skip tests — task is only `completed` if test passed
-- Atomic commit per task — never bundle
-- If task ambiguous, mark `blocked` with reason instead of guessing
-- Conventional commits — scope = phase slug
-- Code/commits language: English. User-facing language: pt-BR
-</rules>
-
-<fallbacks>
-- No tests on task -> write minimal test before implementing (TDD-light)
-- Build fails repeatedly -> mark phase `partial`, return control
-- File conflict with another plan -> abort task, mark `blocked: conflict`
-</fallbacks>
-
-<output>
-- Modified code, atomically committed
-- `{PHASE_DIR}/PLAN.md` updated (task statuses)
-- `{PHASE_DIR}/SUMMARY.md` created
-</output>
-
+Follow `<!-- jdi:managed id=return_contract -->
 <return_contract>
 Your final message goes into the orchestrator's context, which is re-read on
 every later turn of the whole phase. At most 10 lines:
 `phase {PHASE_SLUG}: {X}/{Y} tasks, {Z} blocked. SUMMARY: {path}`, then one line
 per blocked task (id + reason) and the commit SHAs. Details live in the files.
 </return_contract>
+<!-- jdi:/managed -->

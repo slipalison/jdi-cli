@@ -32,7 +32,7 @@ Capture locked decisions for the given phase. Output: CONTEXT.md consumed by the
 
 ### Step 1: Validation
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.16.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.17.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new first."; exit 1; }
 
@@ -44,7 +44,7 @@ ls .jdi/agents/jdi-reviewer-*.md >/dev/null 2>&1 || { echo "Reviewer specialist 
 ### Step 2: Resolve phase
 
 ```bash
-RESOLVED="$(npx -y jdi-cli@0.16.0 resolve-phase "$1")" || {
+RESOLVED="$(npx -y jdi-cli@0.17.0 resolve-phase "$1")" || {
   echo "Phase '$1' not found in ROADMAP."
   exit 1
 }
@@ -57,7 +57,7 @@ PHASE_POSITION="$JDI_PHASE_POSITION"
 
 PowerShell:
 ```powershell
-$r = npx -y jdi-cli@0.16.0 resolve-phase $args[0] --json | ConvertFrom-Json
+$r = npx -y jdi-cli@0.17.0 resolve-phase $args[0] --json | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) { Write-Error "Phase '$($args[0])' not found."; exit $LASTEXITCODE }
 $phaseSlug = $r.slug; $phaseDir = $r.dir; $phasePosition = $r.position
 ```
@@ -68,13 +68,15 @@ If `$PHASE_DIR/CONTEXT.md` exists, ask: overwrite | skip | view.
 
 ### Step 3.5: Prepare the asker's inputs (small, deterministic)
 
-The asker reads these files instead of the whole decision history and old
-CONTEXT.md files (in a long-lived project those passed 50k tokens per spawn):
+The asker starts from a brief (PROJECT sections, the roadmap entry, the
+decisions of the init and the 2 most recent phases, known errors) instead of
+the whole decision history and old CONTEXT.md files — in a long-lived project
+those passed 50k tokens per spawn:
 
 ```bash
 mkdir -p .jdi/cache
-npx -y jdi-cli@0.16.0 decisions --index --recent 2 --out .jdi/cache/decisions.md
-npx -y jdi-cli@0.16.0 template dod-schema --out .jdi/cache/dod-schema.md
+npx -y jdi-cli@0.17.0 template dod-schema --out .jdi/cache/dod-schema.md
+BRIEF=$(npx -y jdi-cli@0.17.0 brief "$PHASE_SLUG" --role asker --runtime other | cut -d' ' -f1)
 ```
 
 ### Step 4: Spawn asker
@@ -83,22 +85,37 @@ Invoke `jdi-asker` with:
 - `phase_dir=$PHASE_DIR`
 - `phase_position=$PHASE_POSITION` (display only)
 - `mode=auto` if `--auto`, otherwise `mode=interactive`
-- Orchestrators (e.g. `/jdi-issue`) may additionally pass `brief=<card text>`
+- `brief=$BRIEF` (the path printed in Step 3.5)
+- Orchestrators (e.g. `/jdi-issue`) may additionally pass `card=<card text>`
   (external card = primary source) and `dod=auto_only` (only executable DoD;
   human-only criteria go to `## Deferred to PR review`) — see the asker's
-  `<brief_mode>`
+  `<card_mode>`
 
 
 Agent runs its own process. Returns when CONTEXT.md is written to `$PHASE_DIR/CONTEXT.md`.
 Its final message is a short status (return contract) — do not open
 CONTEXT.md just to echo it back; Step 4.5 checks the file mechanically.
 
-### Step 4.5: Verify output
+### Step 4.5: Verify output, lint the DoD, move long `Verify:` bodies out
 
 ```bash
 test -f "$PHASE_DIR/CONTEXT.md" || { echo "CONTEXT.md not created"; exit 1; }
 grep -q '## Definition of Done' "$PHASE_DIR/CONTEXT.md" || { echo "CONTEXT.md missing § Definition of Done (asker Stage 2 incomplete)"; exit 1; }
+
+# Long Verify bodies -> $PHASE_DIR/verify/dod-N.sh (executed by the reviewer,
+# read by nobody else). Verbatim command, bash -n checked, idempotent.
+npx -y jdi-cli@0.17.0 dod extract "$PHASE_SLUG"
+
+# Hollow-proof patterns caught by form, before any code exists (one second
+# here, a whole loop round later).
+npx -y jdi-cli@0.17.0 validate-dod "$PHASE_SLUG" > .jdi/cache/dod-lint.txt; LINT_RC=$?
 ```
+
+`LINT_RC` = 1 (at least one ERROR): spawn a FRESH asker with
+`phase_slug`, `phase_dir`, `mode=fix_dod`, `lint=.jdi/cache/dod-lint.txt` — it
+fixes only the flagged `Verify:` lines — then repeat this step once. Still
+ERROR: stop and show `.jdi/cache/dod-lint.txt` (interactive) or record it under
+`## Deferred to PR review` (autonomous). WARN lines are informative.
 
 ### Step 5: Render views + commit
 
@@ -109,9 +126,10 @@ silently commits nothing, #39).
 
 ```bash
 if [ -d .jdi/roadmap ]; then
-  npx -y jdi-cli@0.16.0 render
+  npx -y jdi-cli@0.17.0 render
   git add "$PHASE_DIR/CONTEXT.md" .jdi/decisions/ .jdi/todos/ 2>/dev/null
   [ -d "$PHASE_DIR/verify" ] && git add "$PHASE_DIR/verify/"
+  [ -d .jdi/known-errors ] && git add .jdi/known-errors/
 else
   git add "$PHASE_DIR/CONTEXT.md" .jdi/DECISIONS.md .jdi/todos.md 2>/dev/null
 fi
@@ -139,7 +157,7 @@ Next: /jdi-plan $PHASE_SLUG
 </process>
 
 <gates>
-- pre: `.jdi/` exists + doer/reviewer specialists exist + phase resolves via `npx -y jdi-cli@0.16.0 resolve-phase`
+- pre: `.jdi/` exists + doer/reviewer specialists exist + phase resolves via `npx -y jdi-cli@0.17.0 resolve-phase`
 - post: CONTEXT.md written (including `## Definition of Done`) + commit made + STATE.md updated
 </gates>
 

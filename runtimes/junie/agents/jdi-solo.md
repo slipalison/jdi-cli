@@ -41,7 +41,7 @@ test -d .jdi/ || { echo "ABORT: not a JDI project (/jdi-new + /jdi-bootstrap fir
 ls .jdi/agents/jdi-doer-*.md >/dev/null 2>&1 || { echo "ABORT: no specialists (/jdi-bootstrap first)"; exit 1; }
 
 # 3. jdi-cli helpers reachable (gates depend on them)
-npx -y jdi-cli@0.16.0 --version || { echo "ABORT: jdi-cli unreachable via npx (firewall/allowlist?)"; exit 1; }
+npx -y jdi-cli@0.17.0 --version || { echo "ABORT: jdi-cli unreachable via npx (firewall/allowlist?)"; exit 1; }
 
 # 4. Git hooks active when the repo ships them (the artifact gate)
 test -d .githooks && git config core.hooksPath .githooks || true
@@ -68,7 +68,7 @@ interactive runtime." Never produce code or artifacts without gates.
    silently drop untracked files from their auto-commits — a file that is
    not in the index does not exist.
 4. **Definition of complete is mechanical:**
-   `npx -y jdi-cli@0.16.0 validate-phase <slug> --for-pr` exits 0. No PR before
+   `npx -y jdi-cli@0.17.0 validate-phase <slug> --for-pr` exits 0. No PR before
    that. The 5 artifacts (CONTEXT, PLAN, SUMMARY, REVIEW, SHIPPED) plus a
    non-BLOCKED verdict are the proof the protocol ran.
 5. **Never merge.** Open the PR, report, stop. Killed/escalated work is
@@ -97,23 +97,46 @@ the project's knowledge of HOW to develop and test here:
   `.github/agents/`/installed agent file and follow its process and output
   format.
 
-Fresh-context rotation is lost — compensate by RE-READING the specialist
-file at every role switch, never from memory of an earlier read.
+Fresh-context rotation is lost — compensate at every role switch with the
+role's brief, never from memory of an earlier step:
+
+```bash
+npx -y jdi-cli@0.17.0 brief "$SLUG" --role doer --task T-N --runtime other      # before each task
+npx -y jdi-cli@0.17.0 brief "$SLUG" --role reviewer --stack <reviewer> --runtime other   # before each review
+```
+
+Read the path it prints: the task, the decisions it cites, the DoD lines for
+its files, known errors and learnings, under a token cap. Read each
+specialist file in full the first time you play it in this session; read it
+again only if your context was compacted since (you can no longer quote its
+gates) — everything you read stays in your context and is paid again on every
+later turn.
 
 ### Deviation 2 — the loop runs inline with its caps intact
 `/jdi-loop` Step 4 (doer) and Step B (reviewer) run inline as above.
-Everything deterministic stays literal: LOOP.md init/frontmatter, verdict
-parsing, finding hash, oscillation detection, history append. At the human
-gates take the `Continue` branch automatically appending
-`--- AUTO-RESET n (reason) ---` (per /jdi-issue). Hard caps unchanged:
-5 iter/round, 3 resets, 15 absolute → `killed` = FULL STOP, no ship, no PR
-with production code; commit the `.jdi/` state and report.
+Everything deterministic stays in the CLI, never in your head: `loop init`,
+`loop record "$SLUG" --autonomous` after each verify (verdict parsing,
+finding hash, oscillation, history line), and at a `gate` answer
+`loop reset "$SLUG" --autonomous --reason "<why>"` (per /jdi-issue). Hard caps
+unchanged: 5 iter/round, `orchestration.max_resets_autonomous` resets (3),
+15 absolute → `killed` = FULL STOP, no ship, no PR with production code;
+commit the `.jdi/` state and report. Never edit LOOP.md by hand.
+
+The reviewer's measurable gates run through the gates runner — real exit
+codes, one report per stack, the DoD executed once:
+
+```bash
+npx -y jdi-cli@0.17.0 gates run "$SLUG" --only dod
+npx -y jdi-cli@0.17.0 gates run "$SLUG" --stack <reviewer>
+npx -y jdi-cli@0.17.0 gates show "$SLUG"
+```
 
 ### Deviation 3 — the DoD critic becomes a self-critic pass
 `/jdi-verify` Step 4.5 requires a spawned critic; you cannot spawn. Run a
-reduced self-critic INSIDE the verify step: re-read every `Type=Auto` DoD
-row and re-execute its `Verify:` yourself, checking the command actually
-proves the criterion (not just exits 0). The self-critic can only TIGHTEN
+reduced self-critic INSIDE the verify step: for every `Type=Auto` DoD row,
+read its result in the gates report (`gates show`) and its script in
+`$PHASE_DIR/verify/dod-N.sh` when it was extracted, and check the command
+actually proves the criterion (not just exits 0). The self-critic can only TIGHTEN
 the verdict, never loosen it. Note `critic: self (solo)` in REVIEW.md.
 
 ### Deviation 4 — checkpoint commits per artifact
@@ -135,7 +158,7 @@ bypass it.
 ### Deviation 5 — validate before opening the PR
 
 ```bash
-npx -y jdi-cli@0.16.0 validate-phase "$SLUG" --for-pr || { echo "protocol incomplete — fix before PR"; exit 1; }
+npx -y jdi-cli@0.17.0 validate-phase "$SLUG" --for-pr || { echo "protocol incomplete — fix before PR"; exit 1; }
 git status --porcelain -- .jdi/ | grep . && { echo "untracked/dirty .jdi files — add & commit them"; exit 1; }
 ```
 

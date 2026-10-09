@@ -73,7 +73,7 @@ echo "Reviewers registered: $REVIEWER_COUNT"
 **Single-stack** (`REVIEWER_COUNT == 1`): one reviewer, normal flow.
 **Multi-stack** (`REVIEWER_COUNT > 1`): chain reviewers in registry order. Each writes its own REVIEW segment; aggregate verdict = worst-case (1 BLOCK = overall BLOCK).
 
-### Step 4: Spawn reviewer(s)
+### Step 4: Measure the gates, then spawn reviewer(s)
 
 REVIEW.md is a per-run artifact — regenerate it from scratch so stale
 verdicts from a previous run can never poison the worst-case aggregation
@@ -83,23 +83,54 @@ verdicts from a previous run can never poison the worst-case aggregation
 rm -f "$PHASE_DIR/REVIEW.md"
 ```
 
+**4a. Gates outside the agents' context** (when `.jdi/stacks/` exists —
+`jdi-cli template stack` shows the format; without it, reviewers run their
+own gates as before). Build, tests (once — inside coverage when the stack says
+so), coverage and lint per stack, and the automatic DoD rows ONCE for the whole
+phase. Long suites run here, in this shell, not inside a large reviewer context
+waiting on them:
+
+```bash
+if [ -d .jdi/stacks ]; then
+  npx -y {{JDI_CLI}} gates run "$PHASE_SLUG" --only dod          # DoD once (E2E/real-login rows: EVIDENCE, never executed)
+  for REVIEWER in $REVIEWERS; do
+    npx -y {{JDI_CLI}} gates run "$PHASE_SLUG" --stack "$REVIEWER"
+  done
+fi
+```
+
+A failing gate does not stop the step: the results go into the JSON the
+reviewers read; the verdict comes from the reviewers.
+
+**4b. One brief per reviewer** (scope + changed files, gate results, tasks,
+DoD, decisions for Gate 6, known errors):
+
+```bash
+<!-- jdi:only claude -->
+BRIEF_R=$(npx -y {{JDI_CLI}} brief "$PHASE_SLUG" --role reviewer --stack "$REVIEWER" --runtime claude | cut -d' ' -f1)
+<!-- jdi:end -->
+<!-- jdi:only copilot,opencode,antigravity,junie -->
+BRIEF_R=$(npx -y {{JDI_CLI}} brief "$PHASE_SLUG" --role reviewer --stack "$REVIEWER" --runtime other | cut -d' ' -f1)
+<!-- jdi:end -->
+```
+
 **Single-stack:**
 ```
 Agent(
   subagent_type="${REVIEWERS}",
   description="Verify phase $PHASE_SLUG",
-  prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, mode=verify"
+  prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, mode=verify, dod_owner=true, brief=$BRIEF_R"
 )
 ```
 
-**Multi-stack:** spawn each reviewer in sequence (NOT parallel — build/test commands may conflict on ports, locks, output dirs):
+**Multi-stack:** spawn each reviewer in sequence (NOT parallel — build/test commands may conflict on ports, locks, output dirs). The FIRST reviewer owns the DoD Checklist (`dod_owner=true`); the others reference it — the DoD is evaluated once, not once per reviewer:
 
 ```
 for REVIEWER in $REVIEWERS:
   Agent(
     subagent_type="$REVIEWER",
     description="Verify phase $PHASE_SLUG ($REVIEWER)",
-    prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, mode=verify, reviewer_segment=$REVIEWER"
+    prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, mode=verify, reviewer_segment=$REVIEWER, dod_owner=<true for the first>, brief=$BRIEF_R"
   )
   # Each reviewer appends to $PHASE_DIR/REVIEW.md under section
   # "## Reviewer: $REVIEWER" with its own gate results and verdict
@@ -159,20 +190,9 @@ Invariants: critic is read-only and writes nothing itself; orchestrator owns the
 
 ```bash
 test -f "$PHASE_DIR/REVIEW.md" || { echo "REVIEW.md not created"; exit 1; }
-
-VERDICTS=$(grep -oE 'Verdict:\*\* (APPROVED|APPROVED_WITH_WARNINGS|APPROVED_PENDING_MANUAL|BLOCKED)' "$PHASE_DIR/REVIEW.md" | awk '{print $2}')
-[ -n "$VERDICTS" ] || { echo "Reviewer wrote no verdict line — REVIEW.md malformed. Aborting."; exit 1; }
-
-# Worst-case wins: BLOCK > PENDING_MANUAL > WARNINGS > APPROVED
-if echo "$VERDICTS" | grep -q BLOCKED; then
-  VERDICT=BLOCKED
-elif echo "$VERDICTS" | grep -q APPROVED_PENDING_MANUAL; then
-  VERDICT=APPROVED_PENDING_MANUAL
-elif echo "$VERDICTS" | grep -q APPROVED_WITH_WARNINGS; then
-  VERDICT=APPROVED_WITH_WARNINGS
-else
-  VERDICT=APPROVED
-fi
+# Worst case across every segment (BLOCKED > PENDING_MANUAL > WITH_WARNINGS >
+# APPROVED); exit 2 = no verdict line (malformed — never ship on silence).
+VERDICT=$(npx -y {{JDI_CLI}} review verdict "$PHASE_SLUG") || { echo "Reviewer wrote no verdict line — REVIEW.md malformed. Aborting."; exit 1; }
 ```
 
 ### Step 6: Update STATE

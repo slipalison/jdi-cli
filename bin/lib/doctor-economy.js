@@ -77,6 +77,14 @@ function checks(root) {
     if (reread.length) warn(`specialists mandam reler CLAUDE.md/rules que o runtime ja injeta: ${reread.join(', ')} — remova essa instrucao`);
     if (skills.length) warn(`specialists com <skills_to_load> (nunca carrega: sem ferramenta Skill): ${skills.join(', ')}`);
     if (!reread.length && !skills.length) ok('specialists sem releitura de instrucoes');
+    const specs = fs.readdirSync(agentsDir).filter((n) => /^jdi-(doer|reviewer)-.*\.md$/.test(n));
+    const unmanaged = specs.filter((f) => !fs.readFileSync(path.join(agentsDir, f), 'utf8').includes('<!-- jdi:managed id='));
+    if (unmanaged.length) warn(`specialists sem blocos gerenciados (anteriores a 0.17: sem brief nem retorno curto): ${unmanaged.join(', ')} — \`npx -y jdi-cli specialists upgrade --adopt\``);
+    else if (specs.length) ok('specialists com blocos gerenciados');
+    const reviewers = specs.filter((f) => f.startsWith('jdi-reviewer-'));
+    const stacksDir = path.join(root, '.jdi', 'stacks');
+    const hasStacks = fs.existsSync(stacksDir) && fs.readdirSync(stacksDir).some((f) => f.endsWith('.json'));
+    if (reviewers.length && !hasStacks) note('sem .jdi/stacks/: os reviewers rodam build/testes dentro do proprio contexto (caro) — `npx -y jdi-cli template stack` mostra o formato');
   }
 
   // 4. Config with token budgets (pre-0.16 budgets were chars nobody read)
