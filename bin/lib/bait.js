@@ -39,26 +39,27 @@ function readResults(root, phase) {
   return core.readJson(baitFile(root, phase), null) || { rows: {} };
 }
 
-function findLinks(root, config) {
-  if (Array.isArray(config.dod?.bait_links)) return config.dod.bait_links;
-  const out = [];
-  const walk = (rel, depth) => {
-    if (depth > 3) return;
-    let entries = [];
-    try {
-      entries = fs.readdirSync(path.join(root, rel), { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const e of entries) {
-      if (!e.isDirectory() || e.name === '.git' || e.name === '.jdi') continue;
-      const r = rel ? `${rel}/${e.name}` : e.name;
-      if (e.name === 'node_modules') out.push(r);
-      else if (!e.name.startsWith('.')) walk(r, depth + 1);
-    }
-  };
-  walk('', 0);
+function readDirs(dir) {
+  try {
+    return fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory());
+  } catch {
+    return [];
+  }
+}
+
+// Every node_modules up to depth 3 (outside .git/.jdi and hidden dirs).
+function nodeModulesDirs(root, rel = '', depth = 0, out = []) {
+  if (depth > 3) return out;
+  for (const e of readDirs(path.join(root, rel))) {
+    const r = rel ? `${rel}/${e.name}` : e.name;
+    if (e.name === 'node_modules') out.push(r);
+    else if (!e.name.startsWith('.')) nodeModulesDirs(root, r, depth + 1, out);
+  }
   return out;
+}
+
+function findLinks(root, config) {
+  return Array.isArray(config.dod?.bait_links) ? config.dod.bait_links : nodeModulesDirs(root);
 }
 
 function addWorktree(root, dir) {
@@ -79,58 +80,65 @@ function contextItems(root, phase) {
   return dod.parse(fs.readFileSync(file, 'utf8'), file).items;
 }
 
-function runBait(phase, opts = {}, root = process.cwd()) {
-  const config = core.loadConfig(root);
-  const stacks = gates.loadStacks(root);
-  const env = gates.envFor(stacks);
-  const shell = gates.shellFor(stacks[0]);
-  const timeoutMin = (stacks[0] || {}).timeout_min || 30;
-  const wanted = opts.rows ? new Set(opts.rows) : null;
-  const prev = readResults(root, phase);
-  const head = core.git(['rev-parse', 'HEAD'], root).stdout || null;
-  const results = { head, rows: { ...prev.rows } };
-  const report = [];
-  const links = findLinks(root, config);
-  const logDir = path.join(root, core.JDI_DIR, 'cache', 'gates', phase.slug, 'bait');
+function linkDeps(root, wt, links) {
+  for (const l of links) {
+    const src = path.join(root, l);
+    const dst = path.join(wt, l);
+    if (fs.existsSync(src) && !fs.existsSync(dst)) {
+      fs.mkdirSync(path.dirname(dst), { recursive: true });
+      fs.symlinkSync(src, dst, process.platform === 'win32' ? 'junction' : 'dir');
+    }
+  }
+}
 
-  for (const it of contextItems(root, phase)) {
-    if (it.type !== 'auto' || !it.bait || !it.verify || it.evidence) continue;
-    if (wanted && !wanted.has(it.id)) continue;
+// baseline -> bait -> Verify again, inside the throwaway worktree `wt`.
+function mutationCheck(ctx, it, wt) {
+  const exec = (cmd, name) => gates.run(cmd, { root: ctx.root, cwd: wt, env: ctx.env, shell: ctx.shell, timeoutMin: ctx.timeoutMin, log: path.join(ctx.logDir, `dod-${it.id}-${name}.log`) });
+  const base = exec(it.verify.command, 'baseline');
+  if (base.exit !== 0) {
+    return { status: 'INCONCLUSIVE', reason: `baseline: the Verify exits ${base.exit} in a clean checkout (missing dependency? set dod.bait_links or the stack env)`, excerpt: gates.tail(base.out, 8) };
+  }
+  const mut = exec(it.bait, 'bait');
+  if (!core.git(['status', '--porcelain', '--untracked-files=no'], wt).stdout) return { status: 'INCONCLUSIVE', reason: `the Bait changed no tracked file (exit ${mut.exit})` };
+  const after = exec(it.verify.command, 'after-bait');
+  return after.exit === 0 ? { status: 'HOLLOW', reason: 'the Verify still exits 0 with the criterion broken by the Bait' } : { status: 'CAUGHT' };
+}
+
+function baitRow(ctx, it) {
+  const wt = path.join(ctx.root, core.JDI_DIR, 'cache', 'bait', `wt-${it.id}`);
+  if (fs.existsSync(wt)) removeWorktree(ctx.root, wt);
+  addWorktree(ctx.root, wt);
+  try {
+    linkDeps(ctx.root, wt, ctx.links);
+    return mutationCheck(ctx, it, wt);
+  } finally {
+    removeWorktree(ctx.root, wt);
+  }
+}
+
+const baitable = (it) => it.type === 'auto' && it.bait && it.verify && !it.evidence;
+
+function runBait(phase, opts = {}, root = process.cwd()) {
+  const stacks = gates.loadStacks(root);
+  const ctx = {
+    root,
+    env: gates.envFor(stacks),
+    shell: gates.shellFor(stacks[0]),
+    timeoutMin: stacks[0]?.timeout_min || 30,
+    links: findLinks(root, core.loadConfig(root)),
+    logDir: path.join(root, core.JDI_DIR, 'cache', 'gates', phase.slug, 'bait'),
+  };
+  const prev = readResults(root, phase);
+  const results = { head: core.git(['rev-parse', 'HEAD'], root).stdout || null, rows: { ...prev.rows } };
+  const report = [];
+  for (const it of contextItems(root, phase).filter((x) => baitable(x) && (!opts.rows || opts.rows.includes(x.id)))) {
     const hash = dod.rowHash(it, root);
     const last = prev.rows[it.id];
-    if (!opts.all && last && last.hash === hash && last.status === 'CAUGHT') {
+    if (!opts.all && last?.hash === hash && last.status === 'CAUGHT') {
       report.push({ id: it.id, status: 'CAUGHT', cached: true });
       continue;
     }
-    const wt = path.join(root, core.JDI_DIR, 'cache', 'bait', `wt-${it.id}`);
-    if (fs.existsSync(wt)) removeWorktree(root, wt);
-    addWorktree(root, wt);
-    let res;
-    try {
-      for (const l of links) {
-        const src = path.join(root, l);
-        const dst = path.join(wt, l);
-        if (fs.existsSync(src) && !fs.existsSync(dst)) {
-          fs.mkdirSync(path.dirname(dst), { recursive: true });
-          fs.symlinkSync(src, dst, process.platform === 'win32' ? 'junction' : 'dir');
-        }
-      }
-      const exec = (cmd, name) => gates.run(cmd, { root, cwd: wt, env, shell, timeoutMin, log: path.join(logDir, `dod-${it.id}-${name}.log`) });
-      const base = exec(it.verify.command, 'baseline');
-      if (base.exit !== 0) {
-        res = { status: 'INCONCLUSIVE', reason: `baseline: the Verify exits ${base.exit} in a clean checkout (missing dependency? set dod.bait_links or the stack env)`, excerpt: gates.tail(base.out, 8) };
-      } else {
-        const mut = exec(it.bait, 'bait');
-        const changed = core.git(['status', '--porcelain', '--untracked-files=no'], wt).stdout;
-        if (!changed) res = { status: 'INCONCLUSIVE', reason: `the Bait changed no tracked file (exit ${mut.exit})` };
-        else {
-          const after = exec(it.verify.command, 'after-bait');
-          res = after.exit !== 0 ? { status: 'CAUGHT' } : { status: 'HOLLOW', reason: 'the Verify still exits 0 with the criterion broken by the Bait' };
-        }
-      }
-    } finally {
-      removeWorktree(root, wt);
-    }
+    const res = baitRow(ctx, it);
     results.rows[it.id] = { hash, ...res, bait: it.bait, at: new Date().toISOString() };
     report.push({ id: it.id, ...res });
   }
@@ -138,24 +146,34 @@ function runBait(phase, opts = {}, root = process.cwd()) {
   return report;
 }
 
-function main(argv) {
+function parseArgs(argv) {
   const opts = {};
   let id = null;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--rows') opts.rows = argv[++i].split(',').map((x) => Number(x.trim())).filter(Boolean);
-    else if (a === '--all') opts.all = true;
-    else if (a === '--json') opts.json = true;
+    else if (a === '--all' || a === '--json') opts[a.slice(2)] = true;
     else if (a.startsWith('--')) throw new core.JdiError(`unknown flag: ${a}`, 1);
     else id = a;
   }
+  return { id, opts };
+}
+
+function reportLine(r) {
+  const cached = r.cached ? ' (unchanged since the last run)' : '';
+  const why = r.reason ? ' — ' + r.reason : '';
+  return `  DoD ${r.id}: ${r.status}${cached}${why}`;
+}
+
+function main(argv) {
+  const { id, opts } = parseArgs(argv);
   if (!id) throw new core.JdiError('usage: jdi dod bait <phase> [--rows 1,2] [--all] [--json]', 1);
   const root = process.cwd();
   const phase = core.resolvePhase(id, root);
   const report = runBait(phase, opts, root);
   if (opts.json) process.stdout.write(JSON.stringify(report, null, 2) + '\n');
-  else if (!report.length) console.log(`dod bait ${phase.slug}: no row with a Bait`);
-  else for (const r of report) console.log(`  DoD ${r.id}: ${r.status}${r.cached ? ' (unchanged since the last run)' : ''}${r.reason ? ` — ${r.reason}` : ''}`);
+  else if (report.length) for (const r of report) console.log(reportLine(r));
+  else console.log(`dod bait ${phase.slug}: no row with a Bait`);
   return report.some((r) => r.status === 'HOLLOW') ? 2 : 0;
 }
 

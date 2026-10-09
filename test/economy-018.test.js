@@ -147,8 +147,9 @@ test('critic: preflight exit 3 with a fix list; fail-open without findings; "off
   assert.equal(r.code, 3);
   assert.match(read(root, JSON.parse(r.stdout).fixes), /DoD 1 \[objective\]: grep passes on a comment/);
   assert.equal(read(root, '.jdi/phases/alpha/REVIEW.md'), REVIEW, 'preflight never touches REVIEW.md');
-  // fail-open
+  // fail-open: a planned round whose critic never wrote findings changes nothing
   p = JSON.parse(jdi(root, ['critic', 'plan', 'alpha']).stdout);
+  assert.ok(p.rows.length > 0);
   const a = JSON.parse(jdi(root, ['critic', 'apply', 'alpha']).stdout);
   assert.equal(a.verdict, 'APPROVED');
   assert.match(a.problem, /no findings\.json/);
@@ -159,8 +160,11 @@ test('critic: preflight exit 3 with a fix list; fail-open without findings; "off
   assert.match(p.skip, /off/);
 });
 
-const planWith = (tasks) =>
-  `# Plan\n\n## Tasks\n\n${tasks.map((files, i) => `#### T-${i + 1}: task ${i + 1}\n- **Files modified:** ${files.map((f) => `\`${f}\``).join(', ')}\n- **Status:** pending\n`).join('\n')}`;
+const taskBlock = (files, i) => {
+  const listed = files.map((f) => '`' + f + '`').join(', ');
+  return `#### T-${i + 1}: task ${i + 1}\n- **Files modified:** ${listed}\n- **Status:** pending\n`;
+};
+const planWith = (tasks) => '# Plan\n\n## Tasks\n\n' + tasks.map(taskBlock).join('\n');
 
 test('size: lite for a small single-stack plan; full on tasks, stacks or sensitive files', () => {
   const doer = (name, glob) => [`.jdi/agents/${name}.md`, `---\nname: ${name}\nscope:\n  file_glob: "${glob}"\n---\nbody\n`];
