@@ -5,6 +5,7 @@
 //   dod parse <CONTEXT.md|phase> [--json]        items: id, type, criterion, verify
 //   dod lint  <CONTEXT.md|phase> [--json]        a.k.a. validate-dod (exit 1 on ERROR)
 //   dod extract <phase> [--dry-run] [--all]      long `Verify:` bodies -> verify/dod-N.sh
+//   dod bait <phase> [--rows 1,2] [--all]        mutation check of rows with `Bait:` (bait.js)
 //
 // Why: in a real project the DoD was 64-86% of CONTEXT.md and the `Verify:`
 // lines alone 48-70% — every agent that read CONTEXT.md paid for scripts only
@@ -74,6 +75,7 @@ function newItem(body, lineNo, type, count) {
     verifyLine: null,
     source: null,
     stack: null,
+    bait: null,
     hasEvidenceField: false,
   };
 }
@@ -95,6 +97,11 @@ function itemLine(cur, l, lineNo) {
   const source = fieldOf(l, 'Source');
   if (source !== null) {
     cur.source = source;
+    return;
+  }
+  const bait = fieldOf(l, 'Bait');
+  if (bait !== null) {
+    cur.bait = splitVerify(bait).command.trim() || null;
     return;
   }
   const stack = fieldOf(l, 'Stack');
@@ -133,6 +140,17 @@ function parse(text, file = '<CONTEXT.md>') {
     if (it.verify && /human confirmation required/i.test(it.verify.raw) && it.type !== 'deferred') it.type = 'manual';
   }
   return { found: true, items, start: start + 1, end, file };
+}
+
+// Identity of a DoD row's proof: the criterion, the Verify, the Bait and the
+// verify script's bytes. The critic and the bait runner re-examine a row only
+// when this changes (or when its last result was not clean).
+function rowHash(item, root = process.cwd()) {
+  const crypto = require('node:crypto');
+  const h = crypto.createHash('sha256');
+  h.update(`${item.criterion}\n${item.verify ? item.verify.raw : ''}\n${item.evidence ? 'evidence' : ''}\n${item.bait || ''}\n`);
+  if (item.script) h.update(core.readIf(path.join(root, item.script)) || '');
+  return h.digest('hex').slice(0, 16);
 }
 
 // --------------------------------------------------------------------------
@@ -385,7 +403,8 @@ function main(argv) {
   }
   if (sub === 'lint') return lintCmd(targetFile(target, root).file, root, json);
   if (sub === 'extract') return extractCmd(targetFile(target, root).phase, root, rest, json);
-  throw new core.JdiError('usage: jdi dod <parse|lint|extract> <CONTEXT.md|phase> [--json] [--dry-run] [--all]', 1);
+  if (sub === 'bait') return require('./bait').main(rest);
+  throw new core.JdiError('usage: jdi dod <parse|lint|extract|bait> <CONTEXT.md|phase> [--json] [--dry-run] [--all]', 1);
 }
 
-module.exports = { main, parse, lint, lintCommand, extract, splitVerify };
+module.exports = { main, parse, lint, lintCommand, extract, splitVerify, rowHash };

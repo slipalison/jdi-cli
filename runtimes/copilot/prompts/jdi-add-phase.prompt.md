@@ -64,7 +64,7 @@ test -d .jdi/ || { echo "Not a JDI project. /jdi-new first."; exit 1; }
 # without SHIPPED.md
 if [ ! -d .jdi/roadmap ] && [ ! -f .jdi/STATE.md ]; then
   POS=1
-  while RESOLVED="$(npx -y jdi-cli@0.17.0 resolve-phase "$POS" 2>/dev/null)"; do
+  while RESOLVED="$(npx -y jdi-cli@0.18.0 resolve-phase "$POS" 2>/dev/null)"; do
     eval "$RESOLVED"
     [ -f "$JDI_PHASE_DIR/SHIPPED.md" ] || break
     POS=$((POS+1))
@@ -124,14 +124,14 @@ fi
 # Strict validation + uniqueness check. Capture the validator's exit code
 # IMMEDIATELY — testing "$SLUG" first would overwrite $? with the test's own
 # status and the named exit codes (1-4) would never propagate.
-SLUG=$(npx -y jdi-cli@0.17.0 validate-slug "$SLUG" --check-unique); RC=$?
+SLUG=$(npx -y jdi-cli@0.18.0 validate-slug "$SLUG" --check-unique); RC=$?
 if [ "$RC" -ne 0 ] || [ -z "$SLUG" ]; then
   # validator already printed the error to stderr
   exit "$RC"
 fi
 ```
 
-PowerShell parallel: `npx -y jdi-cli@0.17.0 validate-slug $slug --check-unique`.
+PowerShell parallel: `npx -y jdi-cli@0.18.0 validate-slug $slug --check-unique`.
 
 **Validation failures (any aborts before any write):**
 - Invalid shape (uppercase, underscores, leading hyphen, etc.) → exit 1
@@ -160,7 +160,7 @@ and, with `--reason`, the audit decision
 `{"slug","order","files"}`.
 
 ```bash
-OUT=$(npx -y jdi-cli@0.17.0 add-phase "$NAME" ${SLUG:+--slug "$SLUG"} --goal "$GOAL" \
+OUT=$(npx -y jdi-cli@0.18.0 add-phase "$NAME" ${SLUG:+--slug "$SLUG"} --goal "$GOAL" \
   ${REASON:+--reason "$REASON"} \
   ${BEFORE_SLUG:+--before "$BEFORE_SLUG"} ${AFTER_SLUG:+--after "$AFTER_SLUG"}) || exit $?
 SLUG=$(printf '%s' "$OUT" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).slug))")
@@ -171,14 +171,14 @@ Refresh the views and commit (ROADMAP.md/DECISIONS.md are untracked views —
 never `git add` them):
 
 ```bash
-npx -y jdi-cli@0.17.0 render
+npx -y jdi-cli@0.18.0 render
 git add .jdi/roadmap/ .jdi/decisions/
 git commit -m "chore(jdi): add phase $SLUG"
 ```
 
 ### Step 4-alt: Write the phase — legacy layout (no `.jdi/roadmap/` dir)
 
-Recommend `npx -y jdi-cli@0.17.0 migrate-layout` first (server-side PR merges ignore
+Recommend `npx -y jdi-cli@0.18.0 migrate-layout` first (server-side PR merges ignore
 merge=union — parallel adds on the legacy layout conflict on GitHub). If the
 user declines, keep the old behavior:
 
@@ -189,11 +189,11 @@ EXISTING=$(grep -cE '^### Phase ' .jdi/ROADMAP.md)
 CURRENT_PHASE_INT=$(grep -oE 'current_phase:\s*[0-9]+' .jdi/STATE.md | grep -oE '[0-9]+' | head -1 || echo "0")
 
 if [ -n "$BEFORE_SLUG" ]; then
-  TARGET_POS=$(npx -y jdi-cli@0.17.0 resolve-phase "$BEFORE_SLUG" 2>/dev/null | grep '^JDI_PHASE_POSITION=' | cut -d"'" -f2)
+  TARGET_POS=$(npx -y jdi-cli@0.18.0 resolve-phase "$BEFORE_SLUG" 2>/dev/null | grep '^JDI_PHASE_POSITION=' | cut -d"'" -f2)
   [ -z "$TARGET_POS" ] && { echo "ERROR: anchor slug '$BEFORE_SLUG' not found"; exit 1; }
   INSERT_POS=$TARGET_POS
 elif [ -n "$AFTER_SLUG" ]; then
-  TARGET_POS=$(npx -y jdi-cli@0.17.0 resolve-phase "$AFTER_SLUG" 2>/dev/null | grep '^JDI_PHASE_POSITION=' | cut -d"'" -f2)
+  TARGET_POS=$(npx -y jdi-cli@0.18.0 resolve-phase "$AFTER_SLUG" 2>/dev/null | grep '^JDI_PHASE_POSITION=' | cut -d"'" -f2)
   [ -z "$TARGET_POS" ] && { echo "ERROR: anchor slug '$AFTER_SLUG' not found"; exit 1; }
   INSERT_POS=$((TARGET_POS + 1))
 else
@@ -255,7 +255,7 @@ Next: /jdi-discuss {slug}
 
 <gates>
 - pre: `.jdi/ROADMAP.md` exists (STATE.md regenerated from artifacts if absent)
-- pre: slug passes shape + reserved + uniqueness checks (`npx -y jdi-cli@0.17.0 validate-slug --check-unique`)
+- pre: slug passes shape + reserved + uniqueness checks (`npx -y jdi-cli@0.18.0 validate-slug --check-unique`)
 - pre: `--before`/`--after` anchor resolves successfully if provided
 - pre: insert position > current_phase
 - pre: `--at` not used on v2 schema
@@ -288,7 +288,7 @@ Next: /jdi-discuss {slug}
 
 **Claude Code:**
 - AskUserQuestion handles missing args interactively.
-- Validator + resolver run via `npx -y jdi-cli@0.17.0` subcommands.
+- Validator + resolver run via `npx -y jdi-cli@0.18.0` subcommands.
 
 **Copilot:**
 - AskUserQuestion not always available — require explicit flags or fail with clear error.

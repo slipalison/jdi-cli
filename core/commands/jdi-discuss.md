@@ -126,6 +126,44 @@ fixes only the flagged `Verify:` lines — then repeat this step once. Still
 ERROR: stop and show `.jdi/cache/dod-lint.txt` (interactive) or record it under
 `## Deferred to PR review` (autonomous). WARN lines are informative.
 
+### Step 4.6: DoD critic preflight (once, before any code)
+
+Runs when this runtime can spawn sub-agents AND the critic is on for this
+phase: `orchestration.mode == "enhanced"` in `.jdi/config.json`, or the
+invoking orchestrator passed `critic=on` (`/jdi-issue`). `economy.critic:
+"off"` turns it off everywhere. A hollow proof caught here costs one asker
+fix; caught in verify, it costs loop iterations.
+
+```bash
+CRIT=$(npx -y {{JDI_CLI}} critic plan "$PHASE_SLUG" --preflight --runtime claude)   # JSON: rows, brief, skip
+```
+
+`rows` empty → skip this step (the JSON says why). Otherwise:
+
+```
+Agent(
+  subagent_type="jdi-dod-critic",
+  description="DoD critic preflight $PHASE_SLUG",
+  prompt="phase_slug=$PHASE_SLUG, brief=<brief from CRIT>"
+)
+```
+
+<!-- jdi:only claude -->
+If `.jdi/config.json` sets `models.critic` to anything other than `inherit`,
+pass it as the Agent `model` parameter.
+<!-- jdi:end -->
+
+```bash
+npx -y {{JDI_CLI}} critic apply "$PHASE_SLUG" --preflight; CRIT_RC=$?
+```
+
+`CRIT_RC` = 3 (objective hollow proofs): spawn a FRESH asker with
+`phase_slug`, `phase_dir`, `mode=fix_dod`, `lint=<fixes path from the apply
+JSON>`, then run Step 4.5 once more (extract + lint). No second critic round
+here — verify re-examines the rows whose proof changed. Suspicions (status
+`warn`) are informative. The critic writes nothing but its findings file;
+a failed or silent critic changes nothing (fail-open).
+
 ### Step 5: Render views + commit
 
 The asker has no shell: refresh the views here, then commit the SOURCE files.

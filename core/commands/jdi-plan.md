@@ -92,13 +92,14 @@ test -f "$PHASE_DIR/PLAN.md" || { echo "PLAN.md not created"; exit 1; }
 # The plan may have tightened the DoD: lint again (cheap), size check (warn).
 npx -y {{JDI_CLI}} validate-dod "$PHASE_SLUG" || echo "warn: DoD lint ERROR after plan — fix the flagged Verify lines before /jdi-do"
 npx -y {{JDI_CLI}} budgets "$PHASE_SLUG" || true
+SIZE=$(npx -y {{JDI_CLI}} size "$PHASE_SLUG")   # "lite — ..." or "full — reasons": how /jdi-do will dispatch
 git add "$PHASE_DIR/PLAN.md"; git add .jdi/STATE.md 2>/dev/null || true
 git diff --cached --quiet || git commit -m "docs($PHASE_SLUG): generate plan"
 ```
 Update `.jdi/STATE.md`: `current_phase_slug: $PHASE_SLUG`, `phase_status: planned`, `next_step: /jdi-do $PHASE_SLUG`.
 
 ### Step 6: Confirm
-Relay the planner's status line + suggest `/jdi-do $PHASE_SLUG`.
+Relay the planner's status line and `$SIZE` (lite = one doer runs every task; full = one doer per task, by waves) + suggest `/jdi-do $PHASE_SLUG`.
 
 </process>
 

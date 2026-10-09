@@ -26,7 +26,7 @@ Toolkit de workflow enxuto para desenvolvedores (solo ou em time) + assistente d
 
 Workflows de IA "completos" (33+ agentes, 60+ comandos, 100+ subworkflows) queimam tokens e cerimônia. O JDI entrega o que importa e corta o resto:
 
-- **7 agentes core** + **2 por projeto** (doer + reviewer, gerados pelo `/jdi-bootstrap`)
+- **8 agentes core** + **2 por projeto** (doer + reviewer, gerados pelo `/jdi-bootstrap`)
 - **17 comandos** — `/jdi-issue` (intake autônomo de cards) + `/jdi-next` (roteador automático) + loop principal de 7 passos + confirmação de DoD + entrada brownfield + modo ralph + status (+ métricas com `--stats`) + 2 de mutação de roadmap + migração + meta
 - **Estado em arquivos** em `.jdi/` (Markdown + frontmatter, sem banco de dados) — livre de conflitos de merge para times por construção
 - **Multi-runtime:** Claude Code, GitHub Copilot, Google Antigravity, OpenCode, JetBrains Junie
@@ -775,6 +775,10 @@ Os helpers de fase vêm dentro do pacote npm e são expostos como subcomandos de
 | `specialists <lint\|upgrade> [--adopt] [--write]` | Atualiza os blocos gerenciados pelo JDI nos specialists do projeto e mantém todo o resto; `--adopt` traz os gerados antes da 0.17; `lint` aponta desperdício |
 | `cost [--targets] [--json] [--since d]` | Para onde foram os tokens do projeto, a partir das transcrições locais do Claude Code; `--targets` sai com 2 quando uma meta falha |
 | `template <nome>` · `learnings [--last N]` · `decisions [--ids\|--recent N\|--index]` | Templates do pacote, os últimos learnings por data de entrega, decisões travadas sem a view inteira |
+| `critic <plan\|apply> <fase> [--preflight]` | A cadência enxuta do crítico do DoD: quais itens examinar (nunca examinados, prova mudou, ocos da última vez) e o brief; `apply` aplica os achados (e as iscas que sobreviveram) no REVIEW.md, só endurecendo |
+| `dod bait <fase>` | Checagem mecânica de prova oca nos itens com `Bait:`: num worktree descartável o Verify tem de passar, e falhar depois que a isca quebra o critério |
+| `size <fase>` | `lite` ou `full` a partir do plano — fase lite roda todas as tasks num único doer |
+| `review <plan\|merge\|fresh> <fase>` | Verify incremental em projeto multi-stack (carrega o reviewer cujo escopo não mudou); `fresh` sai com 3 quando o código mudou depois do commit do verify (o ship recusa review velho) |
 
 Você raramente roda esses na mão — eles existem para que os comandos funcionem de forma idêntica em bash e PowerShell (o `migrate-layout` é a exceção: você o roda uma vez por projeto legado).
 
@@ -941,7 +945,7 @@ A partir do próximo `/jdi-plan`, o novo especialista é roteado automaticamente
 
 ## Inventário de agentes
 
-**Core (7 — entregues):**
+**Core (8 — entregues):**
 
 | Agente | Modelo | Papel |
 | --- | --- | --- |
@@ -952,6 +956,7 @@ A partir do próximo `/jdi-plan`, o novo especialista é roteado automaticamente
 | `jdi-planner` | padrão do runtime (Claude: `opus`) | Decompõe a fase em tarefas + ondas |
 | `jdi-architect` | padrão do runtime (Claude: `opus`) | Meta (modos create + specialist) |
 | `jdi-solo` | padrão do runtime (Claude: `opus`) | Executor solo ponta a ponta para sessões delegadas/headless (agente de código do Copilot) — veja "Issues delegadas" |
+| `jdi-dod-critic` | padrão do runtime (`models.critic`) | Julga se cada `Verify:` do DoD prova o critério ou só sai com 0 — preflight no `/jdi-discuss`, cadência enxuta no `/jdi-verify` (0.18) |
 
 O JDI nunca fixa um modelo datado (0.4.0+). No Copilot/OpenCode/Antigravity, os agentes usam o modelo que VOCÊ configurou no runtime. No Claude Code, os aliases de tier (`sonnet`/`opus`) codificam roteamento intencional de custo — eles flutuam conforme os lançamentos de modelo.
 
@@ -1154,7 +1159,7 @@ MIT.
 
 Rode `/jdi-create` dentro do repositório fonte do JDI para adicionar agentes/skills genéricos. Ele roda sobre `core/templates/{agent,skill}.md`, com integração automática.
 
-Pull requests: descreva o problema (quem precisa disso? quantos usuários?) antes de adicionar um novo agente. O JDI cresce **com cuidado** — teto informal: 7 agentes core, 25 skills core. Veja [EXTENSION.md](EXTENSION.md).
+Pull requests: descreva o problema (quem precisa disso? quantos usuários?) antes de adicionar um novo agente. O JDI cresce **com cuidado** — teto informal: 8 agentes core, 25 skills core. Veja [EXTENSION.md](EXTENSION.md).
 
 ## Publicando no npm (mantenedores)
 

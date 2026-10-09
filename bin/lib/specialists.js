@@ -107,6 +107,7 @@ function lintText(text, file) {
   }
   if (REREAD_RE.test(text)) add('WARN', 'manda reler CLAUDE.md/rules que o runtime ja injeta — cada task paga duas vezes');
   if (text.includes('<skills_to_load>')) add('WARN', '<skills_to_load>: o specialist nao tem a ferramenta Skill, a lista nunca carrega');
+  if (text.includes('<dod_critic_mode>')) add('WARN', '<dod_critic_mode>: desde a 0.18 o critico do DoD e o agente jdi-dod-critic — o bloco e texto morto em todo spawn; apague-o');
   if (!text.includes('<return_contract>')) add('WARN', 'sem <return_contract>: o resultado volta inteiro para o contexto do orquestrador');
   if (!/<!-- jdi:managed id=/.test(text)) add('NOTE', 'sem blocos gerenciados: `jdi-cli specialists upgrade --adopt` traz as entradas da versao atual');
   const tokens = core.estimateTokens(text, 3.0);

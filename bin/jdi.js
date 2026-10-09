@@ -579,14 +579,16 @@ async function cmdHelp() {
   console.log(`  ${c.cyan}next${c.reset} ${c.gray}[phase] [--loop] [--json] [--status]${c.reset}  ${tr('help.helper.next')}`);
   console.log(`  ${c.cyan}add-phase${c.reset} ${c.gray}"<name>" [--goal g] [--before|--after s] [--unique]${c.reset}  ${tr('help.helper.add_phase')}`);
   console.log(`  ${c.cyan}ship${c.reset} ${c.gray}<phase> [--learnings-file f]${c.reset}  ${tr('help.helper.ship')}`);
-  console.log(`  ${c.cyan}dod${c.reset} ${c.gray}<parse|lint|extract> <phase>${c.reset}  ${tr('help.helper.dod')}`);
+  console.log(`  ${c.cyan}dod${c.reset} ${c.gray}<parse|lint|extract|bait> <phase>${c.reset}  ${tr('help.helper.dod')}`);
   console.log(`  ${c.cyan}brief${c.reset} ${c.gray}<phase> --role <r> [--task T-N] [--stack s]${c.reset}  ${tr('help.helper.brief')}`);
   console.log(`  ${c.cyan}gates${c.reset} ${c.gray}<run|show> <phase> [--stack s] [--only dod]${c.reset}  ${tr('help.helper.gates')}`);
-  console.log(`  ${c.cyan}review${c.reset} ${c.gray}<verdict|blockers> <phase>${c.reset}  ${tr('help.helper.review')}`);
+  console.log(`  ${c.cyan}review${c.reset} ${c.gray}<verdict|blockers|plan|merge|fresh> <phase>${c.reset}  ${tr('help.helper.review')}`);
   console.log(`  ${c.cyan}loop${c.reset} ${c.gray}<init|record|reset|status> <phase>${c.reset}  ${tr('help.helper.loop')}`);
   console.log(`  ${c.cyan}budgets${c.reset} ${c.gray}<phase>${c.reset}  ${tr('help.helper.budgets')}`);
   console.log(`  ${c.cyan}known-errors${c.reset} ${c.gray}<query|migrate|render|list>${c.reset}  ${tr('help.helper.known_errors')}`);
   console.log(`  ${c.cyan}specialists${c.reset} ${c.gray}<lint|upgrade> [--adopt] [--write]${c.reset}  ${tr('help.helper.specialists')}`);
+  console.log(`  ${c.cyan}critic${c.reset} ${c.gray}<plan|apply> <phase> [--preflight]${c.reset}  ${tr('help.helper.critic')}`);
+  console.log(`  ${c.cyan}size${c.reset} ${c.gray}<phase> [--json]${c.reset}  ${tr('help.helper.size')}`);
   console.log('');
 
   console.log(`${c.bold}${tr('help.runtimes_label')}${c.reset}`);
@@ -749,6 +751,8 @@ async function main() {
     case 'loop':
     case 'next':
     case 'specialists':
+    case 'critic':
+    case 'size':
       runNodeHelper(parsed.cmd, libArgs());
       break;
     case 'add-phase':

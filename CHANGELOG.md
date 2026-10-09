@@ -5,6 +5,77 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.0] - 2026-10-09
+
+Token economy, part 3 of 3: spawn only what has something new to judge. On
+the same real project, the DoD critic re-judged every row on every verify
+round through the project reviewer (whose prompt is large), `/jdi-issue`
+forced it each round, every reviewer of a multi-stack project ran again after
+a fix that touched one stack, and a two-task phase paid one full doer spawn
+per task.
+
+### Added
+- **`jdi-dod-critic`** — a small core agent (8th; the soft cap in the README
+  moves to 8) that answers one question per DoD row: does the `Verify:` fail
+  when the criterion is broken? It starts from a brief with only the rows to
+  examine, writes `.jdi/cache/critic/<slug>/findings.json` and returns one
+  line. It replaces the reviewer's critic mode, whose every spawn paid the
+  reviewer's whole prompt.
+- **`critic plan|apply`** — the critic's lean cadence (`economy.critic`:
+  `lean` default, `every_verify`, `off`): a **preflight** once in
+  `/jdi-discuss`, before any code (objective hollow proofs go back to the
+  asker once); then each verify examines only rows never examined, rows whose
+  proof changed (hash of criterion + Verify + Bait + script) and rows found
+  hollow last time. Not re-examined: rows sound at an unchanged proof,
+  bait-checked rows, failing rows (a defect, not a hollow pass); a row whose
+  hollow-proof block the loop already spent is looked at once more (it may
+  have been fixed), can no longer block, and is then carried as a warning.
+  Only CONTEXT rows. Nothing to examine → no spawn. `apply` is the only writer of
+  the `## DoD Critic` segment (tighten-only, fail-open).
+- **`Bait:` field and `dod bait`** — a mutation that breaks the criterion;
+  in a throwaway git worktree at HEAD (under `.jdi/cache/bait/`, never
+  `/tmp`) the Verify must pass, then fail once the Bait is applied: CAUGHT,
+  HOLLOW (objective, folded into the critic segment) or INCONCLUSIVE.
+  Dependency dirs are linked in (`dod.bait_links`, default every
+  `node_modules`). A caught row is not re-run until its proof changes.
+- **`size <phase>`** — `lite` (at most 3 tasks, 6 files, 6 automatic DoD
+  rows, one stack, nothing in `sizing.sensitive_globs`) or `full`. A lite
+  phase runs all its tasks in ONE doer spawn and skips the critic unless
+  `/jdi-issue` turned it on; every gate still runs.
+- **Incremental verify** — `review plan|merge` (multi-stack,
+  `economy.incremental_verify`): the first reviewer (owner of the DoD
+  Checklist) always runs; another is carried — its last segment kept, no
+  spawn, no gates — when nothing in its scope nor in CONTEXT/PLAN changed
+  since its last run and it was not BLOCKED. `/jdi-verify --full` runs
+  everyone.
+- **Stale-review guard** — `review merge` stamps the verified commit in
+  REVIEW.md (`<!-- jdi:verified head=… -->`); `review fresh` and `ship`: code
+  changed after it (outside `.jdi/` and `loop.non_product_globs`) → ship refuses
+  (exit 4) unless `--allow-stale "<reason>"`, recorded in SHIPPED.md.
+  `/jdi-ship` asks; `/jdi-issue` re-verifies.
+- **Suite at the end of a wave** (`economy.wave_suite`) — after each
+  non-final wave of `/jdi-do`, build + tests of the stacks the wave touched
+  run through `gates run --changed-since`, outside the agents; a failure gets
+  ONE `fix_wave` doer (`gates show --failures` is its work list), then stops
+  the phase if it persists. Doers keep running only their targeted test.
+- `config.json`: `economy` (`critic`, `incremental_verify`, `wave_suite`,
+  `sizing`) and `sizing` (`lite_max_tasks`, `lite_max_files`,
+  `lite_max_dod_rows`, `sensitive_globs`).
+
+### Changed
+- **Reviewer judgment-only** (managed `gates_source` block): when the gates
+  JSON is at HEAD, it IS gates 1-4 and the automatic DoD results — the
+  reviewer copies them and does not run build, tests, coverage or lint; its
+  work is gates 5-7, the evidence rows and what a failure means. The
+  `<dod_critic_mode>` section is gone from the template (`specialists lint`
+  flags it as dead text in existing specialists).
+- `/jdi-issue` no longer re-runs the critic over every row each round: it
+  turns the critic on (preflight + lean cadence).
+- Doer template: `tasks=`/`briefs=` (lite) and `mode=fix_wave`.
+- `/jdi-plan` reports the phase size; jdi-solo plays the critic through
+  `critic plan/apply` and runs `dod bait`.
+- `dod-schema`: `Bait:`.
+
 ## [0.17.0] - 2026-10-09
 
 Token economy, part 2 of 3: deterministic steps leave the prose. Everything the

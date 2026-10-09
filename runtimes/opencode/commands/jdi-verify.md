@@ -1,7 +1,7 @@
 ---
 name: jdi-verify
 description: Runs phase quality gates via reviewer specialist. Build, tests, coverage, lint, security checks, UI validation, Definition of Done. Verdict APPROVED / APPROVED_WITH_WARNINGS / APPROVED_PENDING_MANUAL / BLOCKED. Accepts slug or position.
-argument_hint: "<slug|position>"
+argument_hint: "<slug|position> [--full]"
 runtime_intent:
   invokes_agent: dynamic
 runtime_overrides:
@@ -23,13 +23,14 @@ Verifies the phase was delivered correctly. Runs gates defined in the project's 
 
 <arguments>
 - `phase_id` (required): canonical slug, legacy slug, or integer position
+- `--full` (optional): run every reviewer even when an untouched one could be carried (multi-stack incremental verify). Sets `FULL=1`.
 </arguments>
 
 <process>
 
 ### Step 1: Validation
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.17.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.18.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 ```bash
 test -d .jdi/ || { echo "Not a JDI project."; exit 1; }
 
@@ -42,13 +43,13 @@ ls .jdi/agents/jdi-reviewer-*.md 2>/dev/null | head -1 || {
 # Runtime copies: Agent(subagent_type=...) resolves from .claude/agents/ (etc.),
 # never from .jdi/agents/. Self-heal a fresh clone or a stale copy before the
 # first spawn (byte-deterministic; no-op when already in sync).
-npx -y jdi-cli@0.17.0 sync-specialists --check --quiet || npx -y jdi-cli@0.17.0 sync-specialists --quiet
+npx -y jdi-cli@0.18.0 sync-specialists --check --quiet || npx -y jdi-cli@0.18.0 sync-specialists --quiet
 ```
 
 ### Step 2: Resolve phase
 
 ```bash
-RESOLVED="$(npx -y jdi-cli@0.17.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+RESOLVED="$(npx -y jdi-cli@0.18.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
 eval "$RESOLVED"
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
@@ -75,13 +76,22 @@ echo "Reviewers registered: $REVIEWER_COUNT"
 
 ### Step 4: Measure the gates, then spawn reviewer(s)
 
-REVIEW.md is a per-run artifact — regenerate it from scratch so stale
-verdicts from a previous run can never poison the worst-case aggregation
-(git history keeps every prior run; each verify commits its REVIEW.md):
+REVIEW.md is a per-run artifact — regenerated so stale verdicts from a
+previous run can never poison the worst-case aggregation (git history keeps
+every prior run; each verify commits its REVIEW.md). Which reviewers run is one
+call:
 
 ```bash
-rm -f "$PHASE_DIR/REVIEW.md"
+RPLAN=$(npx -y jdi-cli@0.18.0 review plan "$PHASE_SLUG" --reviewers "$REVIEWERS" ${FULL:+--full})   # JSON: mode, run, carry, reasons
+RUN=<the `run` list of RPLAN, in order>
 ```
+
+It removes REVIEW.md. Multi-stack only (`economy.incremental_verify`, on by
+default): the FIRST reviewer always runs (it owns the DoD Checklist); another
+reviewer is CARRIED — its last segment kept, no spawn, no gates — only when
+nothing in its scope nor in this phase's CONTEXT/PLAN changed since its last
+run and that segment was not BLOCKED. `--full` (this command's flag) runs
+everyone. Single-stack: always one full run.
 
 **4a. Gates outside the agents' context** (when `.jdi/stacks/` exists —
 `jdi-cli template stack` shows the format; without it, reviewers run their
@@ -92,9 +102,9 @@ waiting on them:
 
 ```bash
 if [ -d .jdi/stacks ]; then
-  npx -y jdi-cli@0.17.0 gates run "$PHASE_SLUG" --only dod          # DoD once (E2E/real-login rows: EVIDENCE, never executed)
-  for REVIEWER in $REVIEWERS; do
-    npx -y jdi-cli@0.17.0 gates run "$PHASE_SLUG" --stack "$REVIEWER"
+  npx -y jdi-cli@0.18.0 gates run "$PHASE_SLUG" --only dod          # DoD once (E2E/real-login rows: EVIDENCE, never executed)
+  for REVIEWER in $RUN; do                                       # carried reviewers: no gates
+    npx -y jdi-cli@0.18.0 gates run "$PHASE_SLUG" --stack "$REVIEWER"
   done
 fi
 ```
@@ -106,7 +116,7 @@ reviewers read; the verdict comes from the reviewers.
 DoD, decisions for Gate 6, known errors):
 
 ```bash
-BRIEF_R=$(npx -y jdi-cli@0.17.0 brief "$PHASE_SLUG" --role reviewer --stack "$REVIEWER" --runtime other | cut -d' ' -f1)
+BRIEF_R=$(npx -y jdi-cli@0.18.0 brief "$PHASE_SLUG" --role reviewer --stack "$REVIEWER" --runtime other | cut -d' ' -f1)
 ```
 
 **Single-stack:**
@@ -118,10 +128,10 @@ Agent(
 )
 ```
 
-**Multi-stack:** spawn each reviewer in sequence (NOT parallel — build/test commands may conflict on ports, locks, output dirs). The FIRST reviewer owns the DoD Checklist (`dod_owner=true`); the others reference it — the DoD is evaluated once, not once per reviewer:
+**Multi-stack:** spawn each reviewer of `$RUN` in sequence (NOT parallel — build/test commands may conflict on ports, locks, output dirs). The FIRST reviewer owns the DoD Checklist (`dod_owner=true`); the others reference it — the DoD is evaluated once, not once per reviewer:
 
 ```
-for REVIEWER in $REVIEWERS:
+for REVIEWER in $RUN:
   Agent(
     subagent_type="$REVIEWER",
     description="Verify phase $PHASE_SLUG ($REVIEWER)",
@@ -129,6 +139,14 @@ for REVIEWER in $REVIEWERS:
   )
   # Each reviewer appends to $PHASE_DIR/REVIEW.md under section
   # "## Reviewer: $REVIEWER" with its own gate results and verdict
+```
+
+Then, always (single- and multi-stack): put the carried segments back (if any) and stamp the verified
+commit in REVIEW.md (`<!-- jdi:verified head=… -->` — `/jdi-ship` refuses a
+review older than the code):
+
+```bash
+npx -y jdi-cli@0.18.0 review merge "$PHASE_SLUG"
 ```
 
 Each reviewer scopes its gates to its `file_glob` (from frontmatter `scope.file_glob`). Coverage threshold enforced only on files matching the glob.
@@ -140,41 +158,58 @@ The dispatch prompt is the line above, nothing more: no reading lists, no
 plan text.
 
 
-### Step 4.5: Enhanced DoD critic (opt-in, capability-gated)
+### Step 4.5: DoD proof checks — bait, then the critic (lean cadence)
 
-Read `.jdi/config.json`. Run this step if this runtime can spawn read-only sub-agents (`Agent`/`Task` available) AND either **`orchestration.mode == "enhanced"`** OR the invoking orchestrator requested it (`critic=on` — `/jdi-issue` forces this: with no human watching, the critic is the skeptic in the room). Otherwise SKIP entirely — go to Step 5 with `REVIEW.md` untouched. The off-path is byte-identical; this is the "use the resource only when available" contract.
+Gate 8 maps `exit 0 → PASS` for automatic DoD rows. A command can exit 0
+without proving its criterion (a grep on text that already exists, a test that
+asserts nothing). These checks can only make the verdict **stricter**.
 
-Why: Gate 8 (Definition of Done) maps `exit 0 → PASS` for `Type=Auto` rows with no semantic scrutiny. A command can exit 0 without proving its criterion (a grep on a heading that still exists, a test asserting nothing). This critic re-examines those rows and can only ever make the verdict **stricter** — it can never raise a blocked verdict to approved.
+**Bait (mechanical, any runtime).** Rows that carry a `Bait:` (a mutation that
+breaks the criterion) are checked in a throwaway worktree at HEAD: the Verify
+must pass, then fail once the Bait is applied. A CAUGHT row is not re-run until
+its proof changes.
 
-**If it runs:**
+```bash
+npx -y jdi-cli@0.18.0 dod bait "$PHASE_SLUG"      # no-op when no row has a Bait
+```
 
-1. Spawn ONE read-only critic — single sequential `Agent()` call, never `run_in_background`, never mid-wave, so there is zero `.git/config.lock` exposure. Reuse the project reviewer (already read-only) in critic mode; multi-stack uses the first reviewer (DoD is project-global, evaluated once):
+**Critic (judgment).** Runs when this runtime can spawn sub-agents AND the
+critic is on: `orchestration.mode == "enhanced"`, or the invoking orchestrator
+passed `critic=on` (`/jdi-issue`). `economy.critic: "off"` turns it off; a
+LITE phase (`jdi-cli size`) skips it unless `critic=on`. Lean cadence: only
+rows never examined, rows whose proof changed and rows found hollow last time
+— not rows already sound, bait-checked, failing (a defect, not a hollow pass)
+or whose hollow-proof block the loop already spent (such a row is looked at
+once more after the block — it may have been fixed — and can no longer block).
+(`economy.critic: "every_verify"` re-examines every row each time.)
+
+```bash
+CRIT=$(npx -y jdi-cli@0.18.0 critic plan "$PHASE_SLUG" --runtime claude)   # JSON: rows, brief, skip
+```
+
+`rows` non-empty → spawn ONE critic, sequential, never in the background:
 
 ```
-CRITIC=$(echo "$REVIEWERS" | head -1)
 Agent(
-  subagent_type="$CRITIC",
-  description="DoD critic phase $PHASE_SLUG",
-  prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, mode=dod-critic.
-          For every DoD row in REVIEW.md with Type=Auto AND Status=PASS, decide whether the gate
-          command PROVES the criterion or merely exits 0. Return findings ONLY as
-          [{row, hollow:true|false, objective:true|false, evidence}]. Write nothing to disk."
+  subagent_type="jdi-dod-critic",
+  description="DoD critic $PHASE_SLUG",
+  prompt="phase_slug=$PHASE_SLUG, brief=<brief from CRIT>"
 )
 ```
 
-2. The critic returns findings; **the orchestrator (this command) is the sole writer.** Append ONE segment to `$PHASE_DIR/REVIEW.md`:
 
-```markdown
-## DoD Critic (enhanced)
+Then fold the results in — always, even when the critic did not run (a Bait
+that survived is an objective hollow proof):
 
-{for each hollow=true finding: "- DoD row «{row}»: {evidence}"}
-
-**Verdict:** {BLOCKED if any (hollow && objective); APPROVED_WITH_WARNINGS if any (hollow && !objective); otherwise APPROVED}
+```bash
+npx -y jdi-cli@0.18.0 critic apply "$PHASE_SLUG"
 ```
 
-3. Fall through to Step 5 unchanged — its worst-case grep already aggregates this new `**Verdict:**` line (objective disproof → BLOCKED; suspicion → APPROVED_WITH_WARNINGS; clean → no change).
-
-Invariants: critic is read-only and writes nothing itself; orchestrator owns the single `REVIEW.md` write; the segment can only tighten the aggregate; one sequential agent. Fail-open: if the critic errors or returns nothing, treat as APPROVED and proceed — the deterministic gates already ran in Step 4. (The reviewer-specialist template ships a `mode=dod-critic` branch; the prompt above matches its contract.)
+`apply` is the only writer of the `## DoD Critic` segment of REVIEW.md: objective
+hollow proofs → `[hollow DoD N]` blockers and a BLOCKED line; suspicions and
+rows whose block the loop already spent → warnings. The critic itself writes
+only its findings file and returns one line; a failed or silent critic changes
+nothing (fail-open — the deterministic gates already ran).
 
 ### Step 5: Read aggregate verdict
 
@@ -182,7 +217,7 @@ Invariants: critic is read-only and writes nothing itself; orchestrator owns the
 test -f "$PHASE_DIR/REVIEW.md" || { echo "REVIEW.md not created"; exit 1; }
 # Worst case across every segment (BLOCKED > PENDING_MANUAL > WITH_WARNINGS >
 # APPROVED); exit 2 = no verdict line (malformed — never ship on silence).
-VERDICT=$(npx -y jdi-cli@0.17.0 review verdict "$PHASE_SLUG") || { echo "Reviewer wrote no verdict line — REVIEW.md malformed. Aborting."; exit 1; }
+VERDICT=$(npx -y jdi-cli@0.18.0 review verdict "$PHASE_SLUG") || { echo "Reviewer wrote no verdict line — REVIEW.md malformed. Aborting."; exit 1; }
 ```
 
 ### Step 6: Update STATE

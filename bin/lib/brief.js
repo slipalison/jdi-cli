@@ -66,6 +66,14 @@ function taskHeading(line) {
   return { id: t.slice(0, end), title: title.trim() };
 }
 
+// `jdi-doer-x`, from `\`jdi-doer-x\`,` / `jdi-doer-x).` (markdown around a name)
+function bareName(s) {
+  let a = s.startsWith('`') ? 1 : 0;
+  let b = s.length;
+  while (b > a && '`,;.)'.includes(s[b - 1])) b--;
+  return s.slice(a, b);
+}
+
 function parseTasks(planText) {
   const lines = planText.split('\n');
   const tasks = [];
@@ -97,7 +105,7 @@ function parseTasks(planText) {
       line: t.line,
       block,
       files,
-      specialist: field(/\*\*Specialist:\*\*\s*([^\s·]+)/),
+      specialist: bareName(field(/\*\*Specialist:\*\*\s*([^\s·]+)/)),
       status: field(/\*\*Status:\*\*\s*([^\s·]+)/),
     };
   });
@@ -338,6 +346,14 @@ function askerParts(c) {
   b.add('DoD schema', 'Read `.jdi/cache/dod-schema.md` (written by /jdi-discuss). A `Verify:` longer than one short command goes to `' + phase.dir + '/verify/dod-N.sh`.', 0);
 }
 
+// A row for the critic, with what its last examination found when it was hollow.
+function criticRow(it, ctxRel, last) {
+  const row = `- DoD ${it.id}: ${it.criterion.slice(0, 500)}\n  Verify: ${verifyRef(it, ctxRel, 2000)}`;
+  if (!last?.hollow) return row;
+  const kind = last.objective ? '(objective)' : '(suspicion)';
+  return `${row}\n  Last examination: hollow ${kind} — ${last.evidence}. Check whether the code or test behind the Verify changed since.`;
+}
+
 function criticParts(c) {
   const { b, opts, ctxRel, doc } = c;
   const changedRows = opts.rows ? opts.rows.split(',').map((x) => Number(x.trim())).filter(Boolean) : null;
@@ -346,7 +362,9 @@ function criticParts(c) {
     ? 'PREFLIGHT — before code: for each row, list the mutations its Verify must fail and what it does not cover yet.'
     : `VERIFY — re-examine only the rows below (${rows.length}); the others were examined at an unchanged Verify or already spent their hollow-proof block.`;
   b.add('Mode', mode, 0);
-  b.add(`Rows to examine (${ctxRel})`, rows.map((it) => `- DoD ${it.id}: ${it.criterion.slice(0, 500)}\n  Verify: ${verifyRef(it, ctxRel, 2000)}`).join('\n'), 0);
+  const prev = core.readJson(path.join(c.root, core.JDI_DIR, 'cache', 'critic', c.phase.slug, 'state.json'), null)?.rows || {};
+  b.add(`Rows to examine (${ctxRel})`, rows.map((it) => criticRow(it, ctxRel, prev[it.id])).join('\n'), 0);
+  b.add('Output', `Write \`.jdi/cache/critic/${c.phase.slug}/findings.json\`: a JSON array with one object per row above — \`{"row": N, "hollow": true|false, "objective": true|false, "evidence": "file:line or the exact reason"}\`. Then return one line.`, 0);
   b.add('Known errors about hollow proofs (judgment only — lint already blocks the mechanized ones)', c.ke('critic', []), 4);
 }
 

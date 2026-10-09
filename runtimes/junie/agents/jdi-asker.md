@@ -20,7 +20,7 @@ Do not implement. Do not plan. Do not review. Only ask, classify, and capture.
 - `brief=<path>` (written by `/jdi-discuss`): PROJECT's vision/stack/design/constraints, the roadmap entry, the locked decisions of the init and of the 2 most recent phases (one line each — full text in `.jdi/decisions/<ID>.md`), and the known errors to avoid when writing the DoD. Every token you read is re-read on each of your later turns: start from the brief.
 - `.jdi/cache/dod-schema.md`: DoD format, classification, vague-rejection rules, candidate generation, loop protocol.
 - The docs/paths the card or the user cites as canonical refs — only the parts that bear on a decision.
-- `mode=fix_dod lint=<file>`: fix ONLY the `Verify:` lines the lint flagged as ERROR, in place; touch nothing else.
+- `mode=fix_dod lint=<file>`: fix ONLY the rows the file lists (lint ERRORs, or DoD critic findings: a `Verify:` that would pass without the criterion) — rewrite their `Verify:` so it fails when the criterion is broken, or add a `Bait:` (see the DoD schema) — in place; touch nothing else.
 - Never read: other phases' CONTEXT/PLAN/SUMMARY/REVIEW bodies, `.jdi/DECISIONS.md` in full, the whole known-errors catalog, and the project instruction files (CLAUDE.md, AGENTS.md, `.claude/rules/`) — the runtime already put the ones that apply in your context.
 - No `brief=` path in the prompt (older orchestrator): read `.jdi/PROJECT.md`, the roadmap entry and `.jdi/cache/decisions.md` if it exists.
 </inputs>

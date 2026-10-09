@@ -2,7 +2,7 @@
 
 // `jdi-cli gates run <phase> [--stack <name>] [--only build,test,coverage,lint,dod]
 //                    [--changed-since <sha>] [--json]`
-// `jdi-cli gates show <phase> [--stack <name>]`
+// `jdi-cli gates show <phase> [--stack <name>] [--failures]`
 //
 // Runs the deterministic quality gates (build, tests, coverage, lint) and the
 // automatic Definition of Done checks OUTSIDE any agent's context, and writes
@@ -73,10 +73,10 @@ function tail(text, n = 20) {
   return lines.slice(Math.max(0, lines.length - n)).join('\n').trim();
 }
 
-function run(cmd, { root, env, shell, timeoutMin, log }) {
+function run(cmd, { root, cwd = root, env, shell, timeoutMin, log }) {
   const t0 = Date.now();
   const r = spawnSync(shell.cmd, shell.args(cmd), {
-    cwd: root,
+    cwd,
     env,
     encoding: 'utf8',
     maxBuffer: 256 * 1024 * 1024,
@@ -225,6 +225,7 @@ function parseArgs(rest) {
     else if (a === '--only') opts.only = rest[++i].split(',').map((x) => x.trim());
     else if (a === '--changed-since') opts.changedSince = rest[++i];
     else if (a === '--json') opts.json = true;
+    else if (a === '--failures') opts.failures = true;
     else if (a.startsWith('--')) throw new core.JdiError(`unknown flag: ${a}`, 1);
     else id = a;
   }
@@ -236,8 +237,26 @@ function showCmd(root, phase, opts) {
   const report = core.readJson(f, null);
   if (!report) throw new core.JdiError(`no gate results at ${path.relative(root, f)}`, 2);
   report.file = path.relative(root, f);
+  if (opts.failures) return failuresCmd(report);
   process.stdout.write((opts.json ? JSON.stringify(report, null, 2) : summary(report)) + '\n');
   return 0;
+}
+
+// The work list of a fix round: only what failed, with its excerpt.
+function failuresCmd(report) {
+  const gateFails = (report.results || []).filter((x) => x.status === 'FAIL').map((x) => ({ ...x, what: `${report.stack}/${x.gate}` }));
+  const dodFails = (report.dod || []).filter((x) => x.status === 'FAIL').map((x) => ({ ...x, what: `DoD ${x.source} ${x.id}: ${x.criterion}` }));
+  const fails = [...gateFails, ...dodFails];
+  if (!fails.length) {
+    console.log(`${report.stack}: no failures (head ${String(report.head).slice(0, 10)})`);
+    return 0;
+  }
+  for (const x of fails) {
+    const log = x.log ? ' (log: ' + x.log + ')' : '';
+    const excerpt = (x.excerpt || '').split('\n').map((l) => '    ' + l).join('\n');
+    console.log(`- FAIL ${x.what}${log}\n${excerpt}`);
+  }
+  return 1;
 }
 
 function main(argv) {
@@ -253,4 +272,4 @@ function main(argv) {
   return report.status === 'PASS' ? 0 : 1;
 }
 
-module.exports = { main, runGates, loadStacks, findStack, summary };
+module.exports = { main, runGates, loadStacks, findStack, summary, run, envFor, shellFor, tail, dodItems, changedInScope };

@@ -39,7 +39,7 @@ No agent invoked. No file mutation. Safe to run anytime.
 ### Steps 1-6: One call, print it verbatim
 
 ```bash
-npx -y jdi-cli@0.17.0 next --status
+npx -y jdi-cli@0.18.0 next --status
 ```
 
 It derives everything from the artifacts (never from STATE.md, which is an

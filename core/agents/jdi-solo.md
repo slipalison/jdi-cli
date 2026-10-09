@@ -156,12 +156,20 @@ npx -y {{JDI_CLI}} gates show "$SLUG"
 ```
 
 ### Deviation 3 — the DoD critic becomes a self-critic pass
-`/jdi-verify` Step 4.5 requires a spawned critic; you cannot spawn. Run a
-reduced self-critic INSIDE the verify step: for every `Type=Auto` DoD row,
-read its result in the gates report (`gates show`) and its script in
-`$PHASE_DIR/verify/dod-N.sh` when it was extracted, and check the command
-actually proves the criterion (not just exits 0). The self-critic can only TIGHTEN
-the verdict, never loosen it. Note `critic: self (solo)` in REVIEW.md.
+`/jdi-verify` Step 4.5 spawns `jdi-dod-critic`; you cannot spawn. Run the
+same steps and play the critic yourself:
+
+```bash
+npx -y {{JDI_CLI}} dod bait "$SLUG"                          # mechanical: rows with a Bait:
+npx -y {{JDI_CLI}} critic plan "$SLUG" --runtime other       # which rows, and their brief
+# read the brief, judge each listed row (does its Verify fail when the criterion is broken?),
+# write the findings file the plan names: [{"row":N,"hollow":bool,"objective":bool,"evidence":"..."}]
+npx -y {{JDI_CLI}} critic apply "$SLUG"                      # folds it into REVIEW.md
+```
+
+The self-critic can only TIGHTEN the verdict, never loosen it — reserve
+`objective` for what you can show (`file:line`). Note `critic: self (solo)` in
+the final report.
 
 ### Deviation 4 — checkpoint commits per artifact
 Commit each artifact as soon as it is written and validated (Conventional

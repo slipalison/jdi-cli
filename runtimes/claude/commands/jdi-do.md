@@ -30,7 +30,7 @@ Executes all tasks of the given phase. Reads PLAN.md, groups into waves, dispatc
 
 ### Step 1: Validation
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.17.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.18.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new."; exit 1; }
 # STATE.md is an untracked advisory cache — absence is normal on a fresh clone
@@ -45,13 +45,13 @@ ls .jdi/agents/jdi-doer-*.md 2>/dev/null | head -1 || {
 # Runtime copies: Agent(subagent_type=...) resolves from .claude/agents/ (etc.),
 # never from .jdi/agents/. Self-heal a fresh clone or a stale copy before the
 # first spawn (byte-deterministic; no-op when already in sync).
-npx -y jdi-cli@0.17.0 sync-specialists --check --quiet || npx -y jdi-cli@0.17.0 sync-specialists --quiet
+npx -y jdi-cli@0.18.0 sync-specialists --check --quiet || npx -y jdi-cli@0.18.0 sync-specialists --quiet
 ```
 
 ### Step 2: Resolve phase
 
 ```bash
-RESOLVED="$(npx -y jdi-cli@0.17.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+RESOLVED="$(npx -y jdi-cli@0.18.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
 eval "$RESOLVED"
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
@@ -106,16 +106,40 @@ Agent(
   subagent_type="$DOER",
   description="Fix blockers phase $PHASE_SLUG",
   prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, mode=fix_blockers.
-          Work list: `npx -y jdi-cli@0.17.0 review blockers $PHASE_SLUG` (not the
+          Work list: `npx -y jdi-cli@0.18.0 review blockers $PHASE_SLUG` (not the
           whole REVIEW.md). Fix, run the targeted tests, commit atomically."
 )
 ```
 
 If no pending tasks and no BLOCKED review → "phase already executed", exit 0.
 
-If `--sequential` or phase has <3 parallel tasks: use sequential execution (1 doer at a time).
+**Size (lite or full):**
 
-Otherwise: wave-based parallel.
+```bash
+SIZE=$(npx -y jdi-cli@0.18.0 size "$PHASE_SLUG" --json)   # {size, reasons, tasks, doer}
+```
+
+Every spawn pays its system prompt, the specialist and its brief before doing
+anything; for a small phase that fixed cost dominates. `size: "lite"` (at most
+3 tasks, 6 files, 6 automatic DoD rows, one stack, no file in
+`sizing.sensitive_globs`) → ONE doer runs every pending task, in plan order,
+one commit per task. Briefs are still one per task:
+
+```
+for each pending task T-{X}:  BRIEF_TX=$(npx -y jdi-cli@0.18.0 brief "$PHASE_SLUG" --role doer --task T-{X} --runtime <rt> | cut -d' ' -f1)
+Agent(
+  subagent_type="<doer from SIZE>",
+  description="Execute phase $PHASE_SLUG (lite)",
+  prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, tasks=T-1,T-2,..., briefs=<brief paths, same order>"
+)
+```
+
+Then skip to Step 7 (counts) and Step 8. Lite changes how the work is
+dispatched, never what is checked: verify runs every gate as for a full
+phase.
+
+`size: "full"`: if `--sequential` or phase has <3 parallel tasks: use sequential
+execution (1 doer at a time). Otherwise: wave-based parallel.
 
 ### Step 5: Intra-wave overlap check (safety)
 
@@ -139,7 +163,7 @@ block, the orchestrator notes, the decisions it cites, the DoD lines that touch
 its files, known errors, learnings), under `budgets.brief_tokens`:
 
 ```bash
-BRIEF_TX=$(npx -y jdi-cli@0.17.0 brief "$PHASE_SLUG" --role doer --task T-{X} --runtime claude | cut -d' ' -f1)
+BRIEF_TX=$(npx -y jdi-cli@0.18.0 brief "$PHASE_SLUG" --role doer --task T-{X} --runtime claude | cut -d' ' -f1)
 ```
 
 Sequential dispatch — ONE `Agent()` per message with `run_in_background: true`. Each task resolves its OWN `subagent_type` from task.specialist (multi-stack):
@@ -187,6 +211,28 @@ grep -cE '^\s*- \*\*Status:\*\* completed' "$PHASE_DIR/PLAN.md"
 grep -cE '^\s*- \*\*Status:\*\* blocked' "$PHASE_DIR/PLAN.md"
 grep -cE '^\s*- \*\*Status:\*\* pending' "$PHASE_DIR/PLAN.md"
 ```
+
+**Suite at the end of a NON-FINAL wave** (when `.jdi/stacks/` exists and
+`economy.wave_suite` is not `false`). Doers run only their task's targeted
+test; a break between tasks of the same wave shows up here, outside any
+agent's context, before the next wave builds on it — not after the whole
+phase, in verify. `WAVE_BASE` = `git rev-parse HEAD` taken before the wave:
+
+```bash
+mkdir -p .jdi/cache && : > .jdi/cache/wave-failures.txt
+for S in .jdi/stacks/*.json; do
+  S=$(basename "$S" .json)
+  npx -y jdi-cli@0.18.0 gates run "$PHASE_SLUG" --stack "$S" --only build,test --changed-since "$WAVE_BASE" >/dev/null \
+    || npx -y jdi-cli@0.18.0 gates show "$PHASE_SLUG" --stack "$S" --failures >> .jdi/cache/wave-failures.txt
+done
+```
+
+(A stack with nothing changed in its scope is SKIPPED.) A non-empty
+`wave-failures.txt` → ONE
+fresh doer with `mode=fix_wave failures=.jdi/cache/wave-failures.txt`, then the
+loop above once more. Still failing → STOP before the next wave (phase
+`partial`), skip to Step 9. The final wave has no suite here: `/jdi-verify`
+runs it.
 
 Blocked-task rule (every wave except the last is "critical" by construction —
 later waves depend on it):
