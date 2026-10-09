@@ -393,3 +393,14 @@ test('loop: BLOCKED with no readable reasons or a failed gate never converges; a
   assert.match(review, /## Loop override[\s\S]*- \[hollow DoD 2\] weak, third time/);
   assert.equal(jdi(root, ['review', 'verdict', 'alpha']).stdout.trim(), 'APPROVED_WITH_WARNINGS');
 });
+
+test('dod.extra_lint gets the CONTEXT path as data, never as shell text', () => {
+  const { root } = project();
+  const dir = path.join(root, '.jdi/phases/x$(touch PWNED)y');
+  write(root, '.jdi/phases/x$(touch PWNED)y/CONTEXT.md', CONTEXT);
+  write(root, '.jdi/config.json', JSON.stringify({ dod: { extra_lint: 'printf "%s:3: AVISO PROJ-1 seen\\n" {file}' } }));
+  const dod = require('../bin/lib/dod');
+  const found = dod.lint(path.join(dir, 'CONTEXT.md'), { root });
+  assert.ok(found.some((f) => f.rule === 'PROJ-1' && f.level === 'WARN' && f.line === 3), JSON.stringify(found.filter((f) => f.rule === 'PROJ-1')));
+  assert.equal(fs.existsSync(path.join(root, 'PWNED')), false, 'a $(...) in the path ran');
+});

@@ -269,11 +269,13 @@ function lintItem(it, ctx, add) {
 
 const EXTRA_LEVEL = { ERRO: 'ERROR', ERROR: 'ERROR', AVISO: 'WARN', WARN: 'WARN', NOTA: 'NOTE', NOTE: 'NOTE' };
 
-// Project rules: config `dod.extra_lint`, a command printing
-// `file:line: ERROR|WARN|NOTE RULE message` lines.
+// Project rules: config `dod.extra_lint`, a bash command printing
+// `file:line: ERROR|WARN|NOTE RULE message` lines. `{file}` becomes "$1" and the
+// path goes as an argument: a path is data, and interpolated into the command
+// text a `$(...)` in it would run.
 function extraLint(extra, file, root, findings, add) {
-  const cmd = extra.replaceAll('{file}', JSON.stringify(file));
-  const r = spawnSync(cmd, { shell: true, cwd: root, encoding: 'utf8' });
+  const script = extra.replaceAll('{file}', '"$1"');
+  const r = spawnSync(core.program('bash'), ['-c', script, 'extra_lint', file], { cwd: root, encoding: 'utf8' });
   for (const l of (r.stdout || '').split('\n').filter(Boolean)) {
     const m = /^(.*?):(\d+): (ERRO|ERROR|AVISO|WARN|NOTA|NOTE) (\S+) (.*)$/.exec(l);
     if (m) add(Number(m[2]), EXTRA_LEVEL[m[3]], m[4], m[5]);

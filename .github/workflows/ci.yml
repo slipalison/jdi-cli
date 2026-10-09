@@ -65,10 +65,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { os: windows-latest, node: "20" }
-          - { os: windows-latest, node: "22" }
-          - { os: ubuntu-latest, node: "20" }
+        os: [ubuntu-latest, windows-latest]
+        node: ["20", "22"]
+        exclude:
+          - { os: ubuntu-latest, node: "22" }
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -148,10 +148,10 @@ jobs:
           no_portao="$(jq -r 'keys[]' <<<"$NEEDS" | sort)"
           faltam="$(comm -23 <(echo "$todos") <(echo "$no_portao"))"
           if [ -n "$faltam" ]; then
-            echo "::error::Job outside the CI verde gate: $(echo $faltam). Add it to the needs of the ci-verde job, at the end of .github/workflows/ci.yml."
+            echo "::error::Job outside the CI verde gate: ${faltam//$'\n'/ }. Add it to the needs of the ci-verde job, at the end of .github/workflows/ci.yml."
             exit 1
           fi
-          echo "All $(echo "$todos" | wc -l) jobs are in the gate."
+          echo "All $(wc -l <<<"$todos") jobs are in the gate."
 
       - name: No job failed
         env:
@@ -167,7 +167,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           bad="$(jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key)=\(.value.result)"' <<<"$NEEDS")"
           if [ -n "$bad" ]; then
-            echo "::error::Failed: $(echo $bad)"
+            echo "::error::Failed: ${bad//$'\n'/ }"
             exit 1
           fi
           echo "Every job passed or was skipped by design."

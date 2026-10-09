@@ -34,9 +34,14 @@ jobs:
       - name: Resolve tag (aceita "1.6.0" ou "v1.6.0")
         id: resolve
         shell: bash
+        # By env, never interpolated into the script: the dispatch input is
+        # typed by whoever runs the workflow, and `${{ }}` inside `run:` is
+        # pasted into the bash text before bash reads it.
+        env:
+          RAW_TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          RAW="${{ github.event.inputs.tag || github.ref_name }}"
+          RAW="$RAW_TAG"
           # Normaliza: garante prefixo v
           if [[ "$RAW" != v* ]]; then
             RAW="v${RAW}"
