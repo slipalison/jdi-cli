@@ -5,6 +5,99 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0] - 2026-10-09
+
+Token economy, part 2 of 3: deterministic steps leave the prose. Everything the
+orchestrator used to compute turn by turn — routing, the status screen, the
+roadmap entry, verdicts, the ralph loop's bookkeeping, the gates, the DoD
+checks, shipping — is now one CLI call with a short answer, and every agent
+starts from a capped brief instead of reading whole artifacts. Measured on the
+same real project: the DoD was 64-86% of CONTEXT.md, a 10-minute suite run
+inside a 500k-token reviewer made the next call re-write the whole context, and
+each multi-stack reviewer ran the whole DoD again.
+
+### Added
+- **`brief <phase> --role doer|reviewer|planner|asker|critic`** — the starting
+  context of an agent as one file under `.jdi/cache/briefs/` (its task, the
+  decisions it cites, the DoD lines for its files, gate results, known errors,
+  learnings), capped at `budgets.brief_tokens`; sections are shortened with a
+  pointer before any is dropped. Dispatches pass only its path.
+- **`gates run|show <phase> [--stack s] [--only dod] [--changed-since sha]`** —
+  build, tests (once — inside coverage when the stack says so), coverage and
+  lint per `.jdi/stacks/<name>.json`, plus the automatic DoD rows ONCE for the
+  phase, run in the command's shell, outside any agent's context. Results in
+  `.jdi/cache/gates/<slug>/<stack>.json` with the commit they ran on;
+  reviewers read them. `Verify (evidence):` rows and `evidence_only` commands
+  (E2E with a real login) are never executed — they are judged from evidence.
+  `jdi-cli template stack` shows the format; `/jdi-bootstrap` writes one per
+  reviewer.
+- **`dod parse|lint|extract`**, **`validate-dod`** — the Definition of Done as
+  data. `lint` flags a test runner with a name filter and no count check (exits
+  0 when nothing matches), a positive grep over a directory as the whole proof,
+  an E2E inside an automatic row, long inline commands, missing scripts;
+  `dod.extra_lint` plugs project rules in. `extract` moves long `Verify:` bodies
+  to `verify/dod-N.sh` verbatim (checked with `bash -n`; shipped phases are
+  never rewritten).
+- **`review verdict|blockers`** — worst-case verdict across REVIEW.md segments
+  (exit 2 on silence) with the pending manual rows of the DoD Checklist; the
+  blockers and warnings a fix round needs.
+- **`loop init|record|reset|status`** — the ralph loop's bookkeeping (#62): a
+  `[defect]` blocker always blocks, and so does a gate that failed on the
+  current commit or a BLOCKED review with no readable Blockers list; a
+  `[hollow DoD N]` finding (the Verify passes without proving the criterion)
+  blocks once per row and then ships as a PR warning; no open defect and no
+  product change since the last verify converges (`loop.non_product_globs`);
+  repeated finding hashes in a round are oscillation. Converging on a BLOCKED
+  review records a `## Loop override` in REVIEW.md, so ship reads the same
+  verdict the loop decided. `--autonomous` resets honor
+  `orchestration.max_resets_autonomous`.
+- **`next [phase] [--loop] [--json] [--status]`** — the `/jdi-next` ladder and
+  the whole `/jdi-status` screen, read-only.
+- **`add-phase`** (layout v3) — slug validation, fractional `order`,
+  `created_with: <version>` and the audit decision in one call; `--unique`
+  suffixes a taken slug for unattended intake; `--at` is rejected.
+- **`ship <phase> [--learnings-file f]`** — refuses BLOCKED and pending-manual
+  phases, writes SHIPPED.md (at most 5 learnings), STATE.md and the archive
+  compaction.
+- **`budgets <phase>`** / **`validate-phase --budgets`** — token budgets of the
+  phase artifacts, enforced only for phases created with 0.17+.
+- **`known-errors query|migrate|render|list`** — one known error per file
+  (`.jdi/known-errors/<ID>.md`, with stage, globs and `mechanized_by`);
+  `query` returns only the entries for the given files and stage, capped.
+- **`specialists lint|upgrade [--adopt] [--write]`** — the JDI-owned parts of
+  the specialist templates are managed blocks (`<!-- jdi:managed id=… -->`):
+  `upgrade` replaces only them and keeps the project's text byte for byte;
+  `--adopt` brings specialists generated before 0.17 under management.
+  `jdi update` runs it for managed specialists and points older ones to
+  `--adopt`.
+
+### Changed
+- **Commands call the CLI instead of running shell turn by turn:**
+  `/jdi-next` and `/jdi-status` (one call each), `/jdi-add-phase` (v3),
+  `/jdi-discuss` (asker brief, then `dod extract` + `validate-dod`, with one
+  `fix_dod` re-spawn on ERROR), `/jdi-plan` (planner brief, then DoD and budget
+  checks), `/jdi-do` (one brief per task; fix mode from `review blockers`),
+  `/jdi-verify` (gates run, one brief per reviewer, the first reviewer owns the
+  DoD Checklist, `review verdict`), `/jdi-loop` and `/jdi-issue` (`loop
+  record/reset`), `/jdi-ship` (`jdi-cli ship`), `/jdi-confirm-dod`
+  (`review verdict --json`), jdi-solo (briefs, loop and gates through the CLI;
+  specialists read once per role instead of at every switch).
+- **Specialist templates:** inputs start from the brief; the reviewer uses the
+  gates JSON when its commit matches and tags blockers `[defect]` /
+  `[hollow DoD N]`.
+- **`resolve-phase` is Node** (same `KEY='value'` output and exit codes as the
+  shell resolver).
+- `config.json`: `loop.non_product_globs`, `orchestration.max_resets_autonomous`.
+- `dod-schema`: the machine contract (`Verify (evidence):`, `Stack:`, verify
+  scripts, lint rules).
+
+### Fixed
+- Pending manual DoD rows were counted three ways (whole REVIEW.md, the
+  checklist section, a regex in the command); one function now counts only
+  the `## DoD Checklist` tables.
+- REVIEW.md parsing accepts `### Blockers` under `## Reviewer: x` and numbered
+  lists.
+
 ## [0.16.0] - 2026-10-09
 
 Token economy, part 1 of 3: the safety net, plus every instruction that made

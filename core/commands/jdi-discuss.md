@@ -68,13 +68,20 @@ If `$PHASE_DIR/CONTEXT.md` exists, ask: overwrite | skip | view.
 
 ### Step 3.5: Prepare the asker's inputs (small, deterministic)
 
-The asker reads these files instead of the whole decision history and old
-CONTEXT.md files (in a long-lived project those passed 50k tokens per spawn):
+The asker starts from a brief (PROJECT sections, the roadmap entry, the
+decisions of the init and the 2 most recent phases, known errors) instead of
+the whole decision history and old CONTEXT.md files — in a long-lived project
+those passed 50k tokens per spawn:
 
 ```bash
 mkdir -p .jdi/cache
-npx -y {{JDI_CLI}} decisions --index --recent 2 --out .jdi/cache/decisions.md
 npx -y {{JDI_CLI}} template dod-schema --out .jdi/cache/dod-schema.md
+<!-- jdi:only claude -->
+BRIEF=$(npx -y {{JDI_CLI}} brief "$PHASE_SLUG" --role asker --runtime claude | cut -d' ' -f1)
+<!-- jdi:end -->
+<!-- jdi:only copilot,opencode,antigravity,junie -->
+BRIEF=$(npx -y {{JDI_CLI}} brief "$PHASE_SLUG" --role asker --runtime other | cut -d' ' -f1)
+<!-- jdi:end -->
 ```
 
 ### Step 4: Spawn asker
@@ -83,10 +90,11 @@ Invoke `jdi-asker` with:
 - `phase_dir=$PHASE_DIR`
 - `phase_position=$PHASE_POSITION` (display only)
 - `mode=auto` if `--auto`, otherwise `mode=interactive`
-- Orchestrators (e.g. `/jdi-issue`) may additionally pass `brief=<card text>`
+- `brief=$BRIEF` (the path printed in Step 3.5)
+- Orchestrators (e.g. `/jdi-issue`) may additionally pass `card=<card text>`
   (external card = primary source) and `dod=auto_only` (only executable DoD;
   human-only criteria go to `## Deferred to PR review`) — see the asker's
-  `<brief_mode>`
+  `<card_mode>`
 
 <!-- jdi:only claude -->
 If `.jdi/config.json` sets `models.asker` to anything other than `inherit`,
@@ -97,12 +105,26 @@ Agent runs its own process. Returns when CONTEXT.md is written to `$PHASE_DIR/CO
 Its final message is a short status (return contract) — do not open
 CONTEXT.md just to echo it back; Step 4.5 checks the file mechanically.
 
-### Step 4.5: Verify output
+### Step 4.5: Verify output, lint the DoD, move long `Verify:` bodies out
 
 ```bash
 test -f "$PHASE_DIR/CONTEXT.md" || { echo "CONTEXT.md not created"; exit 1; }
 grep -q '## Definition of Done' "$PHASE_DIR/CONTEXT.md" || { echo "CONTEXT.md missing § Definition of Done (asker Stage 2 incomplete)"; exit 1; }
+
+# Long Verify bodies -> $PHASE_DIR/verify/dod-N.sh (executed by the reviewer,
+# read by nobody else). Verbatim command, bash -n checked, idempotent.
+npx -y {{JDI_CLI}} dod extract "$PHASE_SLUG"
+
+# Hollow-proof patterns caught by form, before any code exists (one second
+# here, a whole loop round later).
+npx -y {{JDI_CLI}} validate-dod "$PHASE_SLUG" > .jdi/cache/dod-lint.txt; LINT_RC=$?
 ```
+
+`LINT_RC` = 1 (at least one ERROR): spawn a FRESH asker with
+`phase_slug`, `phase_dir`, `mode=fix_dod`, `lint=.jdi/cache/dod-lint.txt` — it
+fixes only the flagged `Verify:` lines — then repeat this step once. Still
+ERROR: stop and show `.jdi/cache/dod-lint.txt` (interactive) or record it under
+`## Deferred to PR review` (autonomous). WARN lines are informative.
 
 ### Step 5: Render views + commit
 
@@ -116,6 +138,7 @@ if [ -d .jdi/roadmap ]; then
   npx -y {{JDI_CLI}} render
   git add "$PHASE_DIR/CONTEXT.md" .jdi/decisions/ .jdi/todos/ 2>/dev/null
   [ -d "$PHASE_DIR/verify" ] && git add "$PHASE_DIR/verify/"
+  [ -d .jdi/known-errors ] && git add .jdi/known-errors/
 else
   git add "$PHASE_DIR/CONTEXT.md" .jdi/DECISIONS.md .jdi/todos.md 2>/dev/null
 fi

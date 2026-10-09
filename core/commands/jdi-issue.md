@@ -104,23 +104,30 @@ Extract: **title**, **goal** (1-line distillation), **acceptance criteria**
 
 ### Step 3: Register the phase
 
+Layout v3 (`.jdi/roadmap/` exists) — one call; `--unique` turns a taken slug
+into `-2`, `-3`… instead of stopping (no human to pick another):
+
 ```bash
-SLUG=$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' | cut -c1-40)
-npx -y {{JDI_CLI}} validate-slug "$SLUG" --check-unique || SLUG="${SLUG}-2"
+OUT=$(npx -y {{JDI_CLI}} add-phase "$TITLE" --goal "<goal>" --reason "<source url/id>" --unique) || exit $?
+SLUG=$(printf '%s' "$OUT" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).slug))")
+npx -y {{JDI_CLI}} render
+git add .jdi/roadmap/ .jdi/decisions/
+git commit -m "chore(jdi): add phase $SLUG"
 ```
 
-Follow the INSTALLED `/jdi-add-phase` process with
-`"$TITLE" --slug $SLUG --goal "<goal>" --reason "<source url/id>"`.
-(Installed command paths per runtime — same as /jdi-next: `.claude/commands/`,
-`.github/prompts/`, `.opencode/commands/`, Antigravity skill. Not found →
-print the manual command and exit 0; never improvise another command's process.)
+Legacy layout: follow the INSTALLED `/jdi-add-phase` process with
+`"$TITLE" --goal "<goal>" --reason "<source url/id>"` (it derives and
+validates the slug). Installed command paths per runtime — same as
+/jdi-next: `.claude/commands/`, `.github/prompts/`, `.opencode/commands/`,
+Antigravity skill. Not found → print the manual command and exit 0; never
+improvise another command's process.
 
 ### Step 4: Discuss — card as primary source, DoD auto-verifiable only
 
 Follow the installed `/jdi-discuss` process for `$SLUG` with:
 
 ```
-asker dispatch: phase_slug=$SLUG, mode=auto, dod=auto_only, brief=<full card text + source url>
+asker dispatch: phase_slug=$SLUG, mode=auto, dod=auto_only, card=<full card text + source url>
 ```
 
 - The brief is the PRIMARY source: card constraints → locked decisions; card
@@ -137,11 +144,17 @@ asker dispatch: phase_slug=$SLUG, mode=auto, dod=auto_only, brief=<full card tex
 
 - Follow the installed `/jdi-plan` process for `$SLUG`.
 - Follow the installed `/jdi-loop` process with ONE deviation, declared here:
-  at the loop's human gate (iter cap or oscillation), do NOT ask — take the
-  `Continue` branch automatically, appending `--- AUTO-RESET n (reason) ---`
-  to LOOP.md. All hard caps stay: max 3 resets, 15 iterations absolute, then
-  `killed`. A killed loop is a FULL STOP — killed work is never shipped;
-  autonomy ends where proof of quality ends.
+  at the loop's human gate (iteration cap or oscillation), do NOT ask — take
+  the `Continue` branch automatically:
+  ```bash
+  npx -y {{JDI_CLI}} loop reset "$SLUG" --autonomous --reason "<gate reason from loop record>"
+  ```
+  It appends `--- AUTO-RESET n (reason) ---` to LOOP.md and answers
+  `continue` or `killed`. Resets are capped by
+  `orchestration.max_resets_autonomous` (default: the loop's `max_resets`, 3);
+  with the per-round cap of 5 that is 15 iterations absolute. `killed` is a
+  FULL STOP — killed work is never shipped; autonomy ends where proof of
+  quality ends. Never edit LOOP.md by hand.
 - **Force the critic**: when following `/jdi-verify` (inside the loop), run
   Step 4.5 (DoD critic) whenever the runtime can spawn read-only sub-agents —
   regardless of `orchestration.mode`. No human is watching; the critic is the

@@ -30,7 +30,7 @@ Executes all tasks of the given phase. Reads PLAN.md, groups into waves, dispatc
 
 ### Step 1: Validation
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.16.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.17.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new."; exit 1; }
 # STATE.md is an untracked advisory cache — absence is normal on a fresh clone
@@ -45,13 +45,13 @@ ls .jdi/agents/jdi-doer-*.md 2>/dev/null | head -1 || {
 # Runtime copies: Agent(subagent_type=...) resolves from .claude/agents/ (etc.),
 # never from .jdi/agents/. Self-heal a fresh clone or a stale copy before the
 # first spawn (byte-deterministic; no-op when already in sync).
-npx -y jdi-cli@0.16.0 sync-specialists --check --quiet || npx -y jdi-cli@0.16.0 sync-specialists --quiet
+npx -y jdi-cli@0.17.0 sync-specialists --check --quiet || npx -y jdi-cli@0.17.0 sync-specialists --quiet
 ```
 
 ### Step 2: Resolve phase
 
 ```bash
-RESOLVED="$(npx -y jdi-cli@0.16.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+RESOLVED="$(npx -y jdi-cli@0.17.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
 eval "$RESOLVED"
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
@@ -106,8 +106,8 @@ Agent(
   subagent_type="$DOER",
   description="Fix blockers phase $PHASE_SLUG",
   prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, mode=fix_blockers.
-          All tasks completed; REVIEW.md verdict is BLOCKED. Fix the items in
-          REVIEW.md ## Blockers, run tests, commit atomically."
+          Work list: `npx -y jdi-cli@0.17.0 review blockers $PHASE_SLUG` (not the
+          whole REVIEW.md). Fix, run the targeted tests, commit atomically."
 )
 ```
 
@@ -134,6 +134,14 @@ For each wave:
 
 **If parallel (>=2 tasks in wave + no overlap + not --sequential):**
 
+First, one brief per task — the doer's whole starting context (its task
+block, the orchestrator notes, the decisions it cites, the DoD lines that touch
+its files, known errors, learnings), under `budgets.brief_tokens`:
+
+```bash
+BRIEF_TX=$(npx -y jdi-cli@0.17.0 brief "$PHASE_SLUG" --role doer --task T-{X} --runtime other | cut -d' ' -f1)
+```
+
 Sequential dispatch — ONE `Agent()` per message with `run_in_background: true`. Each task resolves its OWN `subagent_type` from task.specialist (multi-stack):
 
 ```
@@ -142,7 +150,7 @@ TASK_SPECIALIST = <task.specialist field from PLAN.md> OR <single doer fallback>
 Agent(
   subagent_type="${TASK_SPECIALIST}",
   description="Execute T-{X} phase $PHASE_SLUG",
-  prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, task=T-{X}, mode=single_task",
+  prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, task=T-{X}, mode=single_task, brief=$BRIEF_TX",
   run_in_background: true
 )
 ```
@@ -150,17 +158,17 @@ Agent(
 Within a wave, multi-stack projects may spawn DIFFERENT specialists in parallel (different file scopes, disjoint `files_modified`).
 
 **Dispatch prompt = the line above, nothing more.** Do not paste plan text,
-reading lists or file contents into it: the doer reads its own task block, and
+reading lists or file contents into it: the doer starts from its brief, and
 every extra line is paid again on each of its turns. Anything the doer must
 know that is not in the plan goes into PLAN.md under `## Orchestrator notes`
-(it reads that section).
+(the brief carries that section).
 
 
 Wait for all to return before next wave.
 
 **If sequential:** same prompt, no `run_in_background`, one at a time.
 
-Doer reads PLAN.md/PROJECT.md/CONTEXT.md on its own — specialist convention.
+The doer reads its brief, and opens an artifact only for what the brief points to.
 
 ### Step 7: After each wave
 

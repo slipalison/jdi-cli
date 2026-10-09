@@ -37,10 +37,15 @@ Priority order: most advanced artifact wins. `ROADMAP.md` carries no status line
 ```
 .jdi/
 +-- PROJECT.md           vision + stack + code-design LOCKED. Immutable after /jdi-new. TRACKED
-+-- config.json          token/context budget + thresholds. Editable. TRACKED
++-- config.json          token budgets, models per role, thresholds. Editable. TRACKED
++-- stacks/              gate commands per reviewer, run by `jdi-cli gates run` (0.17+)   TRACKED
+|   +-- {slug}.json
++-- known-errors/        one known error per file: stage, globs, mechanized_by (0.17+)  TRACKED
+|   +-- {ID}.md          (`jdi-cli known-errors migrate` splits a legacy known-errors.md)
++-- cache/               briefs/, gates/, learnings, decisions index, dod-schema     UNTRACKED (gitignored)
 +-- roadmap/             SOURCE OF TRUTH: one file per phase              TRACKED
 |   +-- _header.md       view preamble (project title, adopted context)
-|   +-- {slug}.md        frontmatter `order:` (may be fractional) + `name:`; body = Slug/Goal lines
+|   +-- {slug}.md        frontmatter `order:` (may be fractional) + `name:` + `created_with:` (0.17+, written by `jdi-cli add-phase`); body = Slug/Goal lines
 |   +-- _footer.md       optional trailing sections preserved from migration
 +-- decisions/           SOURCE OF TRUTH: one file per decision           TRACKED
 |   +-- D-1.md           init-time decisions keep literal D-1/D-2 (written pre-branching)
@@ -74,6 +79,7 @@ Priority order: most advanced artifact wins. `ROADMAP.md` carries no status line
 |   |   +-- REVIEW.md    output of /jdi-verify (reviewer)
 |   |   +-- SHIPPED.md   output of /jdi-ship — per-phase done marker
 |   |   +-- LOOP.md      audit trail of /jdi-loop (only if ralph mode was used)
+|   |   +-- verify/      dod-N.sh: long DoD `Verify:` bodies (`jdi-cli dod extract`)
 |   +-- 02-old-phase/               v1 legacy layout preserved post-migration (NEVER renamed)
 |   +-- ...
 +-- archive/             old phases moved by /jdi-ship compaction. The DIR LISTING is the
@@ -242,9 +248,13 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
   "compaction": {
     "archive_after": 5
   },
+  "loop": {
+    "non_product_globs": []
+  },
   "orchestration": {
     "mode": "standard",
-    "source": "default"
+    "source": "default",
+    "max_resets_autonomous": 3
   },
   "gate": {
     "code_globs": ["src/**"]
@@ -257,6 +267,8 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
 
 **Fields:**
 - `budgets.*_tokens` — size limit per artifact, in TOKENS (`context_tokens` for CONTEXT.md, `plan_tokens`, `summary_tokens`, `review_segment_tokens`, `brief_tokens`, `known_errors_query_tokens`). `verify_inline_chars`: longer `Verify:` bodies go to `{phase_dir}/verify/*.sh`. `enforce`: `warn` or `fail`.
+- `loop.non_product_globs` — files that do not count as a product change for the ralph loop's convergence rule (`.jdi/**` never counts). E.g. `["docs/**", "*.md"]`.
+- `orchestration.max_resets_autonomous` — reset cap of the loop under `/jdi-issue` (no human at the gate); reaching it kills the loop.
 - `chars_per_token` — per language, used to estimate tokens. Measured: Claude tokenizes pt-BR JDI artifacts at 2.0-2.4 chars/token (the old "4 chars/token" undercounted twice).
 - `models.<role>` — `asker`, `planner`, `doer`, `reviewer`, `critic`: `inherit` (the session's model) or a model the user chose; the commands pass it as the Agent `model` parameter where the runtime supports it. Tokens do not change with the model; the price per token does.
 - `compaction.archive_after` — phases older than this delta from the current position move to `.jdi/archive/` (executed by `/jdi-ship`). `0` disables it.
@@ -574,35 +586,35 @@ by: {git user.name}
 
 ```markdown
 ---
-phase: {N}
-iter: 3
+phase_slug: user-auth
+iter: 2
 total_resets: 1
 status: running | converged | escalated | paused | killed
 max_iter_per_round: 5
 max_resets: 3
-created_at: 2026-05-10T10:30:00-03:00
+created_at: 2026-05-10T13:30:00.000Z
+hollow_spent: [2]
+last_verified_commit: "c1d2e3f"
 ---
 
-## History (append-only)
+## History
 
-- iter 1: BLOCKED, hash=abc123def4, commit=f8d2a1, ts=2026-05-10T10:31:00-03:00
-- iter 2: BLOCKED, hash=abc123def4, commit=a91c33, ts=2026-05-10T10:33:00-03:00  <- oscillation!
-- iter 3: BLOCKED, hash=de45ef9012, commit=2b3d77, ts=2026-05-10T10:36:00-03:00
-- iter 4: BLOCKED, hash=de45ef9012, commit=8e1c44, ts=2026-05-10T10:38:00-03:00
-- iter 5: BLOCKED, hash=11aa22bb33, commit=4f9e21, ts=2026-05-10T10:40:00-03:00
---- RESET 1 at 2026-05-10T10:42:00-03:00 ---
-- iter 1: APPROVED_WITH_WARNINGS, hash=00ff11ee22, commit=c1d2e3, ts=2026-05-10T10:45:00-03:00
+- iter 1: BLOCKED, hash=abc123def456, commit=f8d2a1b, ts=2026-05-10T13:31:00.000Z, product=changed, defects=2, hollow=1
+- iter 2: BLOCKED, hash=abc123def456, commit=a91c33d, ts=2026-05-10T13:33:00.000Z, product=changed, defects=1, hollow=0
+--- RESET 1 at 2026-05-10T13:42:00.000Z (oscillation: finding hash abc123def456 already seen this round) ---
+- iter 1: APPROVED_WITH_WARNINGS, hash=00ff11ee2233, commit=c1d2e3f, ts=2026-05-10T13:45:00.000Z, product=changed, defects=0, hollow=0
 ```
 
-**Who edits:** `/jdi-loop` creates/appends. Nobody else touches it.
+**Who edits:** only `jdi-cli loop init|record|reset` (called by `/jdi-loop`, `/jdi-issue` and jdi-solo). Never by hand — the oscillation check and the caps read this exact format.
 
 **Rules:**
-- Frontmatter `iter` + `total_resets` + `status` are MUTABLE (overwritten)
-- `## History` block is APPEND-ONLY (full audit trail, precise oscillation detection)
-- `hash` = truncated SHA256 of normalized blockers/warnings — to compare iter N vs N-1
-- `status: converged` => phase may proceed to `/jdi-ship`
-- `status: killed` => hard cap reached (max_iter × max_resets), requires human review of PLAN/CONTEXT
-- `status: escalated|paused` => user intervened; re-running `/jdi-loop <slug>` resumes
+- Frontmatter is MUTABLE (overwritten); `## History` is APPEND-ONLY.
+- `hash` = truncated SHA-256 of the normalized blockers + warnings; the same hash twice in a round = oscillation (human gate).
+- `hollow_spent` = DoD rows whose `[hollow DoD N]` finding already blocked once; later hollow findings on them become PR warnings.
+- `last_verified_commit` + `product=` = whether anything outside `.jdi/` and `loop.non_product_globs` changed since the last verify; no open defect and no product change = converged with warnings.
+- A defect is a `[defect]` or untagged blocker, a `[hollow]` tag without a row, a gate that failed on this commit, or a BLOCKED review with no readable `Blockers` list.
+- Converging on a BLOCKED review rewrites its verdict to APPROVED_WITH_WARNINGS and appends `## Loop override` to REVIEW.md (reason + findings) — /jdi-ship reads that verdict.
+- `status: killed` => reset cap reached (`max_resets`; under `/jdi-issue`, `orchestration.max_resets_autonomous`): 5 × 3 = 15 iterations absolute. Requires human review of PLAN/CONTEXT.
 - `total_resets` is never reset. Resuming from `escalated|paused` CONSUMES a reset; crash-resume of `status: running` does not.
 - The only way past `killed` is the explicit `--reset-loop` flag (confirmed by the user, audited — the old file is archived as `LOOP.md.killed-{ts}`).
 

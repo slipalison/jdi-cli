@@ -1,4 +1,4 @@
-<!-- JDI:BEGIN managed by jdi-cli 0.16.0 - edits inside this block are replaced on update; write project rules outside it -->
+<!-- JDI:BEGIN managed by jdi-cli 0.17.0 - edits inside this block are replaced on update; write project rules outside it -->
 # JDI
 
 This project uses JDI (Just Do It): phase work runs through the `/jdi-*` commands.

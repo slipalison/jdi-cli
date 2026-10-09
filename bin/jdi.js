@@ -201,25 +201,15 @@ function runLibScript(baseName, scriptArgs = [], opts = {}) {
   return { code: result.status ?? 0, stdout: opts.capture ? (result.stdout || '') : '' };
 }
 
-// Parse the resolver's KEY='value' lines into a plain object.
-function parseResolverOutput(text) {
-  const map = {};
-  for (const line of text.split(/\r?\n/)) {
-    const m = /^([A-Z_]+)='(.*)'$/.exec(line);
-    if (m) map[m[1]] = m[2];
-  }
-  return {
-    slug: map.JDI_PHASE_SLUG ?? null,
-    dir: map.JDI_PHASE_DIR ?? null,
-    position: map.JDI_PHASE_POSITION == null ? null : Number(map.JDI_PHASE_POSITION),
-    schema_version: map.JDI_PHASE_SCHEMA == null ? null : Number(map.JDI_PHASE_SCHEMA),
-    folder_exists: map.JDI_PHASE_FOLDER_EXISTS === 'true',
-  };
+// resolve-phase runs in Node since 0.17.0 (one implementation: the .sh/.ps1
+// twins disagreed on CRLF roadmaps and absolute vs relative dirs, #48). Same
+// output (KEY='value' lines, or --json) and the same exit codes.
+// 1 = legacy NN-slug folder, 3 = per-entry roadmap (layout v3), 2 otherwise.
+function phaseSchema(r) {
+  if (/\/\d+-[^/]+$/.test(r.dir)) return 1;
+  return fs.existsSync(path.join(process.cwd(), '.jdi', 'roadmap')) ? 3 : 2;
 }
 
-// Plumbing subcommands receive RAW argv (everything after the subcommand):
-// their flags (--json, --check-unique, ...) belong to the helper scripts,
-// not to jdi.js's own flag parser.
 function cmdResolvePhase(rawArgs) {
   const json = rawArgs.includes('--json');
   const rest = rawArgs.filter((a) => a !== '--json');
@@ -227,14 +217,24 @@ function cmdResolvePhase(rawArgs) {
     console.error('usage: jdi resolve-phase <slug|position> [--json]');
     process.exit(1);
   }
+  const core = require(path.join(PKG_ROOT, 'bin', 'lib', 'jdi-core.js'));
+  let r;
+  try {
+    r = core.resolvePhase(rest[0], process.cwd());
+  } catch (err) {
+    console.error(`ERROR: ${err.message}`);
+    process.exit(Number.isInteger(err.code) ? err.code : 1);
+  }
+  const schema = phaseSchema(r);
   if (json) {
-    const { code, stdout } = runLibScript('jdi-resolve-phase', rest, { capture: true });
-    if (code !== 0) process.exit(code);
-    console.log(JSON.stringify(parseResolverOutput(stdout)));
+    console.log(JSON.stringify({ slug: r.slug, dir: r.dir, position: r.position, schema_version: schema, folder_exists: r.exists }));
     return;
   }
-  const { code } = runLibScript('jdi-resolve-phase', rest);
-  process.exit(code);
+  console.log(`JDI_PHASE_SLUG='${r.slug}'`);
+  console.log(`JDI_PHASE_DIR='${r.dir}'`);
+  console.log(`JDI_PHASE_POSITION='${r.position}'`);
+  console.log(`JDI_PHASE_SCHEMA='${schema}'`);
+  console.log(`JDI_PHASE_FOLDER_EXISTS='${r.exists}'`);
 }
 
 function cmdLibPassthrough(baseName, usage, rawArgs) {
@@ -284,7 +284,7 @@ function libArgs() {
 // Node helpers live in bin/lib/<name>.js and export main(argv) -> exit code.
 // Errors carrying a numeric `code` (JdiError) keep it as the exit code.
 function runNodeHelper(name, rawArgs) {
-  const mod = require(path.join(PKG_ROOT, 'bin', 'lib', `${name}.js`));
+  const mod = typeof name === 'string' ? require(path.join(PKG_ROOT, 'bin', 'lib', `${name}.js`)) : name;
   let code;
   try {
     code = mod.main(rawArgs);
@@ -292,7 +292,8 @@ function runNodeHelper(name, rawArgs) {
     console.error(`ERROR: ${err?.message || err}`);
     code = Number.isInteger(err?.code) ? err.code : 1;
   }
-  process.exit(code ?? 0);
+  // exitCode, not exit(): exit() would cut a large stdout written to a pipe.
+  process.exitCode = code ?? 0;
 }
 
 // Build CLI args from a flag spec, picking the platform-correct flag name.
@@ -575,6 +576,17 @@ async function cmdHelp() {
   console.log(`  ${c.cyan}template${c.reset} ${c.gray}<name> [--out f] | --list${c.reset}  ${tr('help.helper.template')}`);
   console.log(`  ${c.cyan}learnings${c.reset} ${c.gray}[--last N] [--out f]${c.reset}  ${tr('help.helper.learnings')}`);
   console.log(`  ${c.cyan}decisions${c.reset} ${c.gray}[--index|--ids|--phase|--recent N]${c.reset}  ${tr('help.helper.decisions')}`);
+  console.log(`  ${c.cyan}next${c.reset} ${c.gray}[phase] [--loop] [--json] [--status]${c.reset}  ${tr('help.helper.next')}`);
+  console.log(`  ${c.cyan}add-phase${c.reset} ${c.gray}"<name>" [--goal g] [--before|--after s] [--unique]${c.reset}  ${tr('help.helper.add_phase')}`);
+  console.log(`  ${c.cyan}ship${c.reset} ${c.gray}<phase> [--learnings-file f]${c.reset}  ${tr('help.helper.ship')}`);
+  console.log(`  ${c.cyan}dod${c.reset} ${c.gray}<parse|lint|extract> <phase>${c.reset}  ${tr('help.helper.dod')}`);
+  console.log(`  ${c.cyan}brief${c.reset} ${c.gray}<phase> --role <r> [--task T-N] [--stack s]${c.reset}  ${tr('help.helper.brief')}`);
+  console.log(`  ${c.cyan}gates${c.reset} ${c.gray}<run|show> <phase> [--stack s] [--only dod]${c.reset}  ${tr('help.helper.gates')}`);
+  console.log(`  ${c.cyan}review${c.reset} ${c.gray}<verdict|blockers> <phase>${c.reset}  ${tr('help.helper.review')}`);
+  console.log(`  ${c.cyan}loop${c.reset} ${c.gray}<init|record|reset|status> <phase>${c.reset}  ${tr('help.helper.loop')}`);
+  console.log(`  ${c.cyan}budgets${c.reset} ${c.gray}<phase>${c.reset}  ${tr('help.helper.budgets')}`);
+  console.log(`  ${c.cyan}known-errors${c.reset} ${c.gray}<query|migrate|render|list>${c.reset}  ${tr('help.helper.known_errors')}`);
+  console.log(`  ${c.cyan}specialists${c.reset} ${c.gray}<lint|upgrade> [--adopt] [--write]${c.reset}  ${tr('help.helper.specialists')}`);
   console.log('');
 
   console.log(`${c.bold}${tr('help.runtimes_label')}${c.reset}`);
@@ -693,9 +705,20 @@ async function main() {
     case 'validate-slug':
       cmdLibPassthrough('jdi-validate-slug', 'validate-slug <slug> [--check-unique]', libArgs());
       break;
-    case 'validate-phase':
-      cmdLibPassthrough('jdi-validate-phase', 'validate-phase <slug|position> [--for-pr] [--quiet]', libArgs());
+    case 'validate-phase': {
+      // --budgets: the shell validation first, then the Node budget check
+      // (one implementation for every platform); exit = the worst of both.
+      const raw = libArgs();
+      if (!raw.includes('--budgets')) {
+        cmdLibPassthrough('jdi-validate-phase', 'validate-phase <slug|position> [--for-pr] [--quiet] [--budgets]', raw);
+        break;
+      }
+      const rest = raw.filter((a) => a !== '--budgets');
+      const shellCode = rest.length ? runLibScript('jdi-validate-phase', rest).code : 1;
+      runNodeHelper('budgets', rest.filter((a) => !a.startsWith('--')));
+      process.exitCode = Math.max(shellCode, process.exitCode || 0);
       break;
+    }
     case 'truncate':
       cmdLibPassthrough('jdi-truncate', 'truncate <file> <max_chars>', libArgs());
       break;
@@ -717,7 +740,25 @@ async function main() {
     case 'template':
     case 'learnings':
     case 'decisions':
+    case 'dod':
+    case 'budgets':
+    case 'known-errors':
+    case 'brief':
+    case 'gates':
+    case 'review':
+    case 'loop':
+    case 'next':
+    case 'specialists':
       runNodeHelper(parsed.cmd, libArgs());
+      break;
+    case 'add-phase':
+    case 'ship': {
+      const ops = require(path.join(PKG_ROOT, 'bin', 'lib', 'phase-ops.js'));
+      runNodeHelper({ main: (a) => ops.main(parsed.cmd, a) }, libArgs());
+      break;
+    }
+    case 'validate-dod':
+      runNodeHelper('dod', ['lint', ...libArgs()]);
       break;
     case 'help':
     case '--help':

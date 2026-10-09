@@ -25,9 +25,13 @@
   "compaction": {
     "archive_after": 5
   },
+  "loop": {
+    "non_product_globs": []
+  },
   "orchestration": {
     "mode": "standard",
-    "source": "default"
+    "source": "default",
+    "max_resets_autonomous": 3
   },
   "gate": {
     "code_globs": ["src/**"]

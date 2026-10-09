@@ -1,0 +1,21 @@
+{
+  "$schema_version": "1",
+  "name": "example-backend",
+  "agent": "jdi-reviewer-example-backend",
+  "file_glob": ["backend/**"],
+  "shell": "bash",
+  "env": {
+    "CI": "1"
+  },
+  "path_prepend": ["~/.cargo/bin"],
+  "gates": {
+    "build": "cargo build --manifest-path backend/Cargo.toml",
+    "test": "cargo test --manifest-path backend/Cargo.toml",
+    "coverage": "cargo llvm-cov --manifest-path backend/Cargo.toml --fail-under-lines 80",
+    "lint": "cargo clippy --manifest-path backend/Cargo.toml -- -D warnings"
+  },
+  "coverage_runs_tests": true,
+  "lint_blocks": false,
+  "timeout_min": 30,
+  "evidence_only": ["npm run e2e", "playwright test"]
+}

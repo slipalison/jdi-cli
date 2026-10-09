@@ -122,3 +122,21 @@ test('runtime blocks are balanced in every source file', () => {
     for (const rt of RUNTIMES) assert.doesNotThrow(() => transform(read(p), rt, '0.0.0', rel(p)), `${rel(p)} (${rt})`);
   }
 });
+
+test('commands use the deterministic CLI instead of hand-parsing artifacts', () => {
+  // verdicts: `review verdict` (worst case across segments, exit 2 on silence)
+  assert.deepEqual(violations(COMMANDS, /grep[^\n]*\(Verdict\|Veredicto\)/), []);
+  // the ralph loop's bookkeeping: `loop record/reset`, never a hand-written LOOP.md history
+  assert.deepEqual(violations(COMMANDS, /--- AUTO-RESET[^\n]*>>|echo "- iter /), []);
+  // the v3 roadmap entry: `add-phase` (validation, order, created_with)
+  assert.deepEqual(violations(COMMANDS, /ORDERS=\$\(|NEW_ORDER=/), []);
+});
+
+test('specialist managed blocks: every template block is balanced and named', () => {
+  for (const p of SPECIALIST_TEMPLATES) {
+    const t = read(p);
+    const opens = (t.match(/<!-- jdi:managed id=[a-z_]+ -->/g) || []).length;
+    assert.ok(opens >= 2, `${rel(p)}: expected managed blocks`);
+    assert.equal(opens, (t.match(/<!-- jdi:\/managed -->/g) || []).length, `${rel(p)}: unbalanced jdi:managed`);
+  }
+});

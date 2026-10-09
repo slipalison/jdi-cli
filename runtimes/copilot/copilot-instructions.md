@@ -1,4 +1,4 @@
-<!-- JDI:BEGIN managed by jdi-cli 0.16.0 - edits inside this block are replaced on update; write project rules outside it -->
+<!-- JDI:BEGIN managed by jdi-cli 0.17.0 - edits inside this block are replaced on update; write project rules outside it -->
 # JDI
 
 This project uses JDI (Just Do It): phase work runs through the `/jdi-*` commands.
@@ -25,7 +25,7 @@ A delegated session runs headless with ONE persona and no sub-agents:
 3. Gates are executed, never narrated: every `Verify:` and test runs in the
    terminal and its real exit code decides.
 4. `git add` every `.jdi/` file you create (agent harnesses drop untracked files).
-5. Done = `npx -y jdi-cli@0.16.0 validate-phase <slug> --for-pr` green before the PR.
+5. Done = `npx -y jdi-cli@0.17.0 validate-phase <slug> --for-pr` green before the PR.
    Never merge.
 
 Commands live in `.github/prompts/` (VS Code `/` menu) and `.github/skills/`
