@@ -94,3 +94,10 @@ test('cost: instruction keys normalize across checkouts', () => {
   assert.equal(cost.instructionKey('/x/proj-wt/CLAUDE.md'), 'CLAUDE.md');
   assert.equal(cost.instructionKey('/home/u/.claude/CLAUDE.md'), '~/.claude/CLAUDE.md');
 });
+
+test('cost: paths from shell commands and Windows paths', () => {
+  assert.deepEqual(cost.shellPaths('sed -n 1,20p CLAUDE.md:12 && cat "a.md,b.md" | head .jdi/x.jsonl'), ['CLAUDE.md', 'a.md,b.md', '.jdi/x.json']);
+  assert.deepEqual(cost.shellPaths('echo .md && ls'), []);
+  assert.deepEqual(cost.artifactRefs(String.raw`C:\repo\.jdi\phases\02-alpha\CONTEXT.md`), [{ slug: 'alpha', file: 'CONTEXT' }]);
+  assert.deepEqual(cost.artifactRefs('/r/.jdi/phases/beta/REVIEW.md'), [{ slug: 'beta', file: 'REVIEW' }]);
+});

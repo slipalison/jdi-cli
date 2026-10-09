@@ -119,6 +119,6 @@ test('agents without a shell carry no shell steps (they cannot run them)', () =>
 test('runtime blocks are balanced in every source file', () => {
   const { transform, RUNTIMES } = require('../bin/lib/build-postprocess');
   for (const p of SHIPPED_PROSE) {
-    for (const rt of RUNTIMES) transform(read(p), rt, '0.0.0', rel(p));
+    for (const rt of RUNTIMES) assert.doesNotThrow(() => transform(read(p), rt, '0.0.0', rel(p)), `${rel(p)} (${rt})`);
   }
 });
