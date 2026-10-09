@@ -218,7 +218,7 @@ For other runtimes, swap `.claude/` for `.github/`, `.agents/` (Antigravity 2.0)
 
 ```mermaid
 flowchart LR
-    subgraph LT["Long-term — project lifetime (always read in full: short + stable = prompt-cache friendly)"]
+    subgraph LT["Long-term — project lifetime (read by section or through the CLI, never pasted whole)"]
         PROJECT["PROJECT.md<br/>immutable after new/adopt"]
         ROADMAP["roadmap/{slug}.md<br/>one file per phase; ROADMAP.md = rendered view"]
         DECISIONS["decisions/D-{date}-{slug}-{seq}.md<br/>one file per decision; DECISIONS.md = rendered view"]
@@ -245,7 +245,7 @@ flowchart LR
     PH -- "old phases move to .jdi/archive/<br/>(ship compaction, keep last 5)" --> ARCH["archive/<br/>out of the read path"]
 ```
 
-**Read-depth ladder (token economy):** current phase = full body · previous phase = frontmatter + verdict only · 2+ back = never read (only `ls`/`head`) · exception: `§ Learnings` of the last 3 SHIPPED.md (≤10 lines each). Long-term files are always read whole — they are short by design and stable, so they hit the prompt cache.
+**Read-depth ladder (token economy):** each agent reads only its own slice of the current phase (the doer: its task block and the DoD lines for its files) · other phases' bodies are never read · cross-phase knowledge comes through the CLI: `learnings --last 3` (by ship date, capped) and `decisions --ids/--recent` (never the whole `DECISIONS.md` view) · instruction files the runtime injects (CLAUDE.md, rules) are never re-read. Why it matters: every token an agent reads is re-read on each of its later turns, and files read by one agent are not a cache prefix for the next — each spawn pays for its own reads. `npx jdi-cli cost` measures it from your local transcripts.
 
 ### When memory is written and read (one phase, end to end)
 
@@ -284,7 +284,7 @@ sequenceDiagram
     CMD->>PH: move old phases → archive/ (keep last 5)
 ```
 
-The cycle: what a phase LEARNS (warnings, blockers, waivers) survives as ≤5 distilled bullets that the NEXT phases' planner and doer consume — ~300 tokens instead of dragging whole REVIEW files forward. Full schema: [MEMORY.md](MEMORY.md).
+The cycle: what a phase LEARNS (warnings, blockers, waivers) survives as ≤5 distilled bullets that the NEXT phases' planner and doer consume through `jdi-cli learnings --last 3` (capped) instead of dragging whole REVIEW files forward. Full schema: [MEMORY.md](MEMORY.md).
 
 ### Invariants
 

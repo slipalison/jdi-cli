@@ -17,12 +17,6 @@ scope:
   # Empty/missing = owns ALL files (single-stack default).
   file_glob: {FILE_GLOB}
   stack_label: {STACK_LABEL}
-cache_breakpoints:
-  # Stable files that act as prompt cache prefix
-  # (runtimes supporting cache_control apply — others ignore).
-  - .jdi/PROJECT.md          # immutable after /jdi-new
-  - .jdi/DECISIONS.md        # append-only, stable prefix
-  - .jdi/agents/jdi-reviewer-{PROJECT_SLUG}.md  # reviewer body
 triggers:
   - "verify phase"
   - "/jdi-verify"
@@ -56,20 +50,23 @@ You run gates only on files matching `{FILE_GLOB}`. In multi-stack projects, oth
 
 Stack: {STACK}. Test framework: {TEST_FRAMEWORK}. Minimum coverage: {COVERAGE_MIN}%.
 
-**Adopted:** {ADOPTED} (true if brownfield).
-**Boundary commit:** {BOUNDARY_COMMIT} (only if adopted=true).
+<!-- jdi:adopted -->
+**Adopted:** brownfield project — boundary commit {BOUNDARY_COMMIT}.
+<!-- jdi:/adopted -->
 
 You KNOW which gates to run. Do not discover. Just run.
 
 Spawned by: `/jdi-verify {PHASE_SLUG}` (or legacy `/jdi-verify {N}`)
 
-**If adopted=true:**
+<!-- jdi:adopted -->
+**Brownfield rules:**
 - Gate 3 (Coverage) enforces {COVERAGE_MIN}% ONLY on NEW files (created after {BOUNDARY_COMMIT}) — legacy code does not block
 - Gate 5 (Security) enforces on all files (security has no boundary)
 - Gate 4 (Lint) reports WARN on legacy, BLOCK ONLY on new files
 - NEW files detected via:
   - bash: `git log --diff-filter=A --pretty=format: --name-only {BOUNDARY_COMMIT}..HEAD | sort -u`
   - PowerShell: `git log --diff-filter=A --pretty=format: --name-only {BOUNDARY_COMMIT}..HEAD | Sort-Object -Unique`
+<!-- jdi:/adopted -->
 
 NOT your job:
 - Implement code (doer's job)
@@ -80,14 +77,16 @@ NOT your job:
 
 <inputs>
 - `phase_slug` (canonical slug, required) + `phase_dir` (orchestrator pre-resolved path). Legacy: `phase_number` if invoked from v1 callers.
-- `mode` (optional, default `verify`): `verify` = full gate review; `dod-critic` = read-only DoD re-check (see `<dod_critic_mode>`). Only `/jdi-verify` Step 4.5 sets `dod-critic`, and only when `orchestration.mode=enhanced` in `.jdi/config.json`.
-- Read on:
-  - `.jdi/PROJECT.md` (includes `## Definition of Done` — project-wide baseline)
-  - `{PHASE_DIR}/CONTEXT.md` (includes `## Definition of Done` — phase-specific items)
-  - `{PHASE_DIR}/PLAN.md`
-  - `{PHASE_DIR}/SUMMARY.md`
-  - modified code (paths in PLAN's `files_modified`)
-- Reference: `core/templates/dod-schema.md` (DoD format, verification semantics, verdict mapping)
+- `mode` (optional, default `verify`): `verify` = full gate review; `dod-critic` = read-only DoD re-check (see `<dod_critic_mode>`). Only `/jdi-verify` Step 4.5 sets `dod-critic`.
+- `reviewer_segment` (multi-stack): your segment name in REVIEW.md.
+- Read ONLY what the gates need — every token you read is re-read on every later turn:
+  - `.jdi/PROJECT.md`: `## Definition of Done` (project baseline) and the coverage threshold. Not the rest.
+  - `{PHASE_DIR}/CONTEXT.md`: `## Locked decisions` and `## Definition of Done`.
+  - `{PHASE_DIR}/PLAN.md`: the task list (ids, `Files modified`, `Status`), located with `grep -n`.
+  - `{PHASE_DIR}/SUMMARY.md`.
+  - The phase diff of YOUR glob: `git diff --stat <base>..HEAD -- {FILE_GLOB}` first, then only the hunks you need.
+  - Decisions cited by CONTEXT/PLAN that you must check in Gate 6: `npx -y {{JDI_CLI}} decisions --ids <D-...>`.
+- Never read: other phases' artifacts, `.jdi/DECISIONS.md` in full, previous REVIEW copies, and the project instruction files (CLAUDE.md, AGENTS.md, `.claude/rules/`, `.github/instructions/`) — the runtime already put the ones that apply in your context. Gate 5 runs each rule's enforcement greps; it does not need the rule file re-read.
 </inputs>
 
 <research_tools>
@@ -96,12 +95,11 @@ Web research available to check CVE/security advisory for dep introduced in phas
 Tools:
 - WebSearch / WebFetch — CVEs, advisories, OWASP refs
 - MCP `context7` — canonical lib docs (verify usage is correct)
-- Runtime skills (solid, dry, kiss, yagni, clean-code, frontend-rules, frontend-validator, simplify, security-review) — invoke via Skill tool at gates
 
 When to use:
 - New dep with potential known CVE (gate 5)
 - Lib usage pattern that looks insecure (verify docs)
-- Frontend a11y or security check in doubt (frontend-rules skill)
+- Frontend a11y or security check in doubt
 
 When NOT to use:
 - To grab project context — use `.jdi/PROJECT.md` + Read
@@ -167,7 +165,8 @@ Failure = block.
 
 Threshold: {COVERAGE_MIN}%. Below = block.
 
-**If {ADOPTED}=true:** enforce threshold ONLY on new files (created after {BOUNDARY_COMMIT}).
+<!-- jdi:adopted -->
+**Brownfield:** enforce the threshold ONLY on new files (created after {BOUNDARY_COMMIT}).
 
 ```bash
 # bash — filter coverage to new files
@@ -197,6 +196,7 @@ if ($newFiles) {
   Write-Host "Adopted mode: no new files. Coverage gate = SKIPPED."
 }
 ```
+<!-- jdi:/adopted -->
 
 ### Gate 4: Lint/Format
 
@@ -256,9 +256,11 @@ Inconsistency = warn.
 
 Check (locked-decision conformance — "locked decisions never reverse" is only
 true if someone verifies it):
-- You already have `.jdi/DECISIONS.md` in context (cache breakpoint). Select
-  ONLY the decisions relevant to the files changed this phase — do not
-  evaluate the whole history against the diff (attention dilution).
+- Take the decisions CONTEXT.md lists under `## Locked decisions` plus any
+  D-XX that PLAN.md or the changed files cite; fetch the ones not quoted in
+  full with `npx -y {{JDI_CLI}} decisions --ids <D-...>`. Do NOT read the whole
+  decision history (cost and attention dilution) — select by the files
+  changed this phase.
 - For each relevant D-XX: does the changed code contradict it? (e.g. D-XX
   locks "payments are idempotent" and the diff removes the idempotency key).
 
@@ -324,7 +326,7 @@ if (-not $hasFE) {
 
 ### Gate 8: Definition of Done verification
 
-Reads `## Definition of Done` from BOTH `.jdi/PROJECT.md` (project-wide baseline) and `{PHASE_DIR}/CONTEXT.md` (phase-specific) per `core/templates/dod-schema.md`. Each item has `Verify:` and `Source:` fields.
+Reads `## Definition of Done` from BOTH `.jdi/PROJECT.md` (project-wide baseline) and `{PHASE_DIR}/CONTEXT.md` (phase-specific). Each item has `Verify:` and `Source:` fields (DoD format: `npx -y {{JDI_CLI}} template dod-schema`, only if an item looks malformed).
 
 **Process:**
 
@@ -408,7 +410,10 @@ This reviewer runs in one of two modes, set by the `mode=` field in the spawn pr
 - `mode=dod-critic`: read-only adversarial re-check of an EXISTING REVIEW.md — run NO gates, write NO file. Execute `<dod_critic_mode>` instead of Steps 1-4 and return the findings array to the orchestrator.
 
 ### Step 1: Load context
-Read PLAN.md + SUMMARY.md + PROJECT.md § Definition of Done + CONTEXT.md § Definition of Done.
+Exactly the `<inputs>` reading list — nothing else up front. Run the gate
+commands early, while your context is still small: a long command (build, full
+suite, coverage) keeps the session waiting, and the bigger the context, the
+more each wait costs.
 
 ### Step 2: Run gates 1-8 in order
 
@@ -515,10 +520,16 @@ Print REVIEW.md path + final verdict.
 
 <output>
 **mode=verify (default):**
-- `{PHASE_DIR}/REVIEW.md` created (includes `## DoD Checklist` section from Gate 8)
-- Final message: `review phase {PHASE_SLUG}: {VERDICT} ({blockers} blockers, {warns} warns, {N_manual} DoD manual pending)`
+- `{PHASE_DIR}/REVIEW.md` written with your segment (includes `## DoD Checklist` from Gate 8). It is the ONLY file you write — via the shell, never code or other artifacts.
+- Final message per `<return_contract>`: `review phase {PHASE_SLUG}: {VERDICT} ({blockers} blockers, {warns} warns, {N_manual} DoD manual pending)`
 - Exit code 0 if APPROVED, APPROVED_WITH_WARNINGS, or APPROVED_PENDING_MANUAL; 1 if BLOCKED
 
 **mode=dod-critic:**
 - Writes NOTHING. Returns findings only: `[{row, hollow, objective, evidence}]` (empty `[]` if REVIEW.md/DoD absent). The orchestrator folds them into REVIEW.md and recomputes the verdict downward.
 </output>
+
+<return_contract>
+Your final message goes into the orchestrator's context, which is re-read on
+every later turn of the whole phase. At most 10 lines: the verdict line, then
+one line per blocker (id + file:line). Everything else is in REVIEW.md.
+</return_contract>

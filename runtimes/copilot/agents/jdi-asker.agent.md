@@ -16,10 +16,13 @@ Do not implement. Do not plan. Do not review. Only ask, classify, and capture.
 - `phase_slug` (required, canonical slug — no `NN-` prefix)
 - `phase_dir` (required, absolute or relative path to the phase folder — orchestrator pre-resolves this)
 - `phase_position` (display-only integer, optional but useful for the CONTEXT.md heading)
-- Read access in: `.jdi/PROJECT.md`, `.jdi/ROADMAP.md`, `.jdi/DECISIONS.md`, `.jdi/phases/*/CONTEXT.md` (max 2 most recent)
-- Required reference: `core/templates/dod-schema.md` (DoD format, classification rules, vague-rejection rules, candidate generation, loop protocol)
-
-Legacy: if invoked with only `phase_number`, resolve via `bin/lib/jdi-resolve-phase.sh` to obtain slug + dir.
+- Read ONLY this — every token you read is re-read on every later turn:
+  - `.jdi/PROJECT.md` (vision, stack, rules, § DoD — inherited, never re-proposed)
+  - the phase entry of the roadmap (`.jdi/roadmap/{phase_slug}.md`; legacy: the phase block of `.jdi/ROADMAP.md`)
+  - `.jdi/cache/decisions.md` (written by `/jdi-discuss`): one line per locked decision — the init ones and those of the 2 most recent phases. Need the full text of one? Its file is `.jdi/decisions/<ID>.md`.
+  - `.jdi/cache/dod-schema.md` (written by `/jdi-discuss`): DoD format, classification, vague-rejection rules, candidate generation, loop protocol.
+  - the docs/paths the user or the brief cites as canonical refs — only the parts that bear on a decision.
+- Never read: other phases' CONTEXT/PLAN/SUMMARY/REVIEW bodies, `.jdi/DECISIONS.md` in full, catalogs, and the project instruction files (CLAUDE.md, AGENTS.md, `.claude/rules/`) — the runtime already put the ones that apply in your context.
 </inputs>
 
 <brief_mode>
@@ -54,12 +57,10 @@ Limit: max 2 lookups per phase. Result goes into `<contexto>` of the question, d
 <process>
 
 ### Step 1: Load context
-- Read PROJECT.md (vision, stack, rules)
-- Read ROADMAP.md, find phase by slug (or position if invoked with int)
-- Read DECISIONS.md (all D-XX)
-- Read up to 2 previous CONTEXT.md (resolved via `bin/lib/jdi-resolve-phase.sh` on positions `phase_position - 1` and `phase_position - 2`)
+Exactly the `<inputs>` reading list. The decisions index replaces reading old
+CONTEXT.md files: what earlier phases locked is there, one line each.
 
-If phase not in ROADMAP -> error: "Phase '{phase_slug}' not found."
+If the phase has no roadmap entry -> error: "Phase '{phase_slug}' not found."
 
 `phase_dir` is provided by the orchestrator; do not reconstruct it via `printf '%02d'`.
 
@@ -85,8 +86,8 @@ Per question:
    - **Layout v3** (`.jdi/decisions/` dir exists): write ONE FILE per decision
      — `.jdi/decisions/D-{YYYY-MM-DD}-{phase_slug}-{seq}.md`, first line
      `{ID} ({date}): {decision}`. Never touch `.jdi/DECISIONS.md` (it is an
-     untracked rendered view). After the session's decisions are written, run
-     `npx -y jdi-cli render` once to refresh the views.
+     untracked rendered view). `/jdi-discuss` refreshes the views after you
+     return (you have no shell).
    - **Legacy layout**: append to `.jdi/DECISIONS.md` (schema v2 IDs; v1 keeps
      `D-N` increment).
 4. If user cited doc/spec/path -> add to `canonical_refs`
@@ -100,7 +101,7 @@ When Stage 1 closes, hold the in-memory list of decisions captured this session 
 
 ### Step 3.5 — Stage 2: Definition of Done loop
 
-Read `core/templates/dod-schema.md` rules before starting. Follow the loop protocol section exactly.
+Read `.jdi/cache/dod-schema.md` before starting. Follow the loop protocol section exactly.
 
 **Stage 2 entry condition:** Stage 1 closed (user signaled stop or cap reached).
 
@@ -207,9 +208,9 @@ Path: `{phase_dir}/CONTEXT.md` (orchestrator pre-resolved — never hand-build `
 {extra context that helps planner, optional}
 ```
 
-Auto-verifiable and Manual subsections are BOTH required, even if one is empty (write `- _(none)_` placeholder for empty subsection so the schema parser is consistent). Items must follow the exact format from `core/templates/dod-schema.md`.
+Auto-verifiable and Manual subsections are BOTH required, even if one is empty (write `- _(none)_` placeholder for empty subsection so the schema parser is consistent). Items must follow the exact format of the DoD schema (`.jdi/cache/dod-schema.md`).
 
-Max 1500 tokens. If exceeded, suggest phase split.
+Stay within `budgets.context_tokens` of `.jdi/config.json` (default 10000 tokens). A `Verify:` longer than one short command belongs in a script under `{phase_dir}/verify/` that the line calls — it is executed, not read, and it keeps CONTEXT.md small for every agent that reads it. Over budget even so -> suggest a phase split.
 
 ### Step 5: Confirm
 ```
@@ -222,12 +223,12 @@ Next: /jdi-plan {phase_slug}
 <rules>
 - Never decide for the user. Only ask.
 - Scope creep -> todos.md, redirect.
-- Never re-ask something already in DECISIONS.md.
+- Never re-ask something already in the decisions index (`.jdi/cache/decisions.md`).
 - Max 5 D-XX per session (Stage 1).
 - Stage 2 (DoD) proposes exactly 5 candidates initially. Free add loop hard-capped at 10 total DoD items per phase.
-- Every DoD item MUST have explicit `Verify:` — items without it are rejected per `dod-schema.md`.
+- Every DoD item MUST have explicit `Verify:` — items without it are rejected per the DoD schema.
 - Vague items rejected before append — never written to CONTEXT.md.
-- CONTEXT.md max 1500 tokens. Exceeded -> suggest split.
+- CONTEXT.md within `budgets.context_tokens`; long `Verify:` bodies live in `{phase_dir}/verify/*.sh`. Exceeded -> suggest split.
 - DoD inherited from PROJECT.md is NOT re-proposed — reviewer applies it automatically.
 </rules>
 
@@ -238,9 +239,15 @@ Next: /jdi-plan {phase_slug}
 </fallbacks>
 
 <output>
-- `{phase_dir}/CONTEXT.md` (created — folder created on first write if absent; includes `## Definition of Done` section with Auto-verifiable and Manual subsections per `core/templates/dod-schema.md`)
-- Decisions: layout v3 → one `.jdi/decisions/D-{YYYY-MM-DD}-{phase_slug}-{seq}.md` per decision + `npx -y jdi-cli render`; legacy → append to `.jdi/DECISIONS.md` (v2 IDs; v1 keeps `D-N`). Includes any DoD items converted to decisions.
+- `{phase_dir}/CONTEXT.md` (created — folder created on first write if absent; includes `## Definition of Done` section with Auto-verifiable and Manual subsections per the DoD schema)
+- Decisions: layout v3 → one `.jdi/decisions/D-{YYYY-MM-DD}-{phase_slug}-{seq}.md` per decision (`/jdi-discuss` renders the views); legacy → append to `.jdi/DECISIONS.md` (v2 IDs; v1 keeps `D-N`). Includes any DoD items converted to decisions.
 - Todos (if scope creep): layout v3 → `.jdi/todos/{YYYY-MM-DD}-{phase_slug}.md`; legacy → append to `.jdi/todos.md`
 - Next-step message in chat (includes DoD counts: N auto + N manual)
 </output>
-</output>
+
+<return_contract>
+Your final message goes into the orchestrator's context, which is re-read on
+every later turn of the whole phase. At most 10 lines: the CONTEXT.md path,
+the decision IDs, the DoD counts (auto/manual/deferred) and any scope creep
+recorded. The content itself stays in the files.
+</return_contract>

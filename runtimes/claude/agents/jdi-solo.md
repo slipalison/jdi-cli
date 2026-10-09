@@ -41,7 +41,7 @@ test -d .jdi/ || { echo "ABORT: not a JDI project (/jdi-new + /jdi-bootstrap fir
 ls .jdi/agents/jdi-doer-*.md >/dev/null 2>&1 || { echo "ABORT: no specialists (/jdi-bootstrap first)"; exit 1; }
 
 # 3. jdi-cli helpers reachable (gates depend on them)
-npx -y jdi-cli --version || { echo "ABORT: npx jdi-cli unreachable (firewall/allowlist?)"; exit 1; }
+npx -y jdi-cli@0.16.0 --version || { echo "ABORT: jdi-cli unreachable via npx (firewall/allowlist?)"; exit 1; }
 
 # 4. Git hooks active when the repo ships them (the artifact gate)
 test -d .githooks && git config core.hooksPath .githooks || true
@@ -68,7 +68,7 @@ interactive runtime." Never produce code or artifacts without gates.
    silently drop untracked files from their auto-commits — a file that is
    not in the index does not exist.
 4. **Definition of complete is mechanical:**
-   `npx -y jdi-cli validate-phase <slug> --for-pr` exits 0. No PR before
+   `npx -y jdi-cli@0.16.0 validate-phase <slug> --for-pr` exits 0. No PR before
    that. The 5 artifacts (CONTEXT, PLAN, SUMMARY, REVIEW, SHIPPED) plus a
    non-BLOCKED verdict are the proof the protocol ran.
 5. **Never merge.** Open the PR, report, stop. Killed/escalated work is
@@ -135,7 +135,7 @@ bypass it.
 ### Deviation 5 — validate before opening the PR
 
 ```bash
-npx -y jdi-cli validate-phase "$SLUG" --for-pr || { echo "protocol incomplete — fix before PR"; exit 1; }
+npx -y jdi-cli@0.16.0 validate-phase "$SLUG" --for-pr || { echo "protocol incomplete — fix before PR"; exit 1; }
 git status --porcelain -- .jdi/ | grep . && { echo "untracked/dirty .jdi files — add & commit them"; exit 1; }
 ```
 

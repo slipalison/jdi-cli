@@ -32,8 +32,9 @@ You are NOT the agent that executes. You are the one who creates the agents.
 <inputs>
 - `mode`: `create` (default) or `specialist`
 - (optional, create mode) Free-form argument: short description of what the user wants to create
-- (specialist mode) Read `.jdi/PROJECT.md` (required)
-- Read: `core/agents/*.md`, `core/skills/*/SKILL.md`, `core/templates/*.md`, `.jdi/specialists.md`, `.jdi/reviewers.md`, `.jdi/skills-registry.md`, `.jdi/registry.md`
+- (specialist mode) Read `.jdi/PROJECT.md` (required). Templates come from the CLI (`npx -y jdi-cli@0.16.0 template <name>`): consumer projects have no `core/` directory.
+- (create mode, jdi-cli source repo only) Read: `core/agents/*.md`, `core/skills/*/SKILL.md`, `core/templates/*.md`
+- Read: `.jdi/specialists.md`, `.jdi/reviewers.md`, `.jdi/skills-registry.md`, `.jdi/registry.md`
 </inputs>
 
 <research_tools>
@@ -42,7 +43,6 @@ Web research available when the user asks for an agent/specialist for a domain y
 Tools:
 - WebSearch / WebFetch
 - MCP `context7` — lib/SDK/API docs
-- Runtime skills — can be referenced in the generated agent's `<skills_to_load>`
 
 Limit: 2 lookups per create/specialist session. After that, proceed with stack defaults.
 </research_tools>
@@ -56,8 +56,10 @@ When invoked with `mode=specialist`, follow this short flow:
 ### S1: Validate prerequisites
 ```bash
 test -f .jdi/PROJECT.md || { echo "PROJECT.md missing. Run /jdi-new first."; exit 1; }
-test -f core/templates/doer-specialist.md || { echo "Template doer-specialist.md missing."; exit 1; }
-test -f core/templates/reviewer-specialist.md || { echo "Template reviewer-specialist.md missing."; exit 1; }
+# Templates ship in the npm package; consumer projects never get core/ (#37).
+mkdir -p .jdi/cache
+npx -y jdi-cli@0.16.0 template doer-specialist --out .jdi/cache/doer-specialist.md || { echo "Template doer-specialist missing."; exit 1; }
+npx -y jdi-cli@0.16.0 template reviewer-specialist --out .jdi/cache/reviewer-specialist.md || { echo "Template reviewer-specialist missing."; exit 1; }
 ```
 
 ### S2: Read PROJECT.md + STATE.md + DECISIONS.md
@@ -277,6 +279,18 @@ User types e.g.: `/`, `/login`, `/dashboard`, `/settings`.
 
 These routes will be navigated by gate 7 in mobile (375x667) and desktop (1280x720) viewports. They must be public OR work without authentication in dev (auth flow not supported in MVP).
 
+### S3.5: Model per role (asked once, stored in `.jdi/config.json`)
+
+AskUserQuestion: "Which model should each JDI role use?"
+- `Inherit the session model (default)` → leave `models` as `inherit`.
+- `Cheaper doer` → `models.doer: "sonnet"`, everything else `inherit`.
+- `Custom` → ask per role (`asker`, `planner`, `doer`, `reviewer`, `critic`).
+
+Write the answer into `.jdi/config.json` `models` (create the key if absent).
+The commands pass it as the Agent `model` parameter at dispatch on runtimes
+that support it; nothing is pinned in the agent files. Tokens do not change
+with the model — the price per token does, and so can quality: say so.
+
 ### S4: Show preview of what will be generated
 
 ```
@@ -325,7 +339,7 @@ frontend:
 
 ### S5: Generate files
 
-Read `core/templates/doer-specialist.md`. Replace placeholders:
+Read `.jdi/cache/doer-specialist.md` (written in S1). Replace placeholders:
 - `{PROJECT_SLUG}` -> slug
 - `{PROJECT_NAME}` -> name
 - `{STACK}` -> stack string
@@ -337,8 +351,11 @@ Read `core/templates/doer-specialist.md`. Replace placeholders:
 - `{LINT_COMMAND}` -> SQ5 (same value used in the reviewer; if the project has no linter, replace with `true` — the doer's per-task lint step becomes a no-op)
 - `{COMMIT_PREFIX}` -> derived from convention (default: `feat`)
 - `{PROJECT_CONVENTIONS}` -> SQ6 (or stack defaults)
-- `{ADOPTED}` -> "true" or "false" (S2)
-- `{BOUNDARY_COMMIT}` -> hash from D-2 or empty string if greenfield
+- `{BOUNDARY_COMMIT}` -> hash from D-2 (brownfield only)
+- Brownfield blocks: text between `<!-- jdi:adopted -->` and `<!-- jdi:/adopted -->`.
+  `adopted=false` (greenfield) → DELETE each block, markers included — never
+  leave a dead "if adopted" paragraph or an empty `{BOUNDARY_COMMIT}` behind.
+  `adopted=true` → keep the text, delete only the two marker lines.
 - `{FILE_GLOB}` -> current iteration's glob (single-stack: `**/*`)
 - `{STACK_LABEL}` -> current iteration's label (single-stack: same as `{STACK}`)
 
@@ -349,8 +366,8 @@ Read `core/templates/doer-specialist.md`. Replace placeholders:
 
 mkdir + Write to `.jdi/agents/jdi-doer-{slug}.md`.
 
-Read `core/templates/reviewer-specialist.md`. Replace placeholders:
-- same as above (including `{ADOPTED}` + `{BOUNDARY_COMMIT}`) +
+Read `.jdi/cache/reviewer-specialist.md` (written in S1). Replace placeholders:
+- same as above (including the brownfield blocks and `{BOUNDARY_COMMIT}`) +
 - `{BUILD_COMMAND}` -> SQ2
 - `{COVERAGE_COMMAND}` -> derived test_command + coverage flag
 - `{LINT_COMMAND}` -> SQ5
@@ -360,8 +377,11 @@ Read `core/templates/reviewer-specialist.md`. Replace placeholders:
 **`{LLM_OPENCODE_MODEL}` substitution:**
 - Read `llm_config.default_model_opencode` from PROJECT.md
 - If present: replace in frontmatter `runtime_overrides.opencode.model:` of doer and reviewer
-- If absent: DELETE the `model:` line from both specialists — they inherit the
-  runtime's configured default (never pin a model the user did not choose)
+- If absent: DELETE that `opencode` `model:` line — the specialists inherit the
+  runtime's configured default (never pin a model the user did not choose).
+- Claude Code: the specialists carry no `model:` line. The model per role is a
+  project choice in `.jdi/config.json` `models` (`inherit` by default), applied
+  by the commands at dispatch time — ask in S3.5.
 
 For each `{X_COMMAND}` (build/test/coverage/lint), also generate `{X_COMMAND_PS}` — PowerShell equivalent. Common mapping:
 
@@ -380,56 +400,30 @@ Most `.NET CLI` / `pnpm` / `npm` commands run identically in bash and PowerShell
 
 Write to `.jdi/agents/jdi-reviewer-{slug}.md`.
 
-### S5.5: Inject `<skills_to_load>`
+### S5.5: Code-design and quality rules, inline (no skills)
 
-After writing doer/reviewer, inject `<skills_to_load>` block after `</role>` via Edit.
+Specialists run with a fixed tool allowlist without the Skill tool, so a
+`<skills_to_load>` list is never loaded (measured: 1 skill call in 191 spawns).
+Put the rules that matter IN the specialist, short:
 
-**Code-design skill (mandatory) — resolve from `PROJECT.md.Code Design` (LOCKED value) using this mapping:**
+1. Resolve the code-design skill from `PROJECT.md` `Code Design` (LOCKED):
+   The Method → `the-method`, DDD → `ddd`, Clean Architecture →
+   `clean-architecture`, Hexagonal → `hexagonal`, Onion → `onion`, Vertical
+   Slice → `vertical-slice`. Unresolvable → abort and ask the user to fix
+   `PROJECT.md`.
+2. Read that skill's SKILL.md once (installed under the runtime's skills dir,
+   e.g. `.claude/skills/<name>/SKILL.md`) and write a digest of its
+   INVIOLABLE structural rules — at most 15 lines — into the doer's
+   `<conventions>` under `### Code design ({CODE_DESIGN})` and into the
+   reviewer's Gate 5 as checks (violation = BLOCKED).
+3. Reviewer Gate 5 also gets at most 10 lines of checks distilled from
+   `dry`, `kiss`, `yagni` and `clean-code` (and `frontend-rules` when
+   `has_frontend=true`), phrased as greps or concrete review questions.
 
-| Code Design (PROJECT.md) | Skill to load |
-|---|---|
-| The Method | `the-method` |
-| DDD | `ddd` |
-| Clean Architecture | `clean-architecture` |
-| Hexagonal | `hexagonal` |
-| Onion | `onion` |
-| Vertical Slice | `vertical-slice` |
-
-The resolved code-design skill is loaded by **both doer and reviewer**. Exactly one code-design skill is loaded. Never load two code-design skills simultaneously — the project uses exactly one design. If the mapping cannot resolve, abort with an error and ask the user to fix `PROJECT.md.Code Design`.
-
-**Doer — always:**
-```markdown
-<skills_to_load>
-- solid — before creating classes/modules/interfaces. Detects god class, large switches, deep inheritance, dep on concretes.
-- {CODE_DESIGN_SKILL} — INVIOLABLE structural rules for the project's locked code design. Apply on every file created.
-</skills_to_load>
-```
-
-Replace `{CODE_DESIGN_SKILL}` with the resolved entry from the mapping above (e.g. `the-method`, `ddd`, `clean-architecture`, `hexagonal`, `onion`, `vertical-slice`).
-
-If `has_frontend=true`, append:
-```markdown
-- frontend-rules — when task touches .tsx/.vue/.svelte/.razor/.cshtml/.html/.twig/.erb/.blade.php. WCAG 2.2 AA + UX.
-```
-
-**Reviewer — always:**
-```markdown
-<skills_to_load>
-- dry — gate 5: knowledge duplication via greps of constants/regex/strings in 3+ files.
-- kiss — gate 5: over-engineering — interface with 1 impl, factory for new(), pass-through, deep inheritance.
-- yagni — gate 5: speculative code — optional params never passed, TODO without ticket, generic with 1 type.
-- clean-code — bad names, long functions, magic numbers, silent catch, boolean params, redundant comments.
-- {CODE_DESIGN_SKILL} — gate 5: enforce INVIOLABLE structural rules for the project's locked code design. BLOCKED on violations defined by the skill.
-</skills_to_load>
-```
-
-Replace `{CODE_DESIGN_SKILL}` with the same resolved entry — both doer and reviewer load the SAME code-design skill.
-
-If `has_frontend=true`, append:
-```markdown
-- frontend-rules — gate 5 frontend: <input> without label, button without aria-label, localStorage with token, outline removed.
-- frontend-validator — gate 7 (live UI). Playwright auto-install consent, dev server, routes, console/network/a11y/layout.
-```
+Never write "read the skill" or "read the rules" into a specialist: the digest
+is the rule, and the project's own instruction files (CLAUDE.md, AGENTS.md,
+`.claude/rules/`) reach every agent through the runtime. A specialist that
+tells the agent to re-read them makes every task pay for them twice.
 
 ### S5.6: Add `.jdi/cache/` to .gitignore (if has_frontend=true)
 
@@ -459,7 +453,7 @@ the core agents and writes one copy per installed runtime (byte-deterministic,
 idempotent, `GENERATED` marker right after the frontmatter):
 
 ```bash
-npx -y jdi-cli sync-specialists
+npx -y jdi-cli@0.16.0 sync-specialists
 ```
 
 The copies are generated artifacts committed alongside `.jdi/agents/` (S6/S7
@@ -498,9 +492,9 @@ Single-stack default glob: `**/*` (catch-all). Multi-stack: one
 inside this same entry file. Then refresh the views:
 
 ```bash
-npx -y jdi-cli render
+npx -y jdi-cli@0.16.0 render
 git add .jdi/agents/ .jdi/registry/
-npx -y jdi-cli sync-specialists --porcelain | xargs -r git add   # runtime copies (S5.7)
+npx -y jdi-cli@0.16.0 sync-specialists --porcelain | xargs -r git add   # runtime copies (S5.7)
 git commit -m "chore(jdi): bootstrap specialists for {project_name}"
 ```
 
@@ -513,7 +507,7 @@ ship? |`), and append the same `## R-{date}-{slug}` block to
 
 ```bash
 git add .jdi/agents/ .jdi/specialists.md .jdi/reviewers.md .jdi/registry.md
-npx -y jdi-cli sync-specialists --porcelain | xargs -r git add   # runtime copies (S5.7)
+npx -y jdi-cli@0.16.0 sync-specialists --porcelain | xargs -r git add   # runtime copies (S5.7)
 git commit -m "chore(jdi): bootstrap specialists for {project_name}"
 ```
 
@@ -539,7 +533,7 @@ for long sessions where context budget matters. Default repo:
 > "Install Caveman plugin (~75% token savings via compressed output style)?
 >  - **Pros:** less tokens per response, longer sessions before compaction.
 >  - **Cons:** terse output style (fragments, no articles); not for all users.
->  - **Idempotent:** safe to run later via `npx jdi-cli install-caveman`."
+>  - **Idempotent:** safe to run later via `npx -y jdi-cli@0.16.0 install-caveman`."
 >
 > Options:
 > - [Yes, install now (user scope)]
@@ -553,14 +547,14 @@ If "Yes (project)": invoke with `--scope project`.
 ```bash
 PW_SCRIPT="$(npm root)/jdi-cli/bin/jdi-install-caveman.sh"
 [ -f "$PW_SCRIPT" ] || PW_SCRIPT="$(npm root -g)/jdi-cli/bin/jdi-install-caveman.sh"
-[ -f "$PW_SCRIPT" ] && bash "$PW_SCRIPT" --scope ${SCOPE:-user} || echo "  [warn] jdi-install-caveman not found. Run: npx jdi-cli install-caveman"
+[ -f "$PW_SCRIPT" ] && bash "$PW_SCRIPT" --scope ${SCOPE:-user} || echo "  [warn] jdi-install-caveman not found. Run: npx -y jdi-cli@0.16.0 install-caveman"
 ```
 
 **PowerShell:**
 ```powershell
 $Script = Join-Path (npm root) 'jdi-cli\bin\jdi-install-caveman.ps1'
 if (-not (Test-Path $Script)) { $Script = Join-Path (npm root -g) 'jdi-cli\bin\jdi-install-caveman.ps1' }
-if (Test-Path $Script) { & $Script -Scope ($Scope ?? 'user') } else { Write-Warning "jdi-install-caveman not found. Run: npx jdi-cli install-caveman" }
+if (Test-Path $Script) { & $Script -Scope ($Scope ?? 'user') } else { Write-Warning "jdi-install-caveman not found. Run: npx -y jdi-cli@0.16.0 install-caveman" }
 ```
 
 If "Skip", append to `.jdi/STATE.md`:
@@ -577,7 +571,7 @@ Only run if `frontend.has_frontend: true` in PROJECT.md. Otherwise skip.
 > "Install Playwright + MCP server for live browser interaction during dev?
 >  - **Pros:** LLM can drive a real browser via MCP (navigate, click, screenshot). Gate 7 frontend-validator skill also benefits.
 >  - **Cons:** ~250MB browser download + 1 dep added (`@playwright/test`).
->  - **Idempotent:** safe to run later via `npx jdi-cli install-playwright`."
+>  - **Idempotent:** safe to run later via `npx -y jdi-cli@0.16.0 install-playwright`."
 >
 > Options:
 > - [Yes, install now (recommended)]
@@ -591,7 +585,7 @@ JDI_LIB="$(dirname "$(command -v jdi 2>/dev/null || echo /usr/local/bin/jdi)")/.
 # Or, if running inside a project that has jdi installed via npx:
 PW_SCRIPT="$(npm root)/jdi-cli/bin/jdi-install-playwright.sh"
 [ -f "$PW_SCRIPT" ] || PW_SCRIPT="$(npm root -g)/jdi-cli/bin/jdi-install-playwright.sh"
-[ -f "$PW_SCRIPT" ] && bash "$PW_SCRIPT" || echo "  [warn] jdi-install-playwright not found in node_modules. Run: npx jdi-cli install-playwright"
+[ -f "$PW_SCRIPT" ] && bash "$PW_SCRIPT" || echo "  [warn] jdi-install-playwright not found in node_modules. Run: npx -y jdi-cli@0.16.0 install-playwright"
 ```
 
 **PowerShell:**
@@ -601,7 +595,7 @@ if (-not (Test-Path $PWScript)) { $PWScript = Join-Path (npm root -g) 'jdi-cli\b
 if (Test-Path $PWScript) {
   & $PWScript
 } else {
-  Write-Warning "jdi-install-playwright not found. Run: npx jdi-cli install-playwright"
+  Write-Warning "jdi-install-playwright not found. Run: npx -y jdi-cli@0.16.0 install-playwright"
 }
 ```
 
@@ -612,7 +606,7 @@ If "Skip", append to `.jdi/STATE.md`:
 playwright_mcp: skipped_at_bootstrap
 ```
 
-User can run `npx jdi-cli install-playwright` anytime later.
+User can run `npx -y jdi-cli@0.16.0 install-playwright` anytime later.
 
 ---
 
@@ -841,7 +835,7 @@ apply to this `{type}`):
 <!-- /jdi:skills -->
 ```
 
-Then `npx -y jdi-cli render` to refresh the views.
+Then `npx -y jdi-cli@0.16.0 render` to refresh the views.
 
 **Legacy layout**: append the rows directly — `.jdi/specialists.md`
 (`| {language} | jdi-{name} | {trigger description} |`), `.jdi/reviewers.md`

@@ -239,6 +239,11 @@ main() {
     done
   fi
 
+  # Ultimo passo, igual nos dois builders: blocos por runtime + CLI fixado na
+  # versao do package.json (bin/lib/build-postprocess.js).
+  echo
+  node "${ROOT}/bin/lib/build-postprocess.js" "$OUT"
+
   echo
   echo "Build completo. Veja runtimes/$TARGET/"
 }

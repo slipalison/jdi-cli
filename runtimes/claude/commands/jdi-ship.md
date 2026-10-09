@@ -32,7 +32,7 @@ Finalizes phase after /jdi-verify approves. Writes phases/<slug>/SHIPPED.md (the
 
 ### Step 1: Validation
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.16.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 ```bash
 test -d .jdi/ || { echo "Not a JDI project."; exit 1; }
 
@@ -43,7 +43,7 @@ for a in "$@"; do [ "$a" = "--pr" ] && WITH_PR=true; done
 ### Step 2: Resolve phase
 
 ```bash
-RESOLVED="$(npx -y jdi-cli resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+RESOLVED="$(npx -y jdi-cli@0.16.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
 eval "$RESOLVED"
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
@@ -183,7 +183,7 @@ Project delivered.
 
 ```bash
 NEXT_PHASE_SLUG=""
-if RESOLVED="$(npx -y jdi-cli resolve-phase "$NEXT_POSITION" 2>/dev/null)"; then
+if RESOLVED="$(npx -y jdi-cli@0.16.0 resolve-phase "$NEXT_POSITION" 2>/dev/null)"; then
   eval "$RESOLVED"
   NEXT_PHASE_SLUG="$JDI_PHASE_SLUG"
 fi
@@ -250,7 +250,7 @@ if [ "$THRESHOLD" -ge 1 ]; then
     }
   ' .jdi/ROADMAP.md | while IFS='|' read -r pos raw_slug; do
     [ "$pos" -le "$THRESHOLD" ] || continue
-    RESOLVED="$(npx -y jdi-cli resolve-phase "$pos" 2>/dev/null)" || continue
+    RESOLVED="$(npx -y jdi-cli@0.16.0 resolve-phase "$pos" 2>/dev/null)" || continue
     eval "$RESOLVED"
     [ "$JDI_PHASE_FOLDER_EXISTS" = "true" ] || continue
 
@@ -320,9 +320,13 @@ PowerShell mirrors with `Get-Command gh` + the same `gh` calls.
 
 ```
 Phase $PHASE_SLUG shipped.
-{if more phases:} Next: /jdi-discuss $NEXT_PHASE_SLUG
+{if more phases:} Next: start a NEW session (/clear), then /jdi-discuss $NEXT_PHASE_SLUG
 {if last:} Project delivered. Tag: phase-$PHASE_SLUG
 ```
+
+A shipped phase is the end of this orchestration session: everything the next
+phase needs is in `.jdi/`, and carrying this session's context into the next
+phase makes every later turn re-read it.
 
 </process>
 

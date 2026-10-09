@@ -221,7 +221,7 @@ O `.jdi/` é memória em camadas. Cada camada tem um tempo de vida diferente e u
 
 ```mermaid
 flowchart LR
-    subgraph LT["Longo prazo — vida do projeto (sempre lido por inteiro: curto + estável = amigável ao cache de prompt)"]
+    subgraph LT["Longo prazo — vida do projeto (lido por seção ou pelo CLI, nunca colado inteiro)"]
         PROJECT["PROJECT.md<br/>imutável depois de new/adopt"]
         ROADMAP["roadmap/{slug}.md<br/>um arquivo por fase; ROADMAP.md = view renderizada"]
         DECISIONS["decisions/D-{data}-{slug}-{seq}.md<br/>um arquivo por decisão; DECISIONS.md = view renderizada"]
@@ -248,7 +248,7 @@ flowchart LR
     PH -- "fases antigas vão para .jdi/archive/<br/>(compactação do ship, mantém as 5 últimas)" --> ARCH["archive/<br/>fora do caminho de leitura"]
 ```
 
-**Escada de profundidade de leitura (economia de tokens):** fase atual = corpo inteiro · fase anterior = só frontmatter + veredito · 2 ou mais atrás = nunca lida (apenas `ls`/`head`) · exceção: a `§ Learnings` dos 3 últimos SHIPPED.md (≤10 linhas cada). Os arquivos de longo prazo são sempre lidos por inteiro — são curtos por design e estáveis, então caem no cache de prompt.
+**Escada de profundidade de leitura (economia de tokens):** cada agente lê só a sua fatia da fase atual (o doer: o bloco da sua task e as linhas do DoD dos seus arquivos) · corpo de outra fase nunca é lido · o que atravessa fases vem pelo CLI: `learnings --last 3` (pela data do ship, com teto) e `decisions --ids/--recent` (nunca a view inteira do `DECISIONS.md`) · arquivo de instrução que o runtime injeta (CLAUDE.md, rules) nunca é relido. Por que importa: cada token que um agente lê é relido em todas as chamadas seguintes dele, e o que um agente leu não vira prefixo de cache do próximo — cada spawn paga as próprias leituras. O `npx jdi-cli cost` mede isso pelos transcripts locais.
 
 ### Quando a memória é escrita e lida (uma fase, ponta a ponta)
 
@@ -287,7 +287,7 @@ sequenceDiagram
     CMD->>PH: move fases antigas → archive/ (mantém as 5 últimas)
 ```
 
-O ciclo: o que uma fase APRENDE (warnings, blockers, waivers) sobrevive como no máximo 5 bullets destilados que o planner e o doer das PRÓXIMAS fases consomem — ~300 tokens em vez de arrastar arquivos REVIEW inteiros adiante. Schema completo: [MEMORY.md](MEMORY.md).
+O ciclo: o que uma fase APRENDE (warnings, blockers, waivers) sobrevive como no máximo 5 bullets destilados que o planner e o doer das PRÓXIMAS fases consomem — lidos via `jdi-cli learnings --last 3` (com teto) em vez de arrastar arquivos REVIEW inteiros adiante. Schema completo: [MEMORY.md](MEMORY.md).
 
 ### Invariantes
 

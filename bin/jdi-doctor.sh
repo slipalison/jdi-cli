@@ -514,6 +514,16 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+section "14. Economia de tokens"
+
+ECON_OUT="$(node "$JDI_ROOT/bin/lib/doctor-economy.js" "$PROJECT_DIR" 2>&1 || true)"
+if [[ -n "$ECON_OUT" ]]; then
+  printf '%s\n' "$ECON_OUT"
+  ECON_WARNS=$(printf '%s\n' "$ECON_OUT" | grep -c '^  WARN' || true)
+  WARNS=$((WARNS + ECON_WARNS))
+fi
+
+# ---------------------------------------------------------------------------
 section "Resumo"
 
 if [[ "$FAILS" -gt 0 ]]; then

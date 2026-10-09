@@ -13,6 +13,7 @@
 set -euo pipefail
 
 PROJECT_DIR="$(pwd)"
+JDI_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 USER_HOME="${HOME:-$HOME}"
 readonly SCOPE_PROJECT="project"
 
@@ -46,6 +47,25 @@ confirm_action() {
   if [[ $YES -eq 1 || $DRY_RUN -eq 1 ]]; then return 0; fi
   read -r -p "$msg (y/N) " resp
   [[ "$resp" =~ ^[YySs] ]]
+}
+
+# Instruction files (CLAUDE.md, AGENTS.md, ...): with the JDI managed block
+# (0.16.0+) only the block is removed — the project's rules stay, and the file
+# is deleted only when nothing else is left. Files from <= 0.15.x (no markers)
+# keep the old behavior: remove the whole file only after confirmation.
+uninstall_instructions() {
+  local path="$1" label="$2"
+  [[ -f "$path" ]] || return 0
+  if grep -q '<!-- JDI:BEGIN' "$path"; then
+    if [[ $DRY_RUN -eq 1 ]]; then
+      echo "  [dry-run] removeria o bloco JDI de: $label"
+      return 0
+    fi
+    node "$JDI_ROOT/bin/lib/instructions.js" strip "$path"
+  elif confirm_action "Remover $label? (pode ter sido editado)"; then
+    remove_safe "$path" "$label"
+  fi
+  return 0
 }
 
 remove_safe() {
@@ -100,8 +120,8 @@ uninstall_claude() {
       remove_safe "$dir/hooks/$h" "hooks/$h"
     done
 
-    if [[ "$sc" == "$SCOPE_PROJECT" ]] && [[ -f "$PROJECT_DIR/CLAUDE.md" ]] && confirm_action "Remover CLAUDE.md? (pode ter sido editado)"; then
-      remove_safe "$PROJECT_DIR/CLAUDE.md" "CLAUDE.md"
+    if [[ "$sc" == "$SCOPE_PROJECT" ]]; then
+      uninstall_instructions "$PROJECT_DIR/CLAUDE.md" "CLAUDE.md"
     fi
   done
 }
@@ -134,9 +154,7 @@ uninstall_copilot() {
     done
   fi
 
-  if [[ -f "$dest/copilot-instructions.md" ]] && confirm_action "Remover .github/copilot-instructions.md? (pode ter sido editado)"; then
-    remove_safe "$dest/copilot-instructions.md" ".github/copilot-instructions.md"
-  fi
+  uninstall_instructions "$dest/copilot-instructions.md" ".github/copilot-instructions.md"
 }
 
 uninstall_antigravity() {
@@ -166,9 +184,7 @@ uninstall_antigravity() {
 
     # agents.md do JDI (2.0: dentro de .agents/; 1.x: root do projeto)
     if [[ "$sc" == "$SCOPE_PROJECT" ]]; then
-      if [[ -f "$dir/agents.md" ]] && confirm_action "Remover $dir/agents.md (Antigravity)? (pode ter sido editado)"; then
-        remove_safe "$dir/agents.md" "agents.md"
-      fi
+      uninstall_instructions "$dir/agents.md" "$dir/agents.md (Antigravity)"
       if [[ -f "$PROJECT_DIR/agents.md" ]] && confirm_action "Remover agents.md legado do root (Antigravity 1.x)? (pode ter sido editado)"; then
         remove_safe "$PROJECT_DIR/agents.md" "agents.md (root, 1.x)"
       fi
@@ -209,9 +225,7 @@ uninstall_opencode() {
     fi
 
     if [[ "$sc" == "$SCOPE_PROJECT" ]]; then
-      if [[ -f "$PROJECT_DIR/AGENTS.md" ]] && confirm_action "Remover AGENTS.md (OpenCode)? (pode ter sido editado)"; then
-        remove_safe "$PROJECT_DIR/AGENTS.md" "AGENTS.md"
-      fi
+      uninstall_instructions "$PROJECT_DIR/AGENTS.md" "AGENTS.md (OpenCode)"
       if [[ -f "$dir/opencode.jsonc" ]] && confirm_action "Remover .opencode/opencode.jsonc? (pode ter config customizada)"; then
         remove_safe "$dir/opencode.jsonc" ".opencode/opencode.jsonc"
       fi
@@ -266,8 +280,8 @@ uninstall_junie() {
       done
     fi
 
-    if [[ "$sc" == "$SCOPE_PROJECT" && -f "$dir/AGENTS.md" ]] && confirm_action "Remover .junie/AGENTS.md? (pode ter sido editado)"; then
-      remove_safe "$dir/AGENTS.md" ".junie/AGENTS.md"
+    if [[ "$sc" == "$SCOPE_PROJECT" ]]; then
+      uninstall_instructions "$dir/AGENTS.md" ".junie/AGENTS.md"
     fi
   done
 }

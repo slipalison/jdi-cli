@@ -88,6 +88,21 @@ function Add-LangDirectiveToSkills {
   }
 }
 
+# Instruction files carry the JDI part as a MANAGED BLOCK: only that block is
+# replaced, the project's own rules around it are preserved byte for byte
+# (<= 0.15.x copied the whole file over them). Same Node helper as install.sh.
+function Merge-Instructions {
+  param([string]$Src, [string]$Dest, [string]$Runtime)
+  # Node gets the raw string: normalize the separators this script writes
+  # Windows-style, so the same call also works under pwsh on Linux/macOS.
+  $sep = [System.IO.Path]::DirectorySeparatorChar
+  $Src = $Src -replace '[\\/]', $sep
+  $Dest = $Dest -replace '[\\/]', $sep
+  $helper = [System.IO.Path]::Combine($Root, 'bin', 'lib', 'instructions.js')
+  & node $helper merge $Src $Dest $Runtime
+  if ($LASTEXITCODE -ne 0) { throw "instructions merge falhou para $Dest" }
+}
+
 function Install-Claude {
   $dest = if ($Scope -eq 'user') { Join-Path $UserHome '.claude' } else { Join-Path $ProjectDir '.claude' }
   New-Item -ItemType Directory -Force -Path "$dest\agents" | Out-Null
@@ -108,7 +123,7 @@ function Install-Claude {
 
   if ($Scope -eq 'project') {
     if (Test-Path "$Root\runtimes\claude\CLAUDE.md") {
-      Copy-Item -Path "$Root\runtimes\claude\CLAUDE.md" -Destination "$ProjectDir\CLAUDE.md" -Force
+      Merge-Instructions -Src "$Root\runtimes\claude\CLAUDE.md" -Dest "$ProjectDir\CLAUDE.md" -Runtime claude
     }
     if (Test-Path "$Root\runtimes\claude\settings.example.json") {
       $target = Join-Path $dest 'settings.example.json'
@@ -142,7 +157,7 @@ function Install-Copilot {
   }
 
   if (Test-Path "$Root\runtimes\copilot\copilot-instructions.md") {
-    Copy-Item -Path "$Root\runtimes\copilot\copilot-instructions.md" -Destination "$dest\copilot-instructions.md" -Force
+    Merge-Instructions -Src "$Root\runtimes\copilot\copilot-instructions.md" -Dest "$dest\copilot-instructions.md" -Runtime copilot
   }
 
   # Coding agent (issues delegadas): setup do ambiente + gate de artefatos.
@@ -183,7 +198,7 @@ function Install-Antigravity {
   }
 
   if ($Scope -eq 'project' -and (Test-Path "$Root\runtimes\antigravity\agents.md")) {
-    Copy-Item -Path "$Root\runtimes\antigravity\agents.md" -Destination "$dest\agents.md" -Force
+    Merge-Instructions -Src "$Root\runtimes\antigravity\agents.md" -Dest "$dest\agents.md" -Runtime antigravity
   }
   Write-Output "Antigravity 2.0 instalado em: $dest\skills (scope=$Scope)"
 
@@ -217,7 +232,7 @@ function Install-Opencode {
 
   if ($Scope -eq 'project') {
     if (Test-Path "$Root\runtimes\opencode\AGENTS.md") {
-      Copy-Item -Path "$Root\runtimes\opencode\AGENTS.md" -Destination "$ProjectDir\AGENTS.md" -Force
+      Merge-Instructions -Src "$Root\runtimes\opencode\AGENTS.md" -Dest "$ProjectDir\AGENTS.md" -Runtime opencode
     }
     $jsoncTarget = Join-Path $dest 'opencode.jsonc'
     if (-not (Test-Path $jsoncTarget) -and (Test-Path "$Root\runtimes\opencode\opencode.example.jsonc")) {
@@ -266,7 +281,7 @@ function Install-Junie {
   }
 
   if ($Scope -eq 'project') {
-    Copy-Item -Path "$Root\runtimes\junie\AGENTS.md" -Destination "$dest\AGENTS.md" -Force
+    Merge-Instructions -Src "$Root\runtimes\junie\AGENTS.md" -Dest "$dest\AGENTS.md" -Runtime junie
   }
 
   Write-Output "Junie instalado em: $dest (scope=$Scope)"

@@ -483,6 +483,15 @@ if ((Test-Path (Join-Path $ghDir 'agents')) -or (Test-Path (Join-Path $ghDir 'pr
 }
 
 # ---------------------------------------------------------------------------
+Write-Section '14. Economia de tokens'
+
+$econHelper = [System.IO.Path]::Combine((Split-Path -Parent $PSScriptRoot), 'bin', 'lib', 'doctor-economy.js')
+$econOut = & node $econHelper $ProjectDir 2>&1
+foreach ($line in @($econOut)) {
+  Write-Output $line
+  if ("$line" -like '  WARN*') { $script:Warns++ }
+}
+
 Write-Section 'Resumo'
 
 if ($script:Fails -gt 0) {

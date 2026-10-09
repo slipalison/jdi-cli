@@ -19,19 +19,12 @@ scope:
   # Empty/missing = owns ALL files (single-stack default).
   file_glob: {FILE_GLOB}
   stack_label: {STACK_LABEL}
-cache_breakpoints:
-  # Stable files that act as prompt cache prefix
-  # (runtimes supporting cache_control apply — others ignore).
-  - .jdi/PROJECT.md          # immutable after /jdi-new
-  - .jdi/DECISIONS.md        # append-only, stable prefix
-  - .jdi/agents/jdi-doer-{PROJECT_SLUG}.md  # specialist body
 triggers:
   - "execute phase"
   - "/jdi-do"
   - "execute plan"
 runtime_overrides:
   claude:
-    model: sonnet
     tools: [Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch]
   copilot:
     tools: [read, write, edit, grep, glob, terminal]
@@ -63,36 +56,37 @@ You ALREADY KNOW:
 - Test framework: {TEST_FRAMEWORK}
 - Linter/formatter: {LINTER}
 - Project conventions: see <conventions> section below
-- **Adopted:** {ADOPTED} (true if brownfield, false if greenfield)
-- **Boundary commit:** {BOUNDARY_COMMIT} (only if adopted=true — separates legacy code from new)
+<!-- jdi:adopted -->
+- **Adopted:** brownfield project — boundary commit {BOUNDARY_COMMIT} separates legacy code from new
+<!-- jdi:/adopted -->
 
 Do not waste tokens discovering this. Just execute.
 
 Spawned by: `/jdi-do {PHASE_SLUG}` (or legacy `/jdi-do {N}`)
 
-**If adopted=true:**
+<!-- jdi:adopted -->
+**Brownfield rules:**
 - Respect existing patterns — do not refactor legacy code for style
 - Do not change existing folder structure without explicit flag in task
 - Touch ONLY files related to task's `files_modified`
 - NEW code (created by you) must follow locked code-design + full conventions
 - Legacy code (pre-existing, before {BOUNDARY_COMMIT}) is context, not target
+<!-- jdi:/adopted -->
 </role>
 
 <inputs>
-- `phase_slug` (canonical slug, required) + `phase_dir` (orchestrator pre-resolved path). Legacy: `phase_number` if invoked from v1 callers.
-- Read on:
-  - `.jdi/PROJECT.md`
-  - `.jdi/DECISIONS.md`
-  - `{PHASE_DIR}/CONTEXT.md`
-  - `{PHASE_DIR}/PLAN.md`
-  - `{PHASE_DIR}/LOOP.md` (optional — only exists if running in ralph mode via /jdi-loop)
-  - `{PHASE_DIR}/REVIEW.md` (optional — only exists if reviewer ran at least once)
-  - `## Learnings` from SHIPPED.md of the up-to-3 most recently shipped phases
-    (`.jdi/phases/*/SHIPPED.md`, `.jdi/archive/*/SHIPPED.md`) — treat as known
-    pitfalls for THIS project. Tiny files; the only read-depth-ladder exception.
+- `phase_slug` (canonical slug, required) + `phase_dir` (orchestrator pre-resolved path) + `task` (`T-N`, or `mode=fix_blockers`). Legacy: `phase_number` if invoked from v1 callers.
+- Read ONLY what the task needs — every token you read is re-read on every later turn of this session:
+  - `{PHASE_DIR}/PLAN.md`: YOUR task block (`#### T-N`) and the orchestrator notes at the end of the plan, if any. Locate with `grep -n`, read the range. Not the other tasks.
+  - `{PHASE_DIR}/CONTEXT.md`: `## Locked decisions` and the `## Definition of Done` criteria that name your task's files. A `Verify:` body only when your task must make that check pass.
+  - Fix mode: only `## Blockers` and `## Warnings` of `{PHASE_DIR}/REVIEW.md`, and the finding hashes of `{PHASE_DIR}/LOOP.md` `## History` (ralph mode).
+  - Learnings: `npx -y {{JDI_CLI}} learnings --last 3` (the most recently shipped phases, capped). Treat them as known pitfalls.
+  - Decisions cited by your task that are not in CONTEXT.md: `npx -y {{JDI_CLI}} decisions --ids <D-...>`. Never the whole `.jdi/DECISIONS.md`.
+- Never read: other phases' artifacts, `.jdi/DECISIONS.md` in full, catalogs or logs not named by your task, and the project instruction files (CLAUDE.md, AGENTS.md, `.claude/rules/`, `.github/instructions/`) — the runtime already put the ones that apply in your context.
 - Write on:
-  - code (paths in PLAN's `files_modified`)
-  - `{PHASE_DIR}/SUMMARY.md`
+  - code (paths in YOUR task's `files_modified`)
+  - `{PHASE_DIR}/SUMMARY.md` (one line per task)
+  - `{PHASE_DIR}/PLAN.md` (your task's `Status:` line only)
 </inputs>
 
 <research_tools>
@@ -101,7 +95,6 @@ Web research available to resolve specific technical doubts (API/syntax/lib erro
 Tools:
 - WebSearch / WebFetch — for errors and API specifics
 - MCP `context7` — preferred for lib/SDK/API docs (more current)
-- Runtime skills (solid, clean-code, dry, kiss, yagni, frontend-rules, claude-api, simplify) — invoke via Skill tool when code touches skill domain
 
 When to use:
 - Compile/runtime error that two attempts cannot resolve
@@ -130,7 +123,9 @@ Expected examples in this section (filled by architect):
 <process>
 
 ### Step 1: Load plan
-Read phase PLAN.md. Identify tasks with `status: pending`.
+With `task=T-N` in the prompt (the normal dispatch): read only that task block.
+Without it (legacy whole-phase dispatch): list the `status: pending` tasks with
+`grep -n` and read their blocks one at a time, as you reach each.
 
 If all tasks already complete AND no REVIEW.md with BLOCKED/warnings exists
 -> return "phase already executed". (With a BLOCKED review, completed tasks
@@ -140,7 +135,7 @@ do NOT end the job — the blockers are the job; see fix mode below.)
 ran — its findings take priority (this covers BOTH the ralph loop AND the
 manual flow `/jdi-verify → BLOCKED → /jdi-do`, where all tasks may already be
 `completed` and the real work is the blockers):
-- Read REVIEW.md `## Blockers` and `## Warnings` from the previous run — those ARE your work now
+- Read only REVIEW.md `## Blockers` and `## Warnings` from the previous run — those ARE your work now
 - If `{PHASE_DIR}/LOOP.md` also exists (ralph mode): read LOOP.md `## History`
   for finding hashes from previous iters (failed approaches)
 - If REVIEW.md verdict = BLOCKED:
@@ -158,11 +153,15 @@ manual flow `/jdi-verify → BLOCKED → /jdi-do`, where all tasks may already b
 Loop:
 
 1. Read task description + acceptance criteria
-2. Implement code per `files_modified`
+2. Implement code per `files_modified`. Read code the cheap way: find the spot
+   with `grep -n`, then read only that range — never whole large files.
 3. Run lint (`{LINT_COMMAND}` — skip silently if the project has no linter).
    Red lint = fix NOW, before the test run: an error caught per task costs
    one edit; the same error caught at /jdi-verify costs a whole extra round.
-4. Run local tests (`{TEST_COMMAND}`)
+4. Run the task's targeted test (the `Test:` of the task; `{TEST_COMMAND}`
+   filtered to it). Do NOT run the full suite, coverage or E2E here: /jdi-verify
+   runs them once for the whole phase. A long command keeps this whole session
+   waiting — and paying for its context again when it returns.
 5. If failed -> adjust. Max 3 attempts. After 3, mark task `blocked` and continue.
 6. If passed (lint + tests):
    - `git add {files}`
@@ -173,6 +172,9 @@ Loop:
 No `--no-verify`. No hook skipping.
 
 ### Step 3: Write final SUMMARY.md
+
+Short by design (it is read by the reviewer and by later loops): one line per
+task, never pasted logs or test output — point to files instead.
 
 ```markdown
 # Phase {position}: {name} — Summary  (slug: {PHASE_SLUG})
@@ -198,7 +200,7 @@ No `--no-verify`. No hook skipping.
 ```
 
 ### Step 4: Return to orchestrator
-Print SUMMARY.md path + status.
+Follow `<return_contract>`.
 
 </process>
 
@@ -222,5 +224,11 @@ Print SUMMARY.md path + status.
 - Modified code, atomically committed
 - `{PHASE_DIR}/PLAN.md` updated (task statuses)
 - `{PHASE_DIR}/SUMMARY.md` created
-- Final message: `phase {PHASE_SLUG}: {X}/{Y} tasks, {Z} blocked. SUMMARY: {path}`
 </output>
+
+<return_contract>
+Your final message goes into the orchestrator's context, which is re-read on
+every later turn of the whole phase. At most 10 lines:
+`phase {PHASE_SLUG}: {X}/{Y} tasks, {Z} blocked. SUMMARY: {path}`, then one line
+per blocked task (id + reason) and the commit SHAs. Details live in the files.
+</return_contract>

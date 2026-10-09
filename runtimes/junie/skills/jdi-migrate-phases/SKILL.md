@@ -50,7 +50,7 @@ Examples:
 > **Scope note:** this command migrates the PHASE-ID schema (v1 numeric →
 > v2 slug-as-ID). The FILE-LAYOUT migration to the conflict-free per-entry
 > layout (v3) is a different, deterministic command:
-> `npx -y jdi-cli migrate-layout`. A project on layout v3 is already schema
+> `npx -y jdi-cli@0.16.0 migrate-layout`. A project on layout v3 is already schema
 > v2+ — this command no-ops there.
 
 ```bash
@@ -63,7 +63,7 @@ test -f .jdi/ROADMAP.md || { echo "ROADMAP.md missing — corrupt project."; exi
 # always tracks STATE.md, so a regenerated file correctly reads as v2 → no-op.
 if [ ! -f .jdi/STATE.md ]; then
   POS=1
-  while RESOLVED="$(npx -y jdi-cli resolve-phase "$POS" 2>/dev/null)"; do
+  while RESOLVED="$(npx -y jdi-cli@0.16.0 resolve-phase "$POS" 2>/dev/null)"; do
     eval "$RESOLVED"
     [ -f "$JDI_PHASE_DIR/SHIPPED.md" ] || break
     POS=$((POS+1))
@@ -87,7 +87,7 @@ if (-not (Test-Path .jdi/ROADMAP.md)) { Write-Error "ROADMAP.md missing."; exit 
 if (-not (Test-Path .jdi/STATE.md)) {
   $pos = 1
   while ($true) {
-    $r = npx -y jdi-cli resolve-phase $pos --json 2>$null | ConvertFrom-Json
+    $r = npx -y jdi-cli@0.16.0 resolve-phase $pos --json 2>$null | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0) { break }
     if (-not (Test-Path (Join-Path $r.dir 'SHIPPED.md'))) { break }
     $pos++
@@ -124,7 +124,7 @@ Strict checks (any failure aborts migration with a named error):
 
 - **C1 — Folder/ROADMAP parity:** every ROADMAP phase with a folder must match by canonical slug. Mismatch ⇒ abort, list offenders.
 - **C2 — No duplicate canonical slugs:** if two folders have the same canonical slug (e.g. `01-auth/` and `auth/`), abort. User must merge or rename manually.
-- **C3 — No invalid slugs:** every existing slug must pass `npx -y jdi-cli validate-slug` shape rules. Pre-existing malformed slugs (mixed case, underscores) ⇒ abort with a remediation hint (rename + commit before re-running).
+- **C3 — No invalid slugs:** every existing slug must pass `npx -y jdi-cli@0.16.0 validate-slug` shape rules. Pre-existing malformed slugs (mixed case, underscores) ⇒ abort with a remediation hint (rename + commit before re-running).
 - **C4 — No orphan folders:** folders without a ROADMAP entry ⇒ warn, do not block (user may have removed phase from ROADMAP without archiving).
 
 ```bash
@@ -137,7 +137,7 @@ while IFS=$'\t' read -r pos raw status; do
   canonical=$(echo "$raw" | sed -E 's/^[0-9]+-//')
 
   # Shape check (C3)
-  if ! npx -y jdi-cli validate-slug "$canonical" >/dev/null 2>&1; then
+  if ! npx -y jdi-cli@0.16.0 validate-slug "$canonical" >/dev/null 2>&1; then
     echo "C3 FAIL: phase $pos slug '$canonical' has invalid shape"
     errors=$((errors + 1))
   fi
@@ -196,7 +196,7 @@ fi
 ```
 
 PowerShell: mirror this audit inline (Get-ChildItem over `.jdi/phases/`,
-Select-String over ROADMAP.md, `npx -y jdi-cli validate-slug` for C3). The
+Select-String over ROADMAP.md, `npx -y jdi-cli@0.16.0 validate-slug` for C3). The
 checks C1-C4 are the contract; the shell is incidental. No separate script
 ships for this one-time migration.
 

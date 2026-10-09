@@ -1,81 +1,17 @@
-# agents.md — JDI workflow (Antigravity)
+<!-- JDI:BEGIN managed by jdi-cli 0.16.0 - edits inside this block are replaced on update; write project rules outside it -->
+# JDI
 
-Este projeto usa **JDI (Just Do It)** como workflow de desenvolvimento. JDI eh um workflow enxuto.
+This project uses JDI (Just Do It): phase work runs through the `/jdi-*` commands.
+`/jdi-next` derives the next step from the artifacts; `/jdi-issue <card>` takes a
+card to a pull request; `/jdi-status` shows where the project is.
 
-## Loop canonico
+- State lives in `.jdi/` (one file per phase, decision, todo). Phase status is
+  derived from the artifacts in `.jdi/phases/<slug>/`; `STATE.md` and the
+  `ROADMAP.md`/`DECISIONS.md` views are untracked and regenerated.
+- Commits: Conventional Commits, scope = phase slug, one task = one commit,
+  never `--no-verify`. Locked decisions (`.jdi/decisions/`) are not reopened.
+- One orchestration session per phase: after `/jdi-ship`, start a new session
+  (`/clear`); the next one resumes from `.jdi/` alone.
 
-```
-/jdi-new "<descricao>"   -> research + PROJECT.md + ROADMAP.md
-/jdi-bootstrap           -> cria specialists per-project
-/jdi-discuss <N>         -> captura decisoes locked
-/jdi-plan <N>            -> decompoe em tasks com waves
-/jdi-do <N>              -> executa via doer specialist
-/jdi-verify <N>          -> gates via reviewer specialist
-/jdi-ship <N>            -> finaliza phase
-
-# Roadmap mutation (qualquer hora)
-/jdi-add-phase "<name>" [--goal "<t>"] [--at <pos>]   -> adiciona phase
-/jdi-remove-phase <N> [--force]                        -> remove future/pending phase
-
-# Continuidade / snapshot
-/jdi-status                                            -> resumo: phase atual + ultima acao + proximo comando
-```
-
-`/jdi-create [desc]` cria agents/skills no `core/` (so dentro do repo JDI).
-
-## Skills disponiveis
-
-Em `.gemini/antigravity/skills/`. Discovery via triggers.
-
-| Skill | Funcao |
-|---|---|
-| jdi-researcher | Research pre-roadmap (PROJECT.md + ROADMAP.md) |
-| jdi-bootstrap | Cria specialists per-project (doer + reviewer) |
-| jdi-asker | Loop de perguntas pra CONTEXT.md |
-| jdi-planner | Gera PLAN.md com waves |
-| jdi-architect | Meta-skill: cria agents/skills/specialists |
-
-## Specialists per-project
-
-Apos `/jdi-bootstrap`, criados em `.jdi/agents/jdi-doer-{slug}.md` e `.jdi/agents/jdi-reviewer-{slug}.md`.
-
-Pra Antigravity reconhecer, copie pra `.gemini/antigravity/skills/` (ou rode `jdi-install.sh antigravity` apos bootstrap).
-
-## Triggers
-
-Digite `/jdi-discuss N` ou peca em natural — ex: "discutir phase 2", "iniciar phase 1", "executar phase 3", "verificar entrega da phase". Skills tem triggers prefixados `jdi-` pra evitar falsos positivos.
-
-## Memoria — files em `.jdi/`
-
-```
-.jdi/
-  PROJECT.md, ROADMAP.md, DECISIONS.md, STATE.md
-  specialists.md, reviewers.md, registry.md
-  agents/         <- per-project specialists
-  phases/{NN-slug}/{CONTEXT,PLAN,SUMMARY,REVIEW}.md
-```
-
-## Limitacoes Antigravity
-
-- **Sem restricao formal de tools**: cada SKILL.md documenta privilegios via prosa. Confianca via review.
-- **Sem hooks runtime**: pre-commit/post-commit ficam em `.githooks/`. Ativar com `git config core.hooksPath .githooks`.
-- **Discovery por trigger**: prefixo `jdi-` evita falsos positivos.
-- **Subagent spawn limitado**: paralelizacao por default sequential. Use prompts explicitos pra paralelo.
-
-## Convencoes
-
-- Conventional Commits — scope = phase slug
-- Atomic commits — 1 task = 1 commit
-- 80% cobertura minima
-- Code design locked no `/jdi-new`
-
-## Idioma
-
-- Codigo/commits/PRs: ingles
-- Discussao/docs em `.jdi/`: pt-BR
-
-## Prioridade quando conflita
-
-1. Seguranca
-2. Performance
-3. Boas praticas
+Commands and agents are skills under `.agents/skills/` (discovered by trigger).
+<!-- JDI:END -->

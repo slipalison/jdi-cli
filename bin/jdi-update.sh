@@ -216,19 +216,22 @@ if [[ ${#specialists[@]} -gt 0 ]]; then
   for s in "${specialists[@]}"; do echo "  - $(basename "$s")"; done
   echo
 
-  # Heuristica: specialists novos tem <skills_to_load>
+  # Heuristica: specialists gerados a partir da 0.16 tem <return_contract> e
+  # nao tem <skills_to_load> (lista que nunca carregava: os specialists nao
+  # tem a ferramenta Skill).
   needs_regen=0
   for s in "${specialists[@]}"; do
-    if ! grep -q '<skills_to_load>' "$s"; then
+    if grep -q '<skills_to_load>' "$s" || ! grep -q '<return_contract>' "$s"; then
       needs_regen=1
       break
     fi
   done
 
   if [[ $needs_regen -eq 1 ]]; then
-    echo "Specialists existentes NAO tem <skills_to_load> - foram gerados antes da 1.2.1."
-    echo "Pra ativar skills universais (DRY/KISS/YAGNI/SOLID/Clean Code) via eager loading,"
-    echo "specialists precisam ser regenerados."
+    echo "Specialists existentes foram gerados antes da 0.16: sem <return_contract>"
+    echo "(retorno curto ao orquestrador) e/ou com <skills_to_load> (nunca carregado)."
+    echo "Regenere com /jdi-bootstrap (Recriar) ou aplique as mudancas da 0.16 a mao"
+    echo "(CHANGELOG: entradas, retorno curto, nada de reler CLAUDE.md/rules)."
     echo
 
     should_regen=0
@@ -236,7 +239,7 @@ if [[ ${#specialists[@]} -gt 0 ]]; then
       should_regen=1
     elif [[ $SKIP_SPECIALISTS -eq 1 ]]; then
       should_regen=0
-    else
+    elif [[ -t 0 ]]; then
       read -r -p "Regenerar specialists? Vai rodar /jdi-bootstrap (Y/n) " resp
       if [[ -z "$resp" || "$resp" =~ ^[YySs] ]]; then should_regen=1; fi
     fi
@@ -246,12 +249,11 @@ if [[ ${#specialists[@]} -gt 0 ]]; then
       echo "ACAO MANUAL NECESSARIA:"
       echo "  Abra teu runtime e rode:  /jdi-bootstrap"
       echo "  Architect vai detectar specialists existentes e oferecer 'Recriar'."
-      echo "  Os specialists novos terao <skills_to_load> com as 5 universais wired."
     else
-      echo "  Specialists mantidos - skills universais ficam em modo discoverable only."
+      echo "  Specialists mantidos como estao."
     fi
   else
-    echo "Specialists ja tem <skills_to_load> - up to date."
+    echo "Specialists ja estao no formato da 0.16+."
   fi
 fi
 

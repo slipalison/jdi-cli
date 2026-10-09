@@ -32,7 +32,7 @@ Capture locked decisions for the given phase. Output: CONTEXT.md consumed by the
 
 ### Step 1: Validation
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.16.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new first."; exit 1; }
 
@@ -44,7 +44,7 @@ ls .jdi/agents/jdi-reviewer-*.md >/dev/null 2>&1 || { echo "Reviewer specialist 
 ### Step 2: Resolve phase
 
 ```bash
-RESOLVED="$(npx -y jdi-cli resolve-phase "$1")" || {
+RESOLVED="$(npx -y jdi-cli@0.16.0 resolve-phase "$1")" || {
   echo "Phase '$1' not found in ROADMAP."
   exit 1
 }
@@ -57,7 +57,7 @@ PHASE_POSITION="$JDI_PHASE_POSITION"
 
 PowerShell:
 ```powershell
-$r = npx -y jdi-cli resolve-phase $args[0] --json | ConvertFrom-Json
+$r = npx -y jdi-cli@0.16.0 resolve-phase $args[0] --json | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) { Write-Error "Phase '$($args[0])' not found."; exit $LASTEXITCODE }
 $phaseSlug = $r.slug; $phaseDir = $r.dir; $phasePosition = $r.position
 ```
@@ -65,6 +65,17 @@ $phaseSlug = $r.slug; $phaseDir = $r.dir; $phasePosition = $r.position
 ### Step 3: Check existing CONTEXT.md
 
 If `$PHASE_DIR/CONTEXT.md` exists, ask: overwrite | skip | view.
+
+### Step 3.5: Prepare the asker's inputs (small, deterministic)
+
+The asker reads these files instead of the whole decision history and old
+CONTEXT.md files (in a long-lived project those passed 50k tokens per spawn):
+
+```bash
+mkdir -p .jdi/cache
+npx -y jdi-cli@0.16.0 decisions --index --recent 2 --out .jdi/cache/decisions.md
+npx -y jdi-cli@0.16.0 template dod-schema --out .jdi/cache/dod-schema.md
+```
 
 ### Step 4: Spawn asker
 Invoke `jdi-asker` with:
@@ -77,7 +88,10 @@ Invoke `jdi-asker` with:
   human-only criteria go to `## Deferred to PR review`) — see the asker's
   `<brief_mode>`
 
+
 Agent runs its own process. Returns when CONTEXT.md is written to `$PHASE_DIR/CONTEXT.md`.
+Its final message is a short status (return contract) — do not open
+CONTEXT.md just to echo it back; Step 4.5 checks the file mechanically.
 
 ### Step 4.5: Verify output
 
@@ -86,10 +100,22 @@ test -f "$PHASE_DIR/CONTEXT.md" || { echo "CONTEXT.md not created"; exit 1; }
 grep -q '## Definition of Done' "$PHASE_DIR/CONTEXT.md" || { echo "CONTEXT.md missing § Definition of Done (asker Stage 2 incomplete)"; exit 1; }
 ```
 
-### Step 5: Commit
+### Step 5: Render views + commit
+
+The asker has no shell: refresh the views here, then commit the SOURCE files.
+On layout v3 the decisions and todos live in `.jdi/decisions/` and
+`.jdi/todos/` (`DECISIONS.md`/`todos.md` are untracked views — staging them
+silently commits nothing, #39).
+
 ```bash
-git add "$PHASE_DIR/CONTEXT.md" .jdi/DECISIONS.md .jdi/todos.md 2>/dev/null
-git commit -m "docs($PHASE_SLUG): capture phase context"
+if [ -d .jdi/roadmap ]; then
+  npx -y jdi-cli@0.16.0 render
+  git add "$PHASE_DIR/CONTEXT.md" .jdi/decisions/ .jdi/todos/ 2>/dev/null
+  [ -d "$PHASE_DIR/verify" ] && git add "$PHASE_DIR/verify/"
+else
+  git add "$PHASE_DIR/CONTEXT.md" .jdi/DECISIONS.md .jdi/todos.md 2>/dev/null
+fi
+git diff --cached --quiet || git commit -m "docs($PHASE_SLUG): capture phase context"
 ```
 
 ### Step 6: Update state
@@ -113,7 +139,7 @@ Next: /jdi-plan $PHASE_SLUG
 </process>
 
 <gates>
-- pre: `.jdi/` exists + doer/reviewer specialists exist + phase resolves via `npx -y jdi-cli resolve-phase`
+- pre: `.jdi/` exists + doer/reviewer specialists exist + phase resolves via `npx -y jdi-cli@0.16.0 resolve-phase`
 - post: CONTEXT.md written (including `## Definition of Done`) + commit made + STATE.md updated
 </gates>
 
