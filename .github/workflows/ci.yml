@@ -62,7 +62,8 @@ jobs:
 
       - name: .ps1 scripts are ASCII-only (Windows PowerShell 5.1 reads them as ANSI)
         run: |
-          BAD=$(git ls-files '*.ps1' | while IFS= read -r f; do LC_ALL=C grep -lP '[^\x00-\x7F]' "$f"; done)
+          # grep -l exits 1 when nothing matches; under `bash -e -o pipefail` that must not end the step
+          BAD=$(git ls-files -z '*.ps1' | LC_ALL=C xargs -0 -r grep -lP '[^\x00-\x7F]' || true)
           if [ -n "$BAD" ]; then echo "::error::non-ASCII bytes in:"; echo "$BAD"; exit 1; fi
 
       - name: Build with bash
