@@ -219,7 +219,7 @@ if ($specialists.Count -gt 0) {
   # (<!-- jdi:managed id=... -->): o update troca so esses blocos e mantem
   # byte a byte tudo o que o projeto escreveu fora deles. Specialists sem
   # blocos (gerados antes da 0.17) precisam de `specialists upgrade --adopt`
-  # uma vez — mostra a diferenca antes de gravar.
+  # uma vez - mostra a diferenca antes de gravar.
   $jdiJs = [System.IO.Path]::Combine($Root, 'bin', 'jdi.js')
   if ($SkipSpecialists) {
     Write-Output "  Specialists mantidos como estao (-SkipSpecialists)."

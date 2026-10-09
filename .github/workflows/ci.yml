@@ -1,8 +1,9 @@
 name: CI
 
-# Pull requests and main: unit tests on Linux and Windows, and the build-drift
-# check — runtimes/ is generated from core/ by two builders (bash and
-# PowerShell) that must produce exactly the committed bytes.
+# Pull requests and main: unit tests on Linux and Windows, the release guards
+# of the npm publish (exec bit, ASCII .ps1), and the build-drift check —
+# runtimes/ is generated from core/ by two builders (bash and PowerShell) that
+# must produce exactly the committed bytes.
 
 on:
   pull_request:
@@ -50,6 +51,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+
+      # The same guards the npm publish runs on the tag: a PR must fail here,
+      # not the release (0.17 shipped an em dash in a .ps1 that only the
+      # publish job would have caught).
+      - name: Shell scripts carry the exec bit
+        run: |
+          BAD=$(git ls-files -s -- '*.sh' 'bin/git-hooks/pre-commit' 'bin/git-hooks/post-commit' | awk '$1 == "100644" { print $4 }')
+          if [ -n "$BAD" ]; then echo "::error::scripts without the exec bit (git update-index --chmod=+x):"; echo "$BAD"; exit 1; fi
+
+      - name: .ps1 scripts are ASCII-only (Windows PowerShell 5.1 reads them as ANSI)
+        run: |
+          BAD=$(git ls-files '*.ps1' | while IFS= read -r f; do LC_ALL=C grep -lP '[^\x00-\x7F]' "$f"; done)
+          if [ -n "$BAD" ]; then echo "::error::non-ASCII bytes in:"; echo "$BAD"; exit 1; fi
 
       - name: Build with bash
         run: bash bin/jdi-build.sh
