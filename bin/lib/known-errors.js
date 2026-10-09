@@ -114,8 +114,15 @@ function splitRow(line) {
   let tick = false;
   for (let i = 0; i < line.length; i++) {
     const c = line[i];
+    // `\|` is a table's escaped pipe (GFM requires it even inside code): the
+    // entry keeps the pipe, not the escape
+    if (c === '\\' && line[i + 1] === '|') {
+      buf += '|';
+      i++;
+      continue;
+    }
     if (c === '`') tick = !tick;
-    if (c === '|' && !tick && line[i - 1] !== '\\') {
+    if (c === '|' && !tick) {
       cells.push(buf);
       buf = '';
       continue;

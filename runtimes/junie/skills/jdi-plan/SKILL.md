@@ -31,7 +31,7 @@ Generates PLAN.md for the given phase. Decomposes into tasks (max 8), groups int
 
 ### Step 1: Validation
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.18.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.18.1 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. Run /jdi-new."; exit 1; }
 test -f .jdi/PROJECT.md || { echo "PROJECT.md missing."; exit 1; }
@@ -40,7 +40,7 @@ test -f .jdi/PROJECT.md || { echo "PROJECT.md missing."; exit 1; }
 ### Step 2: Resolve phase
 
 ```bash
-RESOLVED="$(npx -y jdi-cli@0.18.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+RESOLVED="$(npx -y jdi-cli@0.18.1 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
 eval "$RESOLVED"
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
@@ -49,7 +49,7 @@ PHASE_POSITION="$JDI_PHASE_POSITION"
 
 PowerShell:
 ```powershell
-$r = npx -y jdi-cli@0.18.0 resolve-phase $args[0] --json | ConvertFrom-Json
+$r = npx -y jdi-cli@0.18.1 resolve-phase $args[0] --json | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) { Write-Error "Phase '$($args[0])' not found."; exit $LASTEXITCODE }
 $phaseSlug = $r.slug; $phaseDir = $r.dir; $phasePosition = $r.position
 ```
@@ -62,7 +62,7 @@ test -f "$PHASE_DIR/CONTEXT.md" || { echo "CONTEXT.md missing. Run /jdi-discuss 
 # The planner starts from a brief: goal, locked decisions, DoD criteria,
 # stack/design, routing table, learnings of the last 3 shipped phases (by ship
 # date) and the known errors to plan around — not the whole history.
-BRIEF=$(npx -y jdi-cli@0.18.0 brief "$PHASE_SLUG" --role planner --runtime other | cut -d' ' -f1)
+BRIEF=$(npx -y jdi-cli@0.18.1 brief "$PHASE_SLUG" --role planner --runtime other | cut -d' ' -f1)
 ```
 
 ### Step 4: Spawn planner
@@ -81,9 +81,9 @@ The planner has no shell — this command commits.
 ```bash
 test -f "$PHASE_DIR/PLAN.md" || { echo "PLAN.md not created"; exit 1; }
 # The plan may have tightened the DoD: lint again (cheap), size check (warn).
-npx -y jdi-cli@0.18.0 validate-dod "$PHASE_SLUG" || echo "warn: DoD lint ERROR after plan — fix the flagged Verify lines before /jdi-do"
-npx -y jdi-cli@0.18.0 budgets "$PHASE_SLUG" || true
-SIZE=$(npx -y jdi-cli@0.18.0 size "$PHASE_SLUG")   # "lite — ..." or "full — reasons": how /jdi-do will dispatch
+npx -y jdi-cli@0.18.1 validate-dod "$PHASE_SLUG" || echo "warn: DoD lint ERROR after plan — fix the flagged Verify lines before /jdi-do"
+npx -y jdi-cli@0.18.1 budgets "$PHASE_SLUG" || true
+SIZE=$(npx -y jdi-cli@0.18.1 size "$PHASE_SLUG")   # "lite — ..." or "full — reasons": how /jdi-do will dispatch
 git add "$PHASE_DIR/PLAN.md"; git add .jdi/STATE.md 2>/dev/null || true
 git diff --cached --quiet || git commit -m "docs($PHASE_SLUG): generate plan"
 ```

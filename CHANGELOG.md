@@ -5,7 +5,9 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.18.1] - 2026-10-09
+
+Security and correctness fixes found right after 0.18.0, plus the shared CI.
 
 ### Fixed
 - **`dod.extra_lint`**: the CONTEXT.md path was interpolated into a
@@ -16,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   them in a script. (CodeQL `js/shell-command-injection-from-environment`.)
 - **`npm-publish.yml`**: the `workflow_dispatch` tag was pasted into the run
   script; it now comes through `env`.
+- **`known-errors migrate`** kept a table's escaped pipe (`\|`) inside the
+  entry, where it shows the backslash; the entry now gets the pipe.
+- **`doctor`** counted the `GENERATED` comment that `sync-specialists` writes in
+  every runtime copy as an unpinned `npx jdi-cli` call — a false WARN in every
+  project with specialists.
 
 ### Changed
 - **CI uses the shared pipeline** (`slipalison/github-workflows`): `npm test` on

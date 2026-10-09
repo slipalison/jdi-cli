@@ -349,7 +349,7 @@ name: {feature N from Q4}
 ```
 
 Filename = canonical slug (no `NN-` prefix) = phase identity; validate each
-with `npx -y jdi-cli@0.18.0 validate-slug "{slug}" --check-unique`. Display position
+with `npx -y jdi-cli@0.18.1 validate-slug "{slug}" --check-unique`. Display position
 = rank by `order:`. The roadmap carries no per-phase status and no
 current-phase pointer — phase status is derived from each phase folder's
 artifacts (SHIPPED.md → done, REVIEW → verified, SUMMARY → executed, PLAN →
@@ -413,7 +413,7 @@ for p in .jdi/STATE.md .jdi/ROADMAP.md .jdi/DECISIONS.md .jdi/todos.md \
 done
 
 # Generate the views at their usual paths so every reader keeps working
-npx -y jdi-cli@0.18.0 render
+npx -y jdi-cli@0.18.1 render
 ```
 
 ### Step 9: Commit

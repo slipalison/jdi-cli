@@ -50,7 +50,7 @@ call. It reads the per-entry dirs directly (no render needed) and never
 STATE.md.
 
 ```bash
-NEXT_JSON=$(npx -y jdi-cli@0.18.0 next ${PHASE_ID:+"$PHASE_ID"} ${LOOP_FLAG:+--loop} --json) || exit $?
+NEXT_JSON=$(npx -y jdi-cli@0.18.1 next ${PHASE_ID:+"$PHASE_ID"} ${LOOP_FLAG:+--loop} --json) || exit $?
 ```
 
 `PHASE_ID` = the `phase_id` argument (omit for the current phase);

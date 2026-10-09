@@ -30,7 +30,7 @@ Verifies the phase was delivered correctly. Runs gates defined in the project's 
 
 ### Step 1: Validation
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.18.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.18.1 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 ```bash
 test -d .jdi/ || { echo "Not a JDI project."; exit 1; }
 
@@ -43,13 +43,13 @@ ls .jdi/agents/jdi-reviewer-*.md 2>/dev/null | head -1 || {
 # Runtime copies: Agent(subagent_type=...) resolves from .claude/agents/ (etc.),
 # never from .jdi/agents/. Self-heal a fresh clone or a stale copy before the
 # first spawn (byte-deterministic; no-op when already in sync).
-npx -y jdi-cli@0.18.0 sync-specialists --check --quiet || npx -y jdi-cli@0.18.0 sync-specialists --quiet
+npx -y jdi-cli@0.18.1 sync-specialists --check --quiet || npx -y jdi-cli@0.18.1 sync-specialists --quiet
 ```
 
 ### Step 2: Resolve phase
 
 ```bash
-RESOLVED="$(npx -y jdi-cli@0.18.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+RESOLVED="$(npx -y jdi-cli@0.18.1 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
 eval "$RESOLVED"
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
@@ -82,7 +82,7 @@ every prior run; each verify commits its REVIEW.md). Which reviewers run is one
 call:
 
 ```bash
-RPLAN=$(npx -y jdi-cli@0.18.0 review plan "$PHASE_SLUG" --reviewers "$REVIEWERS" ${FULL:+--full})   # JSON: mode, run, carry, reasons
+RPLAN=$(npx -y jdi-cli@0.18.1 review plan "$PHASE_SLUG" --reviewers "$REVIEWERS" ${FULL:+--full})   # JSON: mode, run, carry, reasons
 RUN=<the `run` list of RPLAN, in order>
 ```
 
@@ -102,9 +102,9 @@ waiting on them:
 
 ```bash
 if [ -d .jdi/stacks ]; then
-  npx -y jdi-cli@0.18.0 gates run "$PHASE_SLUG" --only dod          # DoD once (E2E/real-login rows: EVIDENCE, never executed)
+  npx -y jdi-cli@0.18.1 gates run "$PHASE_SLUG" --only dod          # DoD once (E2E/real-login rows: EVIDENCE, never executed)
   for REVIEWER in $RUN; do                                       # carried reviewers: no gates
-    npx -y jdi-cli@0.18.0 gates run "$PHASE_SLUG" --stack "$REVIEWER"
+    npx -y jdi-cli@0.18.1 gates run "$PHASE_SLUG" --stack "$REVIEWER"
   done
 fi
 ```
@@ -116,7 +116,7 @@ reviewers read; the verdict comes from the reviewers.
 DoD, decisions for Gate 6, known errors):
 
 ```bash
-BRIEF_R=$(npx -y jdi-cli@0.18.0 brief "$PHASE_SLUG" --role reviewer --stack "$REVIEWER" --runtime claude | cut -d' ' -f1)
+BRIEF_R=$(npx -y jdi-cli@0.18.1 brief "$PHASE_SLUG" --role reviewer --stack "$REVIEWER" --runtime claude | cut -d' ' -f1)
 ```
 
 **Single-stack:**
@@ -146,7 +146,7 @@ commit in REVIEW.md (`<!-- jdi:verified head=… -->` — `/jdi-ship` refuses a
 review older than the code):
 
 ```bash
-npx -y jdi-cli@0.18.0 review merge "$PHASE_SLUG"
+npx -y jdi-cli@0.18.1 review merge "$PHASE_SLUG"
 ```
 
 Each reviewer scopes its gates to its `file_glob` (from frontmatter `scope.file_glob`). Coverage threshold enforced only on files matching the glob.
@@ -173,7 +173,7 @@ must pass, then fail once the Bait is applied. A CAUGHT row is not re-run until
 its proof changes.
 
 ```bash
-npx -y jdi-cli@0.18.0 dod bait "$PHASE_SLUG"      # no-op when no row has a Bait
+npx -y jdi-cli@0.18.1 dod bait "$PHASE_SLUG"      # no-op when no row has a Bait
 ```
 
 **Critic (judgment).** Runs when this runtime can spawn sub-agents AND the
@@ -187,7 +187,7 @@ once more after the block — it may have been fixed — and can no longer block
 (`economy.critic: "every_verify"` re-examines every row each time.)
 
 ```bash
-CRIT=$(npx -y jdi-cli@0.18.0 critic plan "$PHASE_SLUG" --runtime claude)   # JSON: rows, brief, skip
+CRIT=$(npx -y jdi-cli@0.18.1 critic plan "$PHASE_SLUG" --runtime claude)   # JSON: rows, brief, skip
 ```
 
 `rows` non-empty → spawn ONE critic, sequential, never in the background:
@@ -207,7 +207,7 @@ Then fold the results in — always, even when the critic did not run (a Bait
 that survived is an objective hollow proof):
 
 ```bash
-npx -y jdi-cli@0.18.0 critic apply "$PHASE_SLUG"
+npx -y jdi-cli@0.18.1 critic apply "$PHASE_SLUG"
 ```
 
 `apply` is the only writer of the `## DoD Critic` segment of REVIEW.md: objective
@@ -222,7 +222,7 @@ nothing (fail-open — the deterministic gates already ran).
 test -f "$PHASE_DIR/REVIEW.md" || { echo "REVIEW.md not created"; exit 1; }
 # Worst case across every segment (BLOCKED > PENDING_MANUAL > WITH_WARNINGS >
 # APPROVED); exit 2 = no verdict line (malformed — never ship on silence).
-VERDICT=$(npx -y jdi-cli@0.18.0 review verdict "$PHASE_SLUG") || { echo "Reviewer wrote no verdict line — REVIEW.md malformed. Aborting."; exit 1; }
+VERDICT=$(npx -y jdi-cli@0.18.1 review verdict "$PHASE_SLUG") || { echo "Reviewer wrote no verdict line — REVIEW.md malformed. Aborting."; exit 1; }
 ```
 
 ### Step 6: Update STATE
