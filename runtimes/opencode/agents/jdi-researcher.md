@@ -27,7 +27,7 @@ NOT your job:
 - Free-form argument: project idea (e.g. "TODO app .NET 10 + React 19")
 - `auto=true` (optional — from `/jdi-new --auto`/`--yolo`): fully autonomous mode, see <auto_mode>
 - (optional) Read current directory if code exists
-- Required reference: the DoD schema — `npx -y jdi-cli@0.18.0 template dod-schema` (DoD format, classification rules, vague-rejection rules, candidate generation, loop protocol)
+- Required reference: the DoD schema — `npx -y jdi-cli@0.18.1 template dod-schema` (DoD format, classification rules, vague-rejection rules, candidate generation, loop protocol)
 </inputs>
 
 <auto_mode>
@@ -144,7 +144,7 @@ Don't go deep. Max 2 lookups. If ctx7 unavailable, skip.
 
 ### Step 3.5: Project-wide Definition of Done baseline
 
-Read the DoD schema (`npx -y jdi-cli@0.18.0 template dod-schema`) before starting. Follow the loop protocol section exactly. This step captures the universal DoD baseline that every phase will inherit.
+Read the DoD schema (`npx -y jdi-cli@0.18.1 template dod-schema`) before starting. Follow the loop protocol section exactly. This step captures the universal DoD baseline that every phase will inherit.
 
 **Step 3.5.1 — Generate 5 candidates** using the researcher-specific priority from the schema (Priority 3 default for `/jdi-new`):
 
@@ -321,7 +321,7 @@ name: {feature N name}
 
 Rules:
 - Filename = canonical slug (no `NN-` prefix) = phase identity. Validate each
-  with `npx -y jdi-cli@0.18.0 validate-slug "{slug}" --check-unique`.
+  with `npx -y jdi-cli@0.18.1 validate-slug "{slug}" --check-unique`.
 - `order:` is a plain number (1, 2, ... N here). It may become fractional
   later — `/jdi-add-phase --before/--after` inserts between neighbors without
   renumbering sibling files. Display position = rank when sorted by order.
@@ -394,7 +394,7 @@ Generate the views (ROADMAP.md, DECISIONS.md, ...) at their usual paths so
 every reader keeps working:
 
 ```bash
-npx -y jdi-cli@0.18.0 render
+npx -y jdi-cli@0.18.1 render
 ```
 
 ### Step 8: Commit
@@ -442,7 +442,7 @@ Next: /jdi-bootstrap
 - `.jdi/roadmap/` — `_header.md` + one `{slug}.md` per phase (conflict-free layout v3)
 - `.jdi/decisions/D-1.md` (code design locked)
 - `.jdi/STATE.md` (untracked advisory cache)
-- `.jdi/ROADMAP.md`, `.jdi/DECISIONS.md` — rendered views (untracked, `npx -y jdi-cli@0.18.0 render`)
+- `.jdi/ROADMAP.md`, `.jdi/DECISIONS.md` — rendered views (untracked, `npx -y jdi-cli@0.18.1 render`)
 - `.jdi/phases/`, `.jdi/agents/`, `.jdi/todos/`, `.jdi/registry/` dirs
 - `.gitattributes` (root: line endings only — no merge=union; the layout is the conflict-freedom mechanism)
 - `.gitignore` entries for STATE.md and the 7 rendered views

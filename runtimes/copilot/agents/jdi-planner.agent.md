@@ -27,7 +27,7 @@ NOT your job:
 - No `brief=` in the prompt (older orchestrator): read `{phase_dir}/CONTEXT.md`, `.jdi/PROJECT.md` (Stack, Code Design), `.jdi/specialists.md` and `.jdi/cache/learnings.md` if it exists.
 - Never read: other phases' artifacts (the PLAN format is in Step 4 — do not open old plans as examples), `.jdi/DECISIONS.md` in full, the whole known-errors catalog, specialist bodies, and the project instruction files (CLAUDE.md, AGENTS.md, `.claude/rules/`) — the runtime already put the ones that apply in your context.
 
-Legacy: if invoked with only `phase_number`, resolve via `npx -y jdi-cli@0.18.0 resolve-phase`.
+Legacy: if invoked with only `phase_number`, resolve via `npx -y jdi-cli@0.18.1 resolve-phase`.
 </inputs>
 
 <research_tools>
