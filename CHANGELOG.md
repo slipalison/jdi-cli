@@ -5,6 +5,25 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **`dod.extra_lint`**: the CONTEXT.md path was interpolated into a
+  `shell: true` command, so a `$(...)` in the path would run (found by
+  Semgrep). It now runs WITHOUT a shell: a program and its arguments (an array,
+  or a string split on spaces — `"bash .jdi/scripts/dod-lint.sh {file}"` keeps
+  working), with `{file}` as one argument. No pipes or redirection in it; put
+  them in a script. (CodeQL `js/shell-command-injection-from-environment`.)
+- **`npm-publish.yml`**: the `workflow_dispatch` tag was pasted into the run
+  script; it now comes through `env`.
+
+### Changed
+- **CI uses the shared pipeline** (`slipalison/github-workflows`): `npm test` on
+  Linux, the security scans (Gitleaks and TruffleHog over the history, Semgrep,
+  Trivy SCA, SBOM), CodeQL and its Portao. This repository keeps Node on
+  Windows, the build drift of the two builders and the npm publish guards;
+  `CI verde` is the single gate over every job. `package.json` gains `test`.
+
 ## [0.18.0] - 2026-10-09
 
 Token economy, part 3 of 3: spawn only what has something new to judge. On

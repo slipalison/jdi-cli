@@ -15,7 +15,8 @@
 // no `set -e` added (the exit status is the last command's, as with eval).
 //
 // lint rules (generic, any stack — project-specific rules plug in through
-// config `dod.extra_lint`, e.g. "bash .jdi/scripts/dod-lint.sh {file}"):
+// config `dod.extra_lint`, e.g. "bash .jdi/scripts/dod-lint.sh {file}", run
+// without a shell):
 //   DOD-S0 ERROR no `## Definition of Done`
 //   DOD-S1 ERROR auto item without `Verify:`; WARN manual item without `Evidence:`
 //   DOD-S2 WARN/ERROR inline `Verify:` longer than budgets.verify_inline_chars
@@ -270,16 +271,25 @@ function lintItem(it, ctx, add) {
 const EXTRA_LEVEL = { ERRO: 'ERROR', ERROR: 'ERROR', AVISO: 'WARN', WARN: 'WARN', NOTA: 'NOTE', NOTE: 'NOTE' };
 
 // Project rules: config `dod.extra_lint`, a command printing
-// `file:line: ERROR|WARN|NOTE RULE message` lines.
+// `file:line: ERROR|WARN|NOTE RULE message` lines. It is a program and its
+// arguments — an array, or one string split on spaces — run WITHOUT a shell:
+// `{file}` becomes the CONTEXT.md path as one argument. A path is data; given
+// to a shell, a `$(...)` in it would run (the first version did that).
+function extraArgv(extra, file) {
+  const argv = Array.isArray(extra) ? extra.map(String) : String(extra).trim().split(/\s+/);
+  return argv.map((a) => a.replaceAll('{file}', file));
+}
+
 function extraLint(extra, file, root, findings, add) {
-  const cmd = extra.replaceAll('{file}', JSON.stringify(file));
-  const r = spawnSync(cmd, { shell: true, cwd: root, encoding: 'utf8' });
+  const [program, ...args] = extraArgv(extra, file);
+  const r = spawnSync(program, args, { cwd: root, encoding: 'utf8' });
   for (const l of (r.stdout || '').split('\n').filter(Boolean)) {
     const m = /^(.*?):(\d+): (ERRO|ERROR|AVISO|WARN|NOTA|NOTE) (\S+) (.*)$/.exec(l);
     if (m) add(Number(m[2]), EXTRA_LEVEL[m[3]], m[4], m[5]);
     else findings.push({ file, line: 0, level: 'NOTE', rule: 'extra_lint', msg: l });
   }
-  if (r.status && r.status !== 0 && !findings.some((f) => f.level === 'ERROR')) add(0, 'ERROR', 'extra_lint', `\`${extra}\` saiu ${r.status}`);
+  if (r.error) add(0, 'ERROR', 'extra_lint', `\`${program}\` nao rodou: ${r.error.message}`);
+  else if (r.status && !findings.some((f) => f.level === 'ERROR')) add(0, 'ERROR', 'extra_lint', `\`${program}\` saiu ${r.status}`);
 }
 
 function lint(file, { root = process.cwd(), config = core.loadConfig(root) } = {}) {

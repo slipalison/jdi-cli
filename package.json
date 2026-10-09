@@ -67,6 +67,7 @@
   "scripts": {
     "build": "node bin/jdi.js build",
     "doctor": "node bin/jdi.js doctor",
+    "test": "node test/run.js",
     "test:local": "npm pack && node -e \"console.log('Package generated. Test with: npx ./jdi-cli-' + require('./package.json').version + '.tgz install <runtime>')\""
   }
 }

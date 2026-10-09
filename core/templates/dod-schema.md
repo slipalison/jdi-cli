@@ -64,8 +64,10 @@ Lint rules (ERROR stops `/jdi-discuss` until fixed; WARN is reported):
 | DOD-L2 | WARN | a positive grep over a directory/glob as the whole proof — passes if the text exists anywhere |
 | DOD-L3 | WARN | E2E / real login inside an automatic `Verify:` — mark it `Verify (evidence):` |
 
-Project-specific rules plug in through `.jdi/config.json` `dod.extra_lint`
-(a command; `{file}` is replaced by the CONTEXT.md path).
+Project-specific rules plug in through `.jdi/config.json` `dod.extra_lint`: a
+program and its arguments, run without a shell (no pipes or redirection) — an
+array, or one string split on spaces, e.g. `"bash .jdi/scripts/dod-lint.sh {file}"`.
+`{file}` becomes the CONTEXT.md path, as one argument.
 
 ## Classification rules (auto vs manual)
 

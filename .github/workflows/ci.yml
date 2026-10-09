@@ -1,9 +1,29 @@
 name: CI
 
-# Pull requests and main: unit tests on Linux and Windows, the release guards
-# of the npm publish (exec bit, ASCII .ps1), and the build-drift check —
-# runtimes/ is generated from core/ by two builders (bash and PowerShell) that
-# must produce exactly the committed bytes.
+# Pull requests and main, in two layers.
+#
+#   pipeline   the shared pipeline (slipalison/github-workflows): `npm test` on
+#              Linux, the security scans (Gitleaks and TruffleHog over the
+#              whole history, Semgrep, Trivy SCA, SBOM), CodeQL, and its own
+#              Portao. No image, no deploy, no versioning: this is an npm
+#              package, versioned by hand and published by npm-publish.yml
+#              (provenance + npm staged publishing), which the shared
+#              `npm.yml` does not do yet.
+#   the rest   what the shared pipeline does not cover yet: Node on Windows
+#              (its `qualidade` runs only Rust there), the build drift of the
+#              two builders (bash and PowerShell must produce the committed
+#              runtimes/ byte for byte) and the release guards of the npm
+#              publish (exec bit on .sh, ASCII-only .ps1).
+#
+# `CI verde` is the one check to require in the ruleset: every job of this
+# file is in its `needs`, and a job added outside it fails the PR that adds it.
+#
+# Sonar: this repository is analysed by SonarCloud's Automatic Analysis (the
+# GitHub app posts the "SonarCloud Code Analysis" check). A CI analysis on top
+# of it is refused by SonarCloud, so the pipeline's Sonar is waived — with the
+# reason written, as its Portao requires.
+#
+# The repository is public: GitHub Actions minutes are free here.
 
 on:
   pull_request:
@@ -18,7 +38,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  pipeline:
+    # What a reusable workflow may ask for is decided here, by the caller, for
+    # every job it declares — including the ones this repository skips (image,
+    # tag and release). On a pull request from a fork GitHub reduces the token
+    # anyway.
+    permissions:
+      contents: write
+      packages: write
+      security-events: write
+      actions: read
+    uses: slipalison/github-workflows/.github/workflows/pipeline.yml@main
+    with:
+      componentes: '[{"nome":"cli","linguagem":"node","versao":"22"}]'
+      versionar: false
+      linguagens_codeql: '["javascript"]'
+      sonar_dispensa: "SonarCloud Automatic Analysis (app do GitHub) ja analisa este repositorio; uma analise por CI seria recusada"
+
   test:
+    # Windows is the reason this job exists (the shared `qualidade` runs Node
+    # only on Linux). Linux Node 20 stays for the lowest supported version;
+    # Linux Node 22 is the pipeline's `npm test`.
     name: Tests (${{ matrix.os }}, Node ${{ matrix.node }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
@@ -27,12 +67,16 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         node: ["20", "22"]
+        exclude:
+          - { os: ubuntu-latest, node: "22" }
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ matrix.node }}
 
@@ -45,10 +89,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
 
@@ -78,3 +124,50 @@ jobs:
 
       - name: runtimes/ matches the committed build (PowerShell)
         run: git diff --exit-code -- runtimes/
+
+  ci-verde:
+    name: CI verde
+    needs: [pipeline, test, build-drift]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/workflows/ci.yml
+          sparse-checkout-cone-mode: false
+
+      - name: Every job of this file is in the gate
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          todos="$(yq '.jobs | keys | .[]' .github/workflows/ci.yml | grep -vx 'ci-verde' | sort)"
+          no_portao="$(jq -r 'keys[]' <<<"$NEEDS" | sort)"
+          faltam="$(comm -23 <(echo "$todos") <(echo "$no_portao"))"
+          if [ -n "$faltam" ]; then
+            echo "::error::Job outside the CI verde gate: ${faltam//$'\n'/ }. Add it to the needs of the ci-verde job, at the end of .github/workflows/ci.yml."
+            exit 1
+          fi
+          echo "All $(wc -l <<<"$todos") jobs are in the gate."
+
+      - name: No job failed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## CI verde"
+            echo ""
+            echo "| Job | Result |"
+            echo "|---|---|"
+            jq -r 'to_entries[] | "| \(.key) | \(.value.result) |"' <<<"$NEEDS"
+          } >> "$GITHUB_STEP_SUMMARY"
+          bad="$(jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key)=\(.value.result)"' <<<"$NEEDS")"
+          if [ -n "$bad" ]; then
+            echo "::error::Failed: ${bad//$'\n'/ }"
+            exit 1
+          fi
+          echo "Every job passed or was skipped by design."
