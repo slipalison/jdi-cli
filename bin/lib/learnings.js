@@ -20,12 +20,22 @@ function shippedPhases(root) {
       if (!fs.existsSync(f)) continue;
       const text = fs.readFileSync(f, 'utf8');
       const at = /^shipped_at:\s*(\S+)/m.exec(text)?.[1] || '';
-      const m = /^## Learnings[^\n]*\n([\s\S]*?)(?=^## |\Z)/m.exec(text + '\n## ');
-      const bullets = m ? m[1].split('\n').filter((l) => /^\s*- /.test(l)).map((l) => l.trim()) : [];
+      const bullets = learningBullets(text);
       out.push({ slug: d.replace(/^\d+-/, ''), shippedAt: at, bullets });
     }
   }
-  return out.sort((a, b) => (a.shippedAt < b.shippedAt ? 1 : a.shippedAt > b.shippedAt ? -1 : 0));
+  return out.sort((a, b) => core.compareStr(b.shippedAt, a.shippedAt));
+}
+
+// The `- ` lines of the `## Learnings` section (until the next `## `).
+function learningBullets(text) {
+  const bullets = [];
+  let inside = false;
+  for (const line of text.split('\n')) {
+    if (line.startsWith('## ')) inside = line.startsWith('## Learnings');
+    else if (inside && line.trimStart().startsWith('- ')) bullets.push(line.trim());
+  }
+  return bullets;
 }
 
 function render(root, last = 3, maxChars = 4000) {

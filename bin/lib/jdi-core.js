@@ -131,53 +131,62 @@ function parseScalar(v) {
   if (s === 'false') return false;
   if (s === 'null' || s === '~') return null;
   if (/^-?\d+(\.\d+)?$/.test(s)) return Number(s);
-  return s.replace(/\s+#.*$/, '');
+  const comment = s.search(/\s#/); // inline ` # comment`
+  return comment === -1 ? s : s.slice(0, comment).trimEnd();
 }
 
 // Minimal YAML: indentation-based maps, `- scalar` lists, inline [a, b].
 // (Lists of maps are not part of any JDI file format and are not supported.)
+const isListItem = (text) => text === '-' || text.startsWith('- ');
+const indentOf = (line) => line.length - line.trimStart().length;
+const isBlank = (line) => !line.trim() || line.trim().startsWith('#');
+
+// Pop the containers the current line no longer belongs to.
+function unwind(stack, indent, isItem) {
+  while (stack.length > 1) {
+    const top = stack.at(-1);
+    const stays = top.type === 'list' ? (isItem && indent === top.itemIndent) || indent > top.itemIndent : indent > top.indent;
+    if (stays) return;
+    stack.pop();
+  }
+}
+
+// `key:` with nothing after it opens a list or a map, decided by the next
+// meaningful line.
+function openContainer(stack, parent, key, lines, i, indent) {
+  let j = i + 1;
+  while (j < lines.length && isBlank(lines[j])) j++;
+  const next = lines[j] || '';
+  if (isListItem(next.trim()) && indentOf(next) >= indent) {
+    parent.obj[key] = [];
+    stack.push({ type: 'list', itemIndent: indentOf(next), obj: parent.obj[key] });
+  } else {
+    parent.obj[key] = {};
+    stack.push({ type: 'map', indent, obj: parent.obj[key] });
+  }
+}
+
 function parseYaml(src) {
   const root = {};
   const stack = [{ type: 'map', indent: -1, obj: root }];
   const lines = src.split('\n').map((l) => l.replace(/\r$/, ''));
-  for (let i = 0; i < lines.length; i++) {
-    const raw = lines[i];
+  lines.forEach((raw, i) => {
+    if (isBlank(raw)) return;
     const text = raw.trim();
-    if (!text || text.startsWith('#')) continue;
-    const indent = raw.length - raw.trimStart().length;
-    const isItem = text === '-' || text.startsWith('- ');
-    while (stack.length > 1) {
-      const top = stack[stack.length - 1];
-      if (top.type === 'list') {
-        if ((isItem && indent === top.itemIndent) || indent > top.itemIndent) break;
-      } else if (indent > top.indent) break;
-      stack.pop();
-    }
-    const parent = stack[stack.length - 1];
+    const indent = indentOf(raw);
+    const isItem = isListItem(text);
+    unwind(stack, indent, isItem);
+    const parent = stack.at(-1);
     if (isItem) {
       if (parent.type === 'list') parent.obj.push(parseScalar(text.slice(1)));
-      continue;
+      return;
     }
     const m = /^([A-Za-z0-9_$.-]+):(.*)$/.exec(text);
-    if (!m || parent.type !== 'map') continue;
+    if (!m || parent.type !== 'map') return;
     const [, key, rest] = m;
-    if (rest.trim() !== '') {
-      parent.obj[key] = parseScalar(rest);
-      continue;
-    }
-    let j = i + 1;
-    while (j < lines.length && (!lines[j].trim() || lines[j].trim().startsWith('#'))) j++;
-    const next = lines[j] || '';
-    const nextIndent = next.length - next.trimStart().length;
-    const nextIsItem = next.trim() === '-' || next.trim().startsWith('- ');
-    if (nextIsItem && nextIndent >= indent) {
-      parent.obj[key] = [];
-      stack.push({ type: 'list', itemIndent: nextIndent, obj: parent.obj[key] });
-    } else {
-      parent.obj[key] = {};
-      stack.push({ type: 'map', indent, obj: parent.obj[key] });
-    }
-  }
+    if (rest.trim() === '') openContainer(stack, parent, key, lines, i, indent);
+    else parent.obj[key] = parseScalar(rest);
+  });
   return root;
 }
 
@@ -199,47 +208,55 @@ class JdiError extends Error {
   }
 }
 
-// Ordered list of { slug, rawSlug, position } for every roadmap phase.
-function listPhases(root = process.cwd()) {
-  const jdi = path.join(root, JDI_DIR);
-  const roadmapDir = path.join(jdi, 'roadmap');
-  if (fs.existsSync(roadmapDir) && fs.statSync(roadmapDir).isDirectory()) {
-    const entries = [];
-    for (const f of fs.readdirSync(roadmapDir)) {
-      if (!f.endsWith('.md') || f.startsWith('_') || f.startsWith('LEGACY')) continue;
-      const slug = f.slice(0, -3);
-      let order = 999999;
-      try {
-        const fmo = readFrontmatter(path.join(roadmapDir, f)).order;
-        if (typeof fmo === 'number') order = fmo;
-        else if (fmo !== undefined && fmo !== '' && !Number.isNaN(Number(fmo))) order = Number(fmo);
-      } catch {
-        // unreadable entry keeps the default order
-      }
-      entries.push({ slug, order });
-    }
-    entries.sort((a, b) => a.order - b.order || (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
-    return entries.map((e, i) => ({ slug: e.slug, rawSlug: e.slug, position: i + 1, layout: 3 }));
+// Total order on strings without locale rules (stable across machines).
+function compareStr(a, b) {
+  return Number(a > b) - Number(a < b);
+}
+
+function entryOrder(file) {
+  try {
+    const fmo = readFrontmatter(file).order;
+    if (typeof fmo === 'number') return fmo;
+    if (fmo !== undefined && fmo !== '' && !Number.isNaN(Number(fmo))) return Number(fmo);
+  } catch {
+    // unreadable entry keeps the default order
   }
-  const roadmap = path.join(jdi, 'ROADMAP.md');
-  if (!fs.existsSync(roadmap)) throw new JdiError('.jdi/ROADMAP.md not found (run /jdi-new first)', 3);
+  return 999999;
+}
+
+function listV3(roadmapDir) {
+  return fs
+    .readdirSync(roadmapDir)
+    .filter((f) => f.endsWith('.md') && !f.startsWith('_') && !f.startsWith('LEGACY'))
+    .map((f) => ({ slug: f.slice(0, -3), order: entryOrder(path.join(roadmapDir, f)) }))
+    .sort((a, b) => a.order - b.order || compareStr(a.slug, b.slug))
+    .map((e, i) => ({ slug: e.slug, rawSlug: e.slug, position: i + 1, layout: 3 }));
+}
+
+function listLegacy(roadmap) {
   const out = [];
   let current = null;
   for (const line of fs.readFileSync(roadmap, 'utf8').split('\n')) {
     const l = line.replace(/\r$/, '');
     const ph = /^### Phase (\d+)/.exec(l);
-    if (ph) {
-      current = Number(ph[1]);
-      continue;
-    }
-    const sl = /^- \*\*Slug:\*\*\s*(\S+)/.exec(l);
-    if (sl && current !== null) {
-      const raw = sl[1];
-      out.push({ slug: raw.replace(/^\d+-/, ''), rawSlug: raw, position: current, layout: 1 });
+    const sl = ph ? null : /^- \*\*Slug:\*\*\s*(\S+)/.exec(l);
+    if (ph) current = Number(ph[1]);
+    else if (sl && current !== null) {
+      out.push({ slug: sl[1].replace(/^\d+-/, ''), rawSlug: sl[1], position: current, layout: 1 });
       current = null;
     }
   }
   return out;
+}
+
+// Ordered list of { slug, rawSlug, position } for every roadmap phase.
+function listPhases(root = process.cwd()) {
+  const jdi = path.join(root, JDI_DIR);
+  const roadmapDir = path.join(jdi, 'roadmap');
+  if (fs.existsSync(roadmapDir) && fs.statSync(roadmapDir).isDirectory()) return listV3(roadmapDir);
+  const roadmap = path.join(jdi, 'ROADMAP.md');
+  if (!fs.existsSync(roadmap)) throw new JdiError('.jdi/ROADMAP.md not found (run /jdi-new first)', 3);
+  return listLegacy(roadmap);
 }
 
 function phaseFolder(root, phase) {
@@ -333,47 +350,55 @@ function writeFileEnsured(file, content, root = process.cwd()) {
   if (rel.startsWith('.jdi/cache/')) ensureCacheIgnored(root);
 }
 
+// External programs the helpers run. `JDI_<NAME>_BIN` pins an absolute path
+// (e.g. a git outside PATH, or a hardened PATH in CI); otherwise the user's
+// PATH resolves the name, as their own shell would.
+function program(name) {
+  return process.env[`JDI_${name.toUpperCase()}_BIN`] || name;
+}
+
 function git(args, cwd = process.cwd()) {
-  const r = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  const r = spawnSync(program('git'), args, { cwd, encoding: 'utf8' });
   return { code: r.status ?? 1, stdout: (r.stdout || '').trim(), stderr: (r.stderr || '').trim() };
 }
 
 // Minimal glob -> RegExp (**, *, ?, {a,b}). Paths use forward slashes.
-function globToRegExp(glob) {
-  let re = '';
-  let i = 0;
-  const g = glob.replace(/\\/g, '/');
-  while (i < g.length) {
-    const ch = g[i];
-    if (ch === '*') {
-      if (g[i + 1] === '*') {
-        const slash = g[i + 2] === '/';
-        re += slash ? '(?:.*/)?' : '.*';
-        i += slash ? 3 : 2;
-        continue;
-      }
-      re += '[^/]*';
-    } else if (ch === '?') re += '[^/]';
-    else if (ch === '{') {
-      const close = g.indexOf('}', i);
-      if (close === -1) re += '\\{';
-      else {
-        re += '(?:' + g.slice(i + 1, close).split(',').map((s) => s.replace(/[.+^$()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*')).join('|') + ')';
-        i = close;
-      }
-    } else if ('.+^$()|[]\\'.includes(ch)) re += '\\' + ch;
-    else re += ch;
-    i++;
+const escapeRe = (text) => text.replaceAll(/[.+^$()|[\]\\]/g, String.raw`\$&`);
+
+// One glob token at g[i] -> [regexp source, characters consumed].
+function globToken(g, i) {
+  const ch = g[i];
+  if (ch === '*' && g[i + 1] === '*') return g[i + 2] === '/' ? ['(?:.*/)?', 3] : ['.*', 2];
+  if (ch === '*') return ['[^/]*', 1];
+  if (ch === '?') return ['[^/]', 1];
+  if (ch === '{') {
+    const close = g.indexOf('}', i);
+    if (close === -1) return [String.raw`\{`, 1];
+    const alts = g.slice(i + 1, close).split(',').map((alt) => escapeRe(alt).replaceAll('*', '[^/]*'));
+    return [`(?:${alts.join('|')})`, close - i + 1];
   }
-  return new RegExp('^' + re + '$');
+  return [escapeRe(ch), 1];
+}
+
+function globToRegExp(glob) {
+  const g = glob.replaceAll('\\', '/');
+  let re = '';
+  for (let i = 0; i < g.length; ) {
+    const [part, used] = globToken(g, i);
+    re += part;
+    i += used;
+  }
+  return new RegExp(`^${re}$`);
 }
 
 function matchesAny(file, globs) {
-  const f = file.replace(/\\/g, '/');
+  const f = file.replaceAll('\\', '/');
   return (globs || []).some((g) => globToRegExp(g).test(f));
 }
 
 module.exports = {
+  compareStr,
+  program,
   JDI_DIR,
   CONFIG_DEFAULTS,
   JdiError,

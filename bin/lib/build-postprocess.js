@@ -23,40 +23,45 @@ const path = require('node:path');
 
 const RUNTIMES = ['claude', 'copilot', 'antigravity', 'opencode', 'junie'];
 const TEXT_EXT = new Set(['.md', '.yml', '.yaml', '.json', '.jsonc', '.sh', '.ps1', '.txt']);
-const OPEN_RE = /^[ \t]*<!--[ \t]*jdi:only[ \t]+([a-z,\s]+?)[ \t]*-->[ \t]*$/;
-const END_RE = /^[ \t]*<!--[ \t]*jdi:end[ \t]*-->[ \t]*$/;
+const OPEN_RE = /^<!-- ?jdi:only ([a-z, ]+)-->$/;
+const END_RE = /^<!-- ?jdi:end ?-->$/;
 
 function packageVersion() {
   const pkg = path.resolve(__dirname, '..', '..', 'package.json');
   return JSON.parse(fs.readFileSync(pkg, 'utf8')).version;
 }
 
+// Marker lines may carry indentation and trailing blanks; trimmed before the
+// (anchored, linear) patterns above are applied.
+function openBlock(line, runtime, where, lineNo, block) {
+  const open = OPEN_RE.exec(line);
+  if (!open) return null;
+  if (block) throw new Error(`${where}:${lineNo}: nested jdi:only block (opened at line ${block.line})`);
+  const list = open[1].split(',').map((s) => s.trim()).filter(Boolean);
+  const unknown = list.find((rt) => !RUNTIMES.includes(rt));
+  if (unknown) throw new Error(`${where}:${lineNo}: unknown runtime "${unknown}" in jdi:only`);
+  return { keep: list.includes(runtime), line: lineNo };
+}
+
 // Pure transform — exported for tests.
 function transform(text, runtime, version, where = '<text>') {
   if (!RUNTIMES.includes(runtime)) throw new Error(`unknown runtime: ${runtime}`);
-  const lines = text.split('\n');
   const out = [];
   let block = null; // { keep, line }
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const open = OPEN_RE.exec(line);
-    if (open) {
-      if (block) throw new Error(`${where}:${i + 1}: nested jdi:only block (opened at line ${block.line})`);
-      const list = open[1].split(',').map((s) => s.trim()).filter(Boolean);
-      for (const rt of list) {
-        if (!RUNTIMES.includes(rt)) throw new Error(`${where}:${i + 1}: unknown runtime "${rt}" in jdi:only`);
-      }
-      block = { keep: list.includes(runtime), line: i + 1 };
-      continue;
+  text.split('\n').forEach((line, i) => {
+    const marker = line.trim().replaceAll(/\s+/g, ' ');
+    const opened = openBlock(marker, runtime, where, i + 1, block);
+    if (opened) {
+      block = opened;
+      return;
     }
-    if (END_RE.test(line)) {
+    if (END_RE.test(marker)) {
       if (!block) throw new Error(`${where}:${i + 1}: jdi:end without jdi:only`);
       block = null;
-      continue;
+      return;
     }
-    if (block && !block.keep) continue;
-    out.push(line);
-  }
+    if (!block || block.keep) out.push(line);
+  });
   if (block) throw new Error(`${where}:${block.line}: jdi:only block never closed`);
   return out
     .join('\n')

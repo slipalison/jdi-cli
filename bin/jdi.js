@@ -204,6 +204,12 @@ function runLibScript(baseName, scriptArgs = [], opts = {}) {
 // resolve-phase runs in Node since 0.17.0 (one implementation: the .sh/.ps1
 // twins disagreed on CRLF roadmaps and absolute vs relative dirs, #48). Same
 // output (KEY='value' lines, or --json) and the same exit codes.
+// 1 = legacy NN-slug folder, 3 = per-entry roadmap (layout v3), 2 otherwise.
+function phaseSchema(r) {
+  if (/\/\d+-[^/]+$/.test(r.dir)) return 1;
+  return fs.existsSync(path.join(process.cwd(), '.jdi', 'roadmap')) ? 3 : 2;
+}
+
 function cmdResolvePhase(rawArgs) {
   const json = rawArgs.includes('--json');
   const rest = rawArgs.filter((a) => a !== '--json');
@@ -219,7 +225,7 @@ function cmdResolvePhase(rawArgs) {
     console.error(`ERROR: ${err.message}`);
     process.exit(Number.isInteger(err.code) ? err.code : 1);
   }
-  const schema = r.dir.match(/\/\d+-[^/]+$/) ? 1 : (fs.existsSync(path.join(process.cwd(), '.jdi', 'roadmap')) ? 3 : 2);
+  const schema = phaseSchema(r);
   if (json) {
     console.log(JSON.stringify({ slug: r.slug, dir: r.dir, position: r.position, schema_version: schema, folder_exists: r.exists }));
     return;

@@ -83,32 +83,39 @@ function stripText(existing) {
   return { content: rest, action: rest.trim() === '' ? 'empty' : 'stripped' };
 }
 
+const STRIP_MESSAGES = {
+  empty: 'removido (so tinha o bloco JDI)',
+  stripped: 'bloco JDI removido, resto preservado',
+  absent: 'sem bloco JDI',
+};
+
+function mergeFile(src, dest, runtime) {
+  if (!src || !dest || !runtime) throw new Error('usage: instructions.js merge <src> <dest> <runtime>');
+  const managed = fs.readFileSync(src, 'utf8');
+  const existing = fs.existsSync(dest) ? fs.readFileSync(dest) : null;
+  const { content, action } = mergeText(managed, existing, runtime);
+  if (action !== 'unchanged') {
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, content);
+  }
+  console.log(`  -> ${path.basename(dest)}: bloco JDI ${action}`);
+  if (action === 'prepended') {
+    console.log(`     aviso: ${dest} nao tinha o bloco JDI nem uma versao conhecida dele;`);
+    console.log('     o bloco novo foi posto no topo. Se houver um bloco JDI antigo abaixo, apague-o.');
+  }
+  return 0;
+}
+
 function main(argv) {
   const [cmd, ...args] = argv;
-  if (cmd === 'merge') {
-    const [src, dest, runtime] = args;
-    if (!src || !dest || !runtime) throw new Error('usage: instructions.js merge <src> <dest> <runtime>');
-    const managed = fs.readFileSync(src, 'utf8');
-    const existing = fs.existsSync(dest) ? fs.readFileSync(dest) : null;
-    const { content, action } = mergeText(managed, existing, runtime);
-    if (action !== 'unchanged') {
-      fs.mkdirSync(path.dirname(dest), { recursive: true });
-      fs.writeFileSync(dest, content);
-    }
-    console.log(`  -> ${path.basename(dest)}: bloco JDI ${action}`);
-    if (action === 'prepended') {
-      console.log(`     aviso: ${dest} nao tinha o bloco JDI nem uma versao conhecida dele;`);
-      console.log('     o bloco novo foi posto no topo. Se houver um bloco JDI antigo abaixo, apague-o.');
-    }
-    return 0;
-  }
+  if (cmd === 'merge') return mergeFile(...args);
   if (cmd === 'strip') {
     const [dest] = args;
     if (!dest || !fs.existsSync(dest)) return 0;
     const { content, action } = stripText(fs.readFileSync(dest, 'utf8'));
     if (action === 'empty') fs.rmSync(dest);
     else if (action === 'stripped') fs.writeFileSync(dest, content);
-    console.log(`  -> ${path.basename(dest)}: ${action === 'empty' ? 'removido (so tinha o bloco JDI)' : action === 'stripped' ? 'bloco JDI removido, resto preservado' : 'sem bloco JDI'}`);
+    console.log(`  -> ${path.basename(dest)}: ${STRIP_MESSAGES[action] || STRIP_MESSAGES.absent}`);
     return 0;
   }
   throw new Error('usage: instructions.js merge <src> <dest> <runtime> | strip <dest>');
