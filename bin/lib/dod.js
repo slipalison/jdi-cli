@@ -24,6 +24,10 @@
 //   DOD-L1 ERROR test runner with a name filter and no count check (exit 0 on zero tests)
 //   DOD-L2 WARN  positive grep over a directory/glob as the whole proof
 //   DOD-L3 WARN  E2E/real-login run inside an auto `Verify:` — mark it `Verify (evidence):`
+//   DOD-L4 WARN  grep for a Gherkin tag/keyword over a directory/glob — any scenario satisfies it
+//   DOD-L5 WARN  the criterion names a document the `Verify:` never reads
+//   DOD-L6 WARN  `grep -A/-B/-C N` window — the match may be another block's line
+// (L4-L6 came from the rules a consumer project had to add by hand, #62.)
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -222,6 +226,21 @@ function splitCommands(cmd) {
   return out.map((s) => s.trim()).filter(Boolean);
 }
 
+const GHERKIN_RE = /@[A-Za-z][\w-]*|\b(?:Feature|Scenario|Funcionalidade|Cen[aá]rio|Esquema do Cen[aá]rio|Contexto|Background):/;
+// grep's context flags: -A 3, -B3, -C2, -nA2, --after-context=3, --context 2
+const isWindowFlag = (t) => /^-[a-zA-Z]*[ABC]\d*$/.test(t) || /^--(?:after-|before-)?context\b/.test(t);
+const overDir = (p) => /\s-[a-zA-Z]*r/.test(p) || p.includes('*') || /\/\s/.test(p) || p.endsWith('/');
+
+function lintGreps(parts, found) {
+  const greps = parts.filter((p) => /^!?\s*grep\b/.test(p.trim()));
+  if (greps.some((p) => overDir(p) && GHERKIN_RE.test(p))) {
+    found.push({ level: 'WARN', rule: 'DOD-L4', msg: 'grep de tag/palavra-chave de Gherkin sobre diretorio/glob: passa se ela existir em qualquer cenario — ancore no .feature e no cenario (ou rode o cenario)' });
+  }
+  if (greps.some((p) => p.trim().split(/\s+/).some(isWindowFlag))) {
+    found.push({ level: 'WARN', rule: 'DOD-L6', msg: 'grep com janela -A/-B/-C: a linha casada pode ser de outro bloco — ancore no bloco (awk entre marcadores) ou no numero da linha' });
+  }
+}
+
 function lintCommand(cmd) {
   const found = [];
   for (const tf of TEST_FILTERS) {
@@ -235,9 +254,9 @@ function lintCommand(cmd) {
     }
   }
   const parts = splitCommands(cmd).filter((p) => !/^\s*\w+=/.test(p) || /\s/.test(p));
+  lintGreps(parts, found);
   if (parts.length && parts.every((p) => /^grep\b/.test(p))) {
     // recursive flag, a glob, or a directory argument (`dir/ ` or ending in `/`)
-    const overDir = (p) => /\s-[a-zA-Z]*r/.test(p) || p.includes('*') || /\/\s/.test(p) || p.endsWith('/');
     const weak = parts.some((p) => overDir(p) && !p.startsWith('!'));
     if (weak) found.push({ level: 'WARN', rule: 'DOD-L2', msg: 'prova so por grep positivo sobre diretorio/glob: passa se o texto existir em qualquer lugar — ancore no arquivo e na linha' });
   }
@@ -266,6 +285,19 @@ function lintItem(it, ctx, add) {
   }
   if (it.evidence) return;
   for (const f of lintCommand(body)) add(it.verifyLine, f.level, f.rule, `item ${it.id}: ${f.msg}`);
+  for (const doc of unreadDocs(it.criterion, body)) {
+    add(it.verifyLine, 'WARN', 'DOD-L5', `item ${it.id}: o criterio cita ${doc}, que o Verify nao le — a prova passa sem olhar o documento`);
+  }
+}
+
+// Documents (`*.md`, `*.adoc`, `*.rst`) the criterion names and the Verify
+// body never mentions, by path or by file name.
+function unreadDocs(criterion, body) {
+  const docs = criterion
+    .split(/[\s`'"()[\],;]+/)
+    .map((t) => t.replace(/[.:]+$/, ''))
+    .filter((t) => /\.(?:md|adoc|rst)$/i.test(t));
+  return [...new Set(docs)].filter((d) => !body.includes(d) && !body.includes(path.posix.basename(d)));
 }
 
 const EXTRA_LEVEL = { ERRO: 'ERROR', ERROR: 'ERROR', AVISO: 'WARN', WARN: 'WARN', NOTA: 'NOTE', NOTE: 'NOTE' };

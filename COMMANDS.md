@@ -248,7 +248,7 @@ Steps 1-3 and 5-7 are one call — `jdi-cli ship <slug> --learnings-file <f>` �
 5. Writes the completion marker `phases/<slug>/SHIPPED.md` (`shipped_at`, `verdict`, `by`) — **team-safe: completion lives in the phase folder, not in ROADMAP.md**, so two developers shipping different phases on different branches produce zero merge conflicts. **ROADMAP.md is not touched** — except on legacy pre-0.2.0 ROADMAPs that still carry `- **Status:**` lines, where this phase's line is updated to `done` best-effort (never added where absent)
 5b. Distills `SHIPPED.md § Learnings` — ≤5 one-line bullets from REVIEW.md warnings/blockers/waived DoD items + SUMMARY.md blocked tasks (section omitted when nothing qualifies). Planner and doer of the next phases read the last 3 and convert recurring items into acceptance criteria
 6. Updates STATE.md (untracked advisory cache: next phase position + slug, `phase_status: ready`, next step — or `all_phases_complete: true` on the last phase)
-7. Archives old phases per `config.json compaction.archive_after` (default 5) into `.jdi/archive/` (+ index)
+7. Archives nothing: old phases move to `.jdi/archive/` only through `npx -y jdi-cli phases archive` (keeps the last `compaction.archive_after`, default 5; skips phases still referenced outside their folder; its own commit)
 8. Commit: `feat(<slug>): ship phase ({VERDICT})`
 8b. With `--pr`: pushes the branch and opens a PR titled `feat(<slug>): ship phase (<VERDICT>)` with verdict + artifact paths + `§ Learnings` in the body (gh CLI; best-effort)
 9. Optional tag: `phase-<slug>` (if PROJECT.md has `tag_phases: true`)

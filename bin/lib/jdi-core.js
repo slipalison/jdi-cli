@@ -271,6 +271,10 @@ function phaseFolder(root, phase) {
     if (any.length === 1) return { dir: path.join(JDI_DIR, 'phases', any[0]), exists: true };
     if (any.length > 1) throw new JdiError(`multiple folder candidates for slug '${phase.slug}': ${any.join(', ')}`, 4);
   }
+  // `phases archive` moved it: still resolvable, read-only by convention.
+  for (const c of candidates) {
+    if (c && fs.existsSync(path.join(root, JDI_DIR, 'archive', c))) return { dir: path.join(JDI_DIR, 'archive', c), exists: true, archived: true };
+  }
   return { dir: path.join(JDI_DIR, 'phases', phase.slug), exists: false };
 }
 
@@ -298,6 +302,7 @@ function resolvePhase(id, root = process.cwd()) {
     dir: folder.dir.split(path.sep).join('/'),
     absDir: path.join(root, folder.dir),
     exists: folder.exists,
+    archived: Boolean(folder.archived),
   };
 }
 

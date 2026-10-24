@@ -201,7 +201,7 @@ seu-projeto/
 │   │   │   ├── SHIPPED.md         # de /jdi-ship (marcador de conclusão — é isso que torna uma fase "done")
 │   │   │   └── LOOP.md            # só se o /jdi-loop rodou (estado do ralph)
 │   │   └── NN-<slug>/             # layout legado v1 — NUNCA renomeado (preserva o histórico do git)
-│   ├── archive/                   # fases antigas movidas pela compactação do ship (padrão: manter as 5 últimas ativas)
+│   ├── archive/                   # fases antigas movidas pelo `jdi-cli phases archive` (mantém as 5 últimas; nunca durante um ship)
 │   └── cache/                     # gitignored — artefatos do gate 7 (screenshots, findings em JSON)
 ├── .claude/                       # (se runtime=claude)
 │   ├── agents/jdi-*.md
@@ -245,7 +245,7 @@ flowchart LR
         STATE["STATE.md — não versionado, gitignored<br/>reescrito por todo comando;<br/>regenerado a partir dos artefatos num clone novo"]
     end
 
-    PH -- "fases antigas vão para .jdi/archive/<br/>(compactação do ship, mantém as 5 últimas)" --> ARCH["archive/<br/>fora do caminho de leitura"]
+    PH -- "fases antigas vão para .jdi/archive/<br/>(jdi-cli phases archive, mantém as 5 últimas)" --> ARCH["archive/<br/>fora do caminho de leitura"]
 ```
 
 **Escada de profundidade de leitura (economia de tokens):** cada agente lê só a sua fatia da fase atual (o doer: o bloco da sua task e as linhas do DoD dos seus arquivos) · corpo de outra fase nunca é lido · o que atravessa fases vem pelo CLI: `learnings --last 3` (pela data do ship, com teto) e `decisions --ids/--recent` (nunca a view inteira do `DECISIONS.md`) · arquivo de instrução que o runtime injeta (CLAUDE.md, rules) nunca é relido. Por que importa: cada token que um agente lê é relido em todas as chamadas seguintes dele, e o que um agente leu não vira prefixo de cache do próximo — cada spawn paga as próprias leituras. O `npx jdi-cli cost` mede isso pelos transcripts locais.
@@ -284,7 +284,6 @@ sequenceDiagram
     Note over CMD: /jdi-ship
     PH->>CMD: lê o veredito do REVIEW + blockers do SUMMARY
     CMD->>PH: escreve SHIPPED.md + destila § Learnings (≤5 bullets)
-    CMD->>PH: move fases antigas → archive/ (mantém as 5 últimas)
 ```
 
 O ciclo: o que uma fase APRENDE (warnings, blockers, waivers) sobrevive como no máximo 5 bullets destilados que o planner e o doer das PRÓXIMAS fases consomem — lidos via `jdi-cli learnings --last 3` (com teto) em vez de arrastar arquivos REVIEW inteiros adiante. Schema completo: [MEMORY.md](MEMORY.md).
@@ -767,7 +766,8 @@ Os helpers de fase vêm dentro do pacote npm e são expostos como subcomandos de
 | `sync-specialists [runtime\|all] [--check] [--quiet] [--porcelain]` | Materializa os especialistas por projeto (`.jdi/agents/jdi-*.md`) no diretório de agents que cada runtime realmente lê — `.claude/agents/`, `.github/agents/*.agent.md`, `.opencode/agents/`, `.agents/skills/*/SKILL.md`, `.junie/agents/` — convertendo o frontmatter canônico com o mesmo emissor que o `build` usa. Determinístico byte a byte, idempotente, marcador `GENERATED`. `--check`: exit 1 se alguma cópia estiver ausente/desatualizada (doctor, CI e o self-heal do `/jdi-do` / `/jdi-verify`) |
 | `next [fase] [--loop] [--json] [--status]` | Onde o projeto está e qual comando vem a seguir, derivado dos artefatos (a escada do `/jdi-next`). `--status`: a tela inteira do `/jdi-status`, só leitura |
 | `add-phase "<nome>" [--slug s] [--goal g] [--reason r] [--before s\|--after s] [--unique]` | Layout v3: valida o slug, calcula o `order` fracionário, grava a entrada do roadmap com `created_with` e a decisão de auditoria opcional. `--unique`: slug ocupado vira `-2`, `-3`… |
-| `ship <fase> [--learnings-file f] [--no-archive]` | Recusa fase BLOCKED ou com item manual pendente, grava o SHIPPED.md (no máximo 5 learnings), atualiza o STATE.md, arquiva fases antigas; imprime os caminhos para commitar |
+| `ship <fase> [--learnings-file f] [--allow-stale "<motivo>"]` | Recusa fase BLOCKED ou com item manual pendente, grava o SHIPPED.md (no máximo 5 learnings), atualiza o STATE.md; imprime os caminhos para commitar. Não move nenhuma outra fase |
+| `phases archive [--dry-run] [--keep N] [--rewrite-refs]` | Move as fases entregues mais antigas que as N últimas (`compaction.archive_after`, padrão 5) para `.jdi/archive/`. Fase ainda referenciada fora da própria pasta (`git grep`) é pulada e listada, a não ser que `--rewrite-refs` aponte as referências para o arquivo. Nunca commita: faça um commit só dele |
 | `dod <parse\|lint\|extract> <fase>` / `validate-dod <fase>` | A Definition of Done como dado: lê, valida (teste filtrado sem checar contagem, grep oco, E2E em item automático, comando longo na linha) e move `Verify:` longos para `verify/dod-N.sh`, sem mudar o comando |
 | `brief <fase> --role doer\|reviewer\|planner\|asker\|critic [--task T-N] [--stack s]` | O contexto inicial de um agente num arquivo com teto em `.jdi/cache/briefs/` (a task, as decisões que ela cita, as linhas do DoD dos seus arquivos, erros conhecidos, learnings) — com ponteiro para o que ficou de fora |
 | `gates <run\|show> <fase> [--stack s] [--only dod] [--changed-since sha]` | Build, testes, cobertura, lint (por `.jdi/stacks/<nome>.json`) e os itens automáticos do DoD (uma vez) rodam neste shell, fora do contexto de qualquer agente; resultados em `.jdi/cache/gates/<slug>/` |

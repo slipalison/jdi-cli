@@ -47,6 +47,16 @@ For each row in the brief, decide:
   looks shallow, the fixture may not exercise the branch). A warning, not a
   blocker.
 
+Judge EVERY row in the brief against every mutation class above in this one
+pass — a hollow row you leave for the next round costs a whole loop round.
+For each hollow row, add:
+
+- `fix` — the Verify (or the change to it) that would fail with the criterion
+  broken, in one line;
+- `bait` — a one-line mutation that breaks the criterion (e.g.
+  `sed -i 's/return total/return 0/' src/cart.rs`), so the asker can paste it
+  as the row's `Bait:` and `jdi-cli dod bait` checks the fix mechanically.
+
 PREFLIGHT mode (no code yet): judge the `Verify:` itself — would it fail on
 the code as it is now and pass only once the criterion holds? A check that
 already passes today without being a non-regression row is hollow.
@@ -62,7 +72,9 @@ object per row in the brief, nothing else in the file:
 
 ```json
 [
-  {"row": 2, "hollow": true, "objective": true, "evidence": "grep -R 'rate limit' src/ matches the comment at src/limits.rs:3, present before the phase"},
+  {"row": 2, "hollow": true, "objective": true, "evidence": "grep -R 'rate limit' src/ matches the comment at src/limits.rs:3, present before the phase",
+   "fix": "cargo test --test limits -- --exact limits::rejects_101st 2>&1 | grep -q '1 passed'",
+   "bait": "sed -i 's/>= 100/>= 1000/' src/limits.rs"},
   {"row": 4, "hollow": false, "objective": false, "evidence": "tests/limits.rs:40 asserts 429 on the 101st request"}
 ]
 ```

@@ -82,7 +82,7 @@ Priority order: most advanced artifact wins. `ROADMAP.md` carries no status line
 |   |   +-- verify/      dod-N.sh: long DoD `Verify:` bodies (`jdi-cli dod extract`)
 |   +-- 02-old-phase/               v1 legacy layout preserved post-migration (NEVER renamed)
 |   +-- ...
-+-- archive/             old phases moved by /jdi-ship compaction. The DIR LISTING is the
++-- archive/             old phases moved by `jdi-cli phases archive`. The DIR LISTING is the
                          index on v3 (index.md is legacy-only, frozen — writers stopped)
 ```
 
@@ -287,7 +287,7 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
 - `orchestration.max_resets_autonomous` — reset cap of the loop under `/jdi-issue` (no human at the gate); reaching it kills the loop.
 - `chars_per_token` — per language, used to estimate tokens. Measured: Claude tokenizes pt-BR JDI artifacts at 2.0-2.4 chars/token (the old "4 chars/token" undercounted twice).
 - `models.<role>` — `asker`, `planner`, `doer`, `reviewer`, `critic`: `inherit` (the session's model) or a model the user chose; the commands pass it as the Agent `model` parameter where the runtime supports it. Tokens do not change with the model; the price per token does.
-- `compaction.archive_after` — phases older than this delta from the current position move to `.jdi/archive/` (executed by `/jdi-ship`). `0` disables it.
+- `compaction.archive_after` — how many shipped phases `jdi-cli phases archive` keeps in `.jdi/phases/` (default for `--keep`); older shipped phases move to `.jdi/archive/`, except those still referenced outside their folder (`--rewrite-refs` updates the references instead). Never run by `/jdi-ship`. `0` disables it.
 - `coverage_min` — overridable per PROJECT.md. Reviewer uses it.
 - `orchestration.mode` — `standard` (default) or `enhanced`. Host-neutral flag: when `enhanced` AND the host can orchestrate sub-agents, commands MAY run optional multi-agent layers (advisory critics); otherwise they degrade to the standard path. Off-path is byte-identical. Capability boolean, NOT a token ledger.
 - `orchestration.next_execution` — `step` (default) or `loop`. With `loop`, `/jdi-next` routes the execute/verify states (`planned`, `executed`, `verified+BLOCKED`) to `/jdi-loop` instead of single `do`/`verify` steps. Per-project opt-in — ralph presumes a trustworthy test suite. Absent = `step`.
@@ -296,7 +296,7 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
 
 **Lifespan:** life of the project. Versioned in git.
 
-**Read by:** `/jdi-do`, `/jdi-plan`, `/jdi-verify`, `/jdi-ship` (for compaction). Specialists (doer/reviewer) read `coverage_min`. `orchestration.mode` is read by `/jdi-verify` (and future consumers) at the top-level turn; sub-agents only see it through this file, never through the host session.
+**Read by:** `/jdi-do`, `/jdi-plan`, `/jdi-verify`, `jdi-cli phases archive` (compaction). Specialists (doer/reviewer) read `coverage_min`. `orchestration.mode` is read by `/jdi-verify` (and future consumers) at the top-level turn; sub-agents only see it through this file, never through the host session.
 
 **Written by:** `/jdi-new` and `/jdi-adopt` (Step 4b — orchestration opt-in, default determined at the top-level turn where the host capability signal is visible).
 

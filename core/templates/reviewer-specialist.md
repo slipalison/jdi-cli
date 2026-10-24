@@ -90,6 +90,7 @@ NOT your job:
 <gates_source>
 - Gates 1-4 and the automatic DoD rows are measured by `jdi-cli gates run` before you are spawned: `.jdi/cache/gates/{PHASE_SLUG}/<stack>.json` and `.jdi/cache/gates/{PHASE_SLUG}/dod.json`. When their `head` equals `git rev-parse HEAD`, they ARE gates 1-4 and the automatic DoD results: copy status, numbers and log paths into REVIEW.md and do not run build, tests, coverage or lint yourself. Your work is judgment — gates 5, 6 and 7, the `EVIDENCE` rows, and whether a failure is a defect. Run a command only when its result is missing or stale (other `head`), or to look closer at one failure (its log first), and do it first, while your context is small.
 - `EVIDENCE` rows (external effect, e.g. real login): never execute them — judge them by the recorded evidence (CI run, local validation) and say which.
+- `dod.json` missing or stale: re-measure with `npx -y {{JDI_CLI}} gates run {PHASE_SLUG} --only dod` — it skips the `Verify (evidence):` rows and the stack's `evidence_only` commands. Never `eval` the `Verify:` lines by hand, and never pick them out of CONTEXT.md by position: a real-login row run by mistake can lock the test account (#62).
 - Multi-stack: only the reviewer with `dod_owner=true` writes the `## DoD Checklist` (from `dod.json`, one row per item); the others write `DoD: see the segment of <owner>`. The DoD runs once per verification.
 - Tag every blocker `[defect]` (behaviour wrong or unsafe, measured) or `[hollow DoD N]` (the code meets row N, but its `Verify:` would pass without it). The loop treats them differently: a defect always blocks; a hollow proof blocks once per row.
 </gates_source>
@@ -337,8 +338,9 @@ Reads `## Definition of Done` from BOTH `.jdi/PROJECT.md` (project-wide baseline
 **Process:**
 
 1. Parse all DoD items from both files. Each item = `{ source, type, text, verify, evidence? }`.
-2. For each item, run its `Verify:`:
-   - **Auto-verifiable**: execute the command/grep/file assertion. Capture exit code + output.
+2. For each item, take its result from `dod.json` (see `<gates_source>`); only when that is missing or stale, run `gates run --only dod`, which executes each automatic `Verify:` for you:
+   - **`Verify (evidence):`** / `evidence_only`: never executed — `EVIDENCE`, judged by the recorded evidence.
+   - **Auto-verifiable**: the command/grep/file assertion. Exit code + output.
      - Exit 0 / pattern absent (for negative checks) / file present → `PASS`
      - Otherwise → `FAIL`
    - **Manual**: never auto-execute. Mark as `MANUAL_REQUIRED`.
@@ -354,21 +356,12 @@ Reads `## Definition of Done` from BOTH `.jdi/PROJECT.md` (project-wide baseline
 | DoD section missing in PROJECT.md and CONTEXT.md | `INCONCLUSIVE` | Triggers WARN (no DoD declared) |
 | Item lacks `Verify:` field (malformed) | `INCONCLUSIVE` | Triggers WARN + recommendation to re-run /jdi-discuss or /jdi-new |
 
-**bash example (Auto-verifiable item):**
+**Re-measuring the automatic rows** (only when `dod.json` is missing or stale):
 ```bash
-# For an item: "npm test exits 0" with Verify: "npm test && echo OK"
-if eval "{verify_command}" >/dev/null 2>&1; then
-  echo "PASS: {item_text}"
-else
-  echo "FAIL: {item_text}"
-fi
+npx -y {{JDI_CLI}} gates run {PHASE_SLUG} --only dod   # PASS / FAIL / EVIDENCE per row, in dod.json
 ```
-
-**PowerShell example:**
-```powershell
-$result = Invoke-Expression "{verify_command}" 2>&1
-if ($LASTEXITCODE -eq 0) { Write-Host "PASS: {item_text}" } else { Write-Host "FAIL: {item_text}" }
-```
+Never `eval` a `Verify:` yourself: the runner is what knows which rows have an
+external effect.
 
 **Manual items**: never executed. Recorded as `MANUAL_REQUIRED` for downstream confirmation via `/jdi-confirm-dod`.
 

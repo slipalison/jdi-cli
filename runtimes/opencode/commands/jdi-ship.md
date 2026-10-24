@@ -112,16 +112,17 @@ SHIP=$(npx -y jdi-cli@0.18.1 ship "$PHASE_SLUG" $LEARN_ARG ${ALLOW_STALE:+--allo
 ```
 
 `SHIP` is JSON: writes `$PHASE_DIR/SHIPPED.md` (`shipped_at`, `verdict`, `by`,
-`## Learnings`), refreshes the advisory STATE.md for the next phase, and runs
-the archive compaction (`compaction.archive_after`, `0` = off; moved folders in
-`archived`). Phase completion is recorded IN THE PHASE FOLDER, never in
+`## Learnings`) and refreshes the advisory STATE.md for the next phase. It
+moves no other phase: archiving old phases is separate housekeeping
+(`npx -y jdi-cli@0.18.1 phases archive --dry-run`, then without `--dry-run`, in
+its own commit). Phase completion is recorded IN THE PHASE FOLDER, never in
 ROADMAP.md — parallel developers shipping different phases never conflict.
 
 ### Step 6: Final commit
 
 ```bash
-git add "$PHASE_DIR/SHIPPED.md" .jdi/known-errors/ 2>/dev/null
-git add -A .jdi/phases .jdi/archive 2>/dev/null || true   # archive moves (if any)
+git add "$PHASE_DIR"
+git add .jdi/known-errors/ 2>/dev/null || true            # entries written in Step 4
 git add .jdi/STATE.md 2>/dev/null || true                 # legacy projects that still track it
 git commit -m "feat($PHASE_SLUG): ship phase ($VERDICT)"
 ```
@@ -183,7 +184,7 @@ phase makes every later turn re-read it.
 
 <gates>
 - pre: REVIEW.md exists + verdict ∉ {BLOCKED, APPROVED_PENDING_MANUAL} + no DoD row still MANUAL_REQUIRED + SHIPPED.md absent
-- post: SHIPPED.md written + STATE.md updated + old phases archived (if applicable) + commit (+ optional tag) (+ PR when --pr and gh/remote/branch allow — best-effort, never blocks). ROADMAP.md untouched except legacy Status-line projects.
+- post: SHIPPED.md written + STATE.md updated + commit (+ optional tag) (+ PR when --pr and gh/remote/branch allow — best-effort, never blocks). ROADMAP.md untouched except legacy Status-line projects.
 </gates>
 
 <errors>

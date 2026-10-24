@@ -198,7 +198,7 @@ your-project/
 │   │   │   ├── SHIPPED.md         # from /jdi-ship (completion marker — this is what makes a phase "done")
 │   │   │   └── LOOP.md            # only if /jdi-loop ran (ralph state)
 │   │   └── NN-<slug>/             # v1 legacy layout — NEVER renamed (preserves git history)
-│   ├── archive/                   # old phases moved here by ship compaction (default: keep last 5 active)
+│   ├── archive/                   # old phases moved here by `jdi-cli phases archive` (keeps the last 5; never during a ship)
 │   └── cache/                     # gitignored — gate 7 artifacts (screenshots, JSON findings)
 ├── .claude/                       # (if runtime=claude)
 │   ├── agents/jdi-*.md
@@ -242,7 +242,7 @@ flowchart LR
         STATE["STATE.md — untracked, gitignored<br/>rewritten by every command;<br/>regenerated from artifacts on a fresh clone"]
     end
 
-    PH -- "old phases move to .jdi/archive/<br/>(ship compaction, keep last 5)" --> ARCH["archive/<br/>out of the read path"]
+    PH -- "old phases move to .jdi/archive/<br/>(jdi-cli phases archive, keep last 5)" --> ARCH["archive/<br/>out of the read path"]
 ```
 
 **Read-depth ladder (token economy):** each agent reads only its own slice of the current phase (the doer: its task block and the DoD lines for its files) · other phases' bodies are never read · cross-phase knowledge comes through the CLI: `learnings --last 3` (by ship date, capped) and `decisions --ids/--recent` (never the whole `DECISIONS.md` view) · instruction files the runtime injects (CLAUDE.md, rules) are never re-read. Why it matters: every token an agent reads is re-read on each of its later turns, and files read by one agent are not a cache prefix for the next — each spawn pays for its own reads. `npx jdi-cli cost` measures it from your local transcripts.
@@ -281,7 +281,6 @@ sequenceDiagram
     Note over CMD: /jdi-ship
     PH->>CMD: read REVIEW verdict + SUMMARY blockers
     CMD->>PH: write SHIPPED.md + distill § Learnings (≤5 bullets)
-    CMD->>PH: move old phases → archive/ (keep last 5)
 ```
 
 The cycle: what a phase LEARNS (warnings, blockers, waivers) survives as ≤5 distilled bullets that the NEXT phases' planner and doer consume through `jdi-cli learnings --last 3` (capped) instead of dragging whole REVIEW files forward. Full schema: [MEMORY.md](MEMORY.md).
@@ -784,7 +783,8 @@ The phase helpers ship inside the npm package and are exposed as CLI subcommands
 | `sync-specialists [runtime\|all] [--check] [--quiet] [--porcelain]` | Materialize the per-project specialists (`.jdi/agents/jdi-*.md`) into the agent dir each runtime actually reads — `.claude/agents/`, `.github/agents/*.agent.md`, `.opencode/agents/`, `.agents/skills/*/SKILL.md`, `.junie/agents/` — converting the canonical frontmatter with the same emitter `build` uses. Byte-deterministic, idempotent, `GENERATED` marker. `--check`: exit 1 on a missing/stale copy (doctor, CI, and the `/jdi-do` / `/jdi-verify` self-heal) |
 | `next [phase] [--loop] [--json] [--status]` | Where the project is and which command comes next, derived from the artifacts (the `/jdi-next` ladder). `--status`: the whole `/jdi-status` screen, read-only |
 | `add-phase "<name>" [--slug s] [--goal g] [--reason r] [--before s\|--after s] [--unique]` | Layout v3: validates the slug, computes the fractional `order`, writes the roadmap entry with `created_with` and the optional audit decision. `--unique`: a taken slug gets `-2`, `-3`… |
-| `ship <phase> [--learnings-file f] [--no-archive]` | Refuses BLOCKED and pending-manual phases, writes SHIPPED.md (at most 5 learnings), updates STATE.md, archives old phases; prints the paths to commit |
+| `ship <phase> [--learnings-file f] [--allow-stale "<reason>"]` | Refuses BLOCKED and pending-manual phases, writes SHIPPED.md (at most 5 learnings), updates STATE.md; prints the paths to commit. Moves no other phase |
+| `phases archive [--dry-run] [--keep N] [--rewrite-refs]` | Moves shipped phases older than the last N (`compaction.archive_after`, default 5) to `.jdi/archive/`. A phase still referenced outside its folder (`git grep`) is skipped and listed, unless `--rewrite-refs` points the references to the archive. Never commits: commit it on its own |
 | `dod <parse\|lint\|extract> <phase>` / `validate-dod <phase>` | The Definition of Done as data: parse it, lint it (tests filtered without a count check, hollow greps, E2E in an automatic row, long inline commands), and move long `Verify:` bodies into `verify/dod-N.sh` verbatim |
 | `brief <phase> --role doer\|reviewer\|planner\|asker\|critic [--task T-N] [--stack s]` | The starting context of an agent as one capped file in `.jdi/cache/briefs/` (its task, the decisions it cites, the DoD lines for its files, known errors, learnings) — with a pointer for everything it left out |
 | `gates <run\|show> <phase> [--stack s] [--only dod] [--changed-since sha]` | Build, tests, coverage, lint (per `.jdi/stacks/<name>.json`) and the automatic DoD rows (once) run in this shell, outside any agent's context; results in `.jdi/cache/gates/<slug>/` |

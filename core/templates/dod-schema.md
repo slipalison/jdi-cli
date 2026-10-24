@@ -63,6 +63,9 @@ Lint rules (ERROR stops `/jdi-discuss` until fixed; WARN is reported):
 | DOD-L1 | ERROR | test runner with a name filter and no count check — exits 0 when zero tests match; require "N passed" with N >= 1 |
 | DOD-L2 | WARN | a positive grep over a directory/glob as the whole proof — passes if the text exists anywhere |
 | DOD-L3 | WARN | E2E / real login inside an automatic `Verify:` — mark it `Verify (evidence):` |
+| DOD-L4 | WARN | a grep for a Gherkin tag or keyword (`@smoke`, `Scenario:`) over a directory/glob — any scenario satisfies it; anchor the `.feature` file and the scenario, or run it |
+| DOD-L5 | WARN | the criterion names a document (`docs/api.md`) that the `Verify:` never reads |
+| DOD-L6 | WARN | `grep -A/-B/-C N` window — the matched line may belong to another block; anchor the block |
 
 Project-specific rules plug in through `.jdi/config.json` `dod.extra_lint`: a
 program and its arguments, run without a shell (no pipes or redirection) — an

@@ -239,8 +239,15 @@ later waves depend on it):
 
 Verify SUMMARY.md was created:
 ```bash
-test -f "$PHASE_DIR/SUMMARY.md" || { echo "warn: SUMMARY missing"; }
+test -f "$PHASE_DIR/SUMMARY.md" || echo "SUMMARY missing"
 ```
+
+Missing (a doer could not write it — some runtimes deny a subagent that
+write): write it yourself from the doers' return lines — one `## T-N` line
+per task with its status and commit (from `git log --oneline`),
+plus `## Blocked tasks` when any — and commit it
+(`docs($PHASE_SLUG): summary`). Never leave the phase without SUMMARY.md:
+`/jdi-verify` and `/jdi-ship` read it.
 
 ### Step 9: Update STATE
 

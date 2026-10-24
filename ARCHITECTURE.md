@@ -56,7 +56,7 @@ core/                    <- shipped, generators (lives in the JDI repo)
     LOOP.md              <- only if /jdi-loop ran (written by `jdi-cli loop`)
     verify/dod-N.sh      <- long DoD `Verify:` bodies (`jdi-cli dod extract`)
   phases/NN-<slug>/      <- v1 legacy layout (never renamed post-migration)
-  archive/               <- old phases moved by ship compaction + removed-<slug>/ folders
+  archive/               <- old phases moved by `phases archive` + removed-<slug>/ folders
 
 bin/lib/                 <- shared helpers (shipped via npm files whitelist)
   jdi-core.js (resolvePhase)    <- int OR slug → {slug, dir, position, schema, exists}
@@ -84,7 +84,7 @@ The `bin/lib` helpers are exposed as **CLI subcommands** — slash commands call
 /jdi-do      <slug|position>      -> atomic commits + phases/<slug>/SUMMARY.md
 /jdi-verify  <slug|position>      -> phases/<slug>/REVIEW.md (gates 1-8 + DoD Checklist; recreated per run)
 /jdi-confirm-dod <slug|position>  -> REVIEW.md DoD rows flipped (CONFIRMED/REJECTED) + verdict recomputed
-/jdi-ship    <slug|position>      -> phases/<slug>/SHIPPED.md + STATE advance + archive compaction + tag (optional)
+/jdi-ship    <slug|position>      -> phases/<slug>/SHIPPED.md + STATE advance + tag (optional)
 
 /jdi-loop    <slug|position>      -> ralph mode: do <-> verify bounded auto-loop (LOOP.md)
 /jdi-status                       -> read-only snapshot (status derived from artifacts)

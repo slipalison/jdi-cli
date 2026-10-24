@@ -80,13 +80,22 @@ PLAN.md just to repeat it.
 The planner has no shell — this command commits.
 ```bash
 test -f "$PHASE_DIR/PLAN.md" || { echo "PLAN.md not created"; exit 1; }
-# The plan may have tightened the DoD: lint again (cheap), size check (warn).
-npx -y jdi-cli@0.18.1 validate-dod "$PHASE_SLUG" || echo "warn: DoD lint ERROR after plan — fix the flagged Verify lines before /jdi-do"
+# The plan may have tightened the DoD: lint again (cheap).
+npx -y jdi-cli@0.18.1 validate-dod "$PHASE_SLUG" > .jdi/cache/dod-lint.txt; LINT_RC=$?
 npx -y jdi-cli@0.18.1 budgets "$PHASE_SLUG" || true
 SIZE=$(npx -y jdi-cli@0.18.1 size "$PHASE_SLUG")   # "lite — ..." or "full — reasons": how /jdi-do will dispatch
 git add "$PHASE_DIR/PLAN.md"; git add .jdi/STATE.md 2>/dev/null || true
 git diff --cached --quiet || git commit -m "docs($PHASE_SLUG): generate plan"
 ```
+
+`LINT_RC` = 1 (a DoD ERROR): the plan is not ready for code — a hollow proof
+found now costs a second, found in `/jdi-verify` it costs a loop round (#62).
+Same as `/jdi-discuss` Step 4.5: spawn a FRESH asker with `phase_slug`,
+`phase_dir`, `mode=fix_dod`, `lint=.jdi/cache/dod-lint.txt`, run
+`validate-dod` again and commit the fix (`docs($PHASE_SLUG): fix DoD proofs`).
+Still ERROR: stop and show `.jdi/cache/dod-lint.txt` (interactive) or record it
+under `## Deferred to PR review` (autonomous) — never move to `/jdi-do` with a
+DoD ERROR silently. WARN lines are informative.
 Update `.jdi/STATE.md`: `current_phase_slug: $PHASE_SLUG`, `phase_status: planned`, `next_step: /jdi-do $PHASE_SLUG`.
 
 ### Step 6: Confirm
