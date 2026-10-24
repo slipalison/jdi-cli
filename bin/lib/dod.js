@@ -82,6 +82,8 @@ function newItem(body, lineNo, type, count) {
     stack: null,
     bait: null,
     hasEvidenceField: false,
+    inputs: null,
+    iteration: null,
   };
 }
 
@@ -112,6 +114,18 @@ function itemLine(cur, l, lineNo) {
   const stack = fieldOf(l, 'Stack');
   if (stack !== null) {
     cur.stack = stack;
+    return;
+  }
+  // Evidence rows (#70): what the evidence depends on, and the focused run
+  // that is enough inside a loop round.
+  const inputs = fieldOf(l, 'Inputs');
+  if (inputs !== null) {
+    cur.inputs = inputs.replaceAll('`', '').split(',').map((g) => g.trim()).filter(Boolean);
+    return;
+  }
+  const iteration = fieldOf(l, 'Iteration');
+  if (iteration !== null) {
+    cur.iteration = splitVerify(iteration).command.trim() || null;
     return;
   }
   if (fieldOf(l, 'Evidence') !== null) {
@@ -154,6 +168,7 @@ function rowHash(item, root = process.cwd()) {
   const crypto = require('node:crypto');
   const h = crypto.createHash('sha256');
   h.update(`${item.criterion}\n${item.verify ? item.verify.raw : ''}\n${item.evidence ? 'evidence' : ''}\n${item.bait || ''}\n`);
+  if (item.inputs || item.iteration) h.update(`${(item.inputs || []).join(',')}\n${item.iteration || ''}\n`);
   if (item.script) h.update(core.readIf(path.join(root, item.script)) || '');
   return h.digest('hex').slice(0, 16);
 }

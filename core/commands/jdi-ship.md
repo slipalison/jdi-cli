@@ -72,6 +72,21 @@ Re-verify → stop and point to `/jdi-verify $PHASE_SLUG`. Ship anyway → set
 stale review: it re-verifies. (`.jdi/` and `loop.non_product_globs` do not
 count as code.)
 
+The evidence rows (`Verify (evidence):`) need a full run on the code being
+shipped — inside the loop a focused run was enough:
+
+```bash
+npx -y {{JDI_CLI}} evidence status "$PHASE_SLUG"; EVID_RC=$?   # 2 = a row without a fresh `ship` run
+```
+
+`EVID_RC` = 2 → AskUserQuestion: "Run the full evidence now (recommended) /
+Ship anyway (the reason is recorded in SHIPPED.md)". Run → run each listed
+row's `Verify (evidence):` command once, then
+`npx -y {{JDI_CLI}} evidence record "$PHASE_SLUG" --row N --scope ship --artifact <report>`.
+Ship anyway → `ALLOW_STALE_EVIDENCE="<the user's reason>"`. Autonomous
+`/jdi-issue` runs it and never overrides. (Enforced by `jdi-cli ship` only on
+phases created with 0.19+; older phases ship as before.)
+
 (`jdi-cli ship` in Step 5 re-checks all of this and also refuses any DoD
 Checklist row still `MANUAL_REQUIRED`; `REJECTED` rows are audited waivers and
 do not block.)
@@ -108,7 +123,7 @@ pitfalls, waived criteria, systemic warnings) — to
 
 ```bash
 LEARN_ARG=""; [ -f ".jdi/cache/learnings-$PHASE_SLUG.md" ] && LEARN_ARG="--learnings-file .jdi/cache/learnings-$PHASE_SLUG.md"
-SHIP=$(npx -y {{JDI_CLI}} ship "$PHASE_SLUG" $LEARN_ARG ${ALLOW_STALE:+--allow-stale "$ALLOW_STALE"}) || { echo "Ship refused (reason above)."; exit 1; }
+SHIP=$(npx -y {{JDI_CLI}} ship "$PHASE_SLUG" $LEARN_ARG ${ALLOW_STALE:+--allow-stale "$ALLOW_STALE"} ${ALLOW_STALE_EVIDENCE:+--allow-stale-evidence "$ALLOW_STALE_EVIDENCE"}) || { echo "Ship refused (reason above)."; exit 1; }
 ```
 
 `SHIP` is JSON: writes `$PHASE_DIR/SHIPPED.md` (`shipped_at`, `verdict`, `by`,

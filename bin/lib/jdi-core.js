@@ -44,15 +44,19 @@ const CONFIG_DEFAULTS = {
     incremental_verify: true,
     wave_suite: true,
     sizing: true,
+    gate_cache: true,
   },
   sizing: {
     lite_max_tasks: 3,
     lite_max_files: 6,
     lite_max_dod_rows: 6,
+    split_max_dod_rows: 12,
+    split_max_areas: 3,
+    split_max_criteria: 8,
     sensitive_globs: [],
   },
   compaction: { archive_after: 5 },
-  loop: { non_product_globs: [] },
+  loop: { non_product_globs: [], record_commits: 'per_round' },
 };
 
 function isPlainObject(v) {

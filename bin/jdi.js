@@ -692,7 +692,8 @@ async function cmdHelp() {
   console.log(`  ${c.cyan}known-errors${c.reset} ${c.gray}<query|migrate|render|list>${c.reset}  ${tr('help.helper.known_errors')}`);
   console.log(`  ${c.cyan}specialists${c.reset} ${c.gray}<lint|upgrade> [--adopt] [--write]${c.reset}  ${tr('help.helper.specialists')}`);
   console.log(`  ${c.cyan}critic${c.reset} ${c.gray}<plan|apply> <phase> [--preflight]${c.reset}  ${tr('help.helper.critic')}`);
-  console.log(`  ${c.cyan}size${c.reset} ${c.gray}<phase> [--json]${c.reset}  ${tr('help.helper.size')}`);
+  console.log(`  ${c.cyan}size${c.reset} ${c.gray}<phase> [--intake] [--json]${c.reset}  ${tr('help.helper.size')}`);
+  console.log(`  ${c.cyan}evidence${c.reset} ${c.gray}<record|status> <phase> [--row N --scope iteration|ship]${c.reset}  ${tr('help.helper.evidence')}`);
   console.log('');
 
   console.log(`${c.bold}${tr('help.runtimes_label')}${c.reset}`);
@@ -869,6 +870,7 @@ async function main() {
     case 'specialists':
     case 'critic':
     case 'size':
+    case 'evidence':
       runNodeHelper(parsed.cmd, libArgs());
       break;
     case 'add-phase':

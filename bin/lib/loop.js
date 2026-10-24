@@ -6,6 +6,8 @@
 // oscillation check could no longer parse).
 //
 //   loop init   <phase> [--max-iter 5] [--max-resets 3]
+//   loop precheck <phase> [--autonomous] before each verify: `verify`, or the
+//                                        decision when nothing it reads changed
 //   loop record <phase> [--autonomous]   after each verify: appends the
 //                                        iteration and prints the decision as JSON
 //   loop reset  <phase> --reason <text> [--autonomous]
@@ -23,6 +25,12 @@
 // - Same finding hash already seen this round -> gate (oscillation).
 // - iter >= max_iter -> gate. Resets beyond max_resets (autonomous:
 //   orchestration.max_resets_autonomous, default = max_resets) -> killed.
+//
+// precheck (#69): when the fix round changed no product file and no DoD row
+// since the last verify, verifying again would read the same inputs — no
+// gates, no reviewers. Last verify without defects -> it converges now (the
+// same rule `record` applies after a verify). With defects open -> gate: the
+// fix round fixed nothing.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -42,8 +50,8 @@ function readLoop(phase) {
   const y = core.parseYaml(fm);
   const history = [];
   for (const l of body.split('\n')) {
-    const m = /^- iter (\d+): (\w+), hash=([a-f0-9]+)(?:, commit=(\w+))?(?:, ts=(\S+?))?(?:, product=(\w+))?(?:, defects=(\d+))?(?:, hollow=(\d+))?\s*$/.exec(l);
-    if (m) history.push({ iter: Number(m[1]), verdict: m[2], hash: m[3], commit: m[4], product: m[6] });
+    const m = /^- iter (\d+): (\w+), hash=([a-f0-9]+)(?:, commit=(\w+))?(?:, ts=(\S+?))?(?:, product=(\w+))?(?:, defects=(\d+))?(?:, hollow=(\d+))?(?:, dod=([a-f0-9]+))?(?:, precheck)?\s*$/.exec(l);
+    if (m) history.push({ iter: Number(m[1]), verdict: m[2], hash: m[3], commit: m[4], product: m[6], defects: m[7] === undefined ? null : Number(m[7]), dod: m[9] || null });
     else if (/^--- (AUTO-)?RESET|^--- RESUMED/.test(l)) history.push({ marker: l });
   }
   const list = (v) => (Array.isArray(v) ? v.map(Number).filter((n) => !Number.isNaN(n)) : []);
@@ -96,6 +104,14 @@ function findingHash(f) {
     .filter(Boolean)
     .sort(core.compareStr);
   return crypto.createHash('sha256').update([...new Set(norm)].join('\n')).digest('hex').slice(0, 12);
+}
+
+// One hash over every DoD row of the phase (criterion, Verify, Bait, script).
+function dodHash(root, phase) {
+  const dod = require('./dod');
+  const gates = require('./gates');
+  const rows = gates.dodItems(root, phase).map((it) => `${it.source}:${it.id}:${dod.rowHash(it, root)}`);
+  return crypto.createHash('sha256').update(rows.join('\n')).digest('hex').slice(0, 12);
 }
 
 function productChanged(root, since, nonProduct) {
@@ -185,7 +201,7 @@ function record(phase, { root = process.cwd(), autonomous = false } = {}) {
 
   const next = { ...st, iter, hollowSpent: [...new Set([...st.hollowSpent, ...newHollow])].sort((a, b) => a - b), lastVerifiedCommit: head };
   if (decision.status.startsWith('converged') || decision.status === 'pending-manual') next.status = 'converged';
-  const line = `- iter ${iter}: ${v.verdict}, hash=${hash}, commit=${head}, ts=${new Date().toISOString()}, product=${changed ? 'changed' : 'unchanged'}, defects=${defects.length}, hollow=${hollowRows.length}`;
+  const line = `- iter ${iter}: ${v.verdict}, hash=${hash}, commit=${head}, ts=${new Date().toISOString()}, product=${changed ? 'changed' : 'unchanged'}, defects=${defects.length}, hollow=${hollowRows.length}, dod=${dodHash(root, phase)}`;
   writeLoop(phase, next, [line]);
   if (decision.status === 'converged-with-warnings' && v.verdict === 'BLOCKED') {
     overrideVerdict(phase, iter, decision.reason, decision.prWarnings || []);
@@ -193,6 +209,24 @@ function record(phase, { root = process.cwd(), autonomous = false } = {}) {
   }
   if (decision.status === 'gate' && autonomous) decision.autonomous = 'take the Continue branch: run `jdi-cli loop reset <phase> --autonomous --reason "<why>"`';
   return { ...decision, iter, verdict: v.verdict, hash, defects: defects.length, hollowNew: newHollow, hollowSpent: next.hollowSpent };
+}
+
+function precheck(phase, { root = process.cwd(), autonomous = false } = {}) {
+  const config = core.loadConfig(root);
+  const st = readLoop(phase);
+  const last = st ? [...st.history].reverse().find((h) => !h.marker) : null;
+  if (!st || st.status !== 'running' || !last?.dod || last.defects === null || !st.lastVerifiedCommit) return { status: 'verify', reason: 'no previous verify to compare with' };
+  if (!fs.existsSync(path.join(phase.absDir, 'REVIEW.md'))) return { status: 'verify', reason: 'no REVIEW.md' };
+  if (productChanged(root, st.lastVerifiedCommit, config.loop?.non_product_globs)) return { status: 'verify', reason: `product changed since ${st.lastVerifiedCommit}` };
+  if (dodHash(root, phase) !== last.dod) return { status: 'verify', reason: 'a DoD row changed since the last verify' };
+  if (last.defects > 0) {
+    const out = { status: 'gate', reason: `the fix round changed no product file and no DoD row since iter ${last.iter} — its ${last.defects} defect(s) are still open`, skipped: 'verify' };
+    if (autonomous) out.autonomous = 'take the Continue branch: run `jdi-cli loop reset <phase> --autonomous --reason "<why>"`';
+    return out;
+  }
+  // Nothing new to verify and no defect: record() reaches the same decision
+  // from the last REVIEW.md (no product change -> converged-with-warnings).
+  return { ...record(phase, { root, autonomous }), skipped: 'verify' };
 }
 
 function reset(phase, { root = process.cwd(), reason = 'reset', autonomous = false } = {}) {
@@ -216,13 +250,14 @@ function main(argv) {
   };
   const valued = new Set(['--max-iter', '--max-resets', '--reason']);
   const id = rest.find((a, i) => !a.startsWith('--') && !valued.has(rest[i - 1]));
-  if (!id) throw new core.JdiError('usage: jdi loop <init|record|reset|status> <phase> ...', 1);
+  if (!id) throw new core.JdiError('usage: jdi loop <init|precheck|record|reset|status> <phase> ...', 1);
   const root = process.cwd();
   const phase = core.resolvePhase(id, root);
   const autonomous = rest.includes('--autonomous');
   let out;
   if (sub === 'init') out = init(phase, { maxIter: Number(opt('--max-iter') || 5), maxResets: Number(opt('--max-resets') || 3) });
   else if (sub === 'record') out = record(phase, { root, autonomous });
+  else if (sub === 'precheck') out = precheck(phase, { root, autonomous });
   else if (sub === 'reset') out = reset(phase, { root, reason: opt('--reason') || 'reset', autonomous });
   else if (sub === 'status') {
     const st = readLoop(phase);
@@ -234,4 +269,4 @@ function main(argv) {
   return out.status === 'killed' ? 1 : 0;
 }
 
-module.exports = { main, init, record, reset, readLoop, findingHash };
+module.exports = { main, init, precheck, record, reset, readLoop, findingHash };

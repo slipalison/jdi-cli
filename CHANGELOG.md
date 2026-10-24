@@ -7,8 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Fewer, shorter verify rounds — from a real 6-hour phase (two cards, three
+verify rounds of ~1 h each, the 20-minute E2E run five times, 27 of 50
+commits only bookkeeping, 20-31 phases archived inside unrelated ship commits).
+
 Fixes from the review batch filed against 0.15.0 (#35-#61), checked again on
 0.18.1: what was still wrong is fixed here.
+
+### Added
+- **Gate reuse** (#69, `economy.gate_cache`, on): a gate or DoD row that
+  PASSED on exactly the same inputs comes back `reused (key: passed on <commit>
+  at <time>)` instead of running again. Key: the command, the stack config,
+  `cache_key_cmd` (toolchain), the content of every product file (tracked and
+  untracked, outside `.jdi/` and `loop.non_product_globs`, or the stack's
+  `inputs`) and — for a DoD row — the files its command names and the row's
+  own hash. A FAIL is never reused; `gates run --fresh` and `/jdi-verify
+  --full` run everything.
+- **`loop precheck`** (#69): before a verify, a fix round that changed no
+  product file and no DoD row converges (no defect left) or goes to the gate
+  (defects still open) — no gates, no reviewers on the same inputs.
+- **Evidence freshness** (#70): `evidence record <phase> --row N --scope
+  iteration|ship [--artifact f]` and `evidence status`. A recorded run of a
+  `Verify (evidence):` row stays `fresh` while its inputs (`**Inputs:**`, or
+  every product file, plus the files its command names) and the row do not
+  change; the `dod` gates report carries it. `**Iteration:**` names the
+  focused run that is enough inside a loop round; `ship` refuses a phase
+  created with 0.19+ whose evidence rows lack a fresh full run (exit 5,
+  `--allow-stale-evidence "<reason>"` recorded in SHIPPED.md).
+- **`size --intake`** (#72): after `/jdi-discuss`, `split` when CONTEXT.md has
+  more DoD rows, areas or acceptance criteria than `sizing.split_max_*`
+  (12 / 3 / 8). `/jdi-discuss` offers the split (asker `mode=split` writes
+  SPLIT.md and trims CONTEXT.md to part 1; the other parts become the next
+  phases); `/jdi-issue` splits, and runs several cards as sequential phases.
+- **`phases archive [--dry-run] [--keep N] [--rewrite-refs]`** (#73): the
+  compaction as its own command. It skips a phase still referenced outside
+  its folder (`git grep`) unless `--rewrite-refs` points the references to
+  `.jdi/archive/`, and never commits. Archived phases still resolve.
+- **`review blockers --stack <reviewer> [--dod-owner]`** (#71): one
+  reviewer's batch; a multi-stack fix round spawns one doer per stack with
+  its whole list. `loop.record_commits: "at_ship"` keeps REVIEW.md, LOOP.md
+  and `reviews/round-N.md` (every replaced review) out of the history until
+  the ship commit; `per_round` (default) is today's behavior.
+- DoD lint (#62): DOD-L4 (Gherkin tag/keyword grep over a directory),
+  DOD-L5 (a document the criterion names and the Verify never reads),
+  DOD-L6 (`grep -A/-B/-C` window) — warnings.
+- `config.json`: `economy.gate_cache`, `sizing.split_max_*`,
+  `loop.record_commits`; stack keys `inputs`, `cache_key_cmd`.
+
+### Changed
+- **`ship` archives nothing** (#73): it used to move old phases inside the
+  ship commit of the current one and break every link to them.
+  `--no-archive` is accepted and ignored. STATE.md keeps `adopted: true`
+  across a ship (bootstrap read a brownfield project as greenfield after it).
+- `/jdi-plan` gives a DoD lint ERROR to the asker (`fix_dod`) instead of a
+  warning (#62).
+- The DoD critic judges every row in one pass and returns `fix` and `bait`
+  per hollow row; both reach the preflight fix list and the `## DoD Critic`
+  segment (#62).
+- Reviewer: never `eval` a `Verify:` by hand — `gates run --only dod`, which
+  skips evidence rows; a `reused` result is copied as reused (managed
+  `gates_source` block, delivered by `specialists upgrade`) (#62, #69).
+- Doer fix mode: every item of the work list in one pass (#71). `/jdi-issue`
+  skips its separate warnings round when the loop's last fix round already
+  had those warnings.
+- `/jdi-do` writes SUMMARY.md itself when a doer could not (#62).
 
 ### Fixed
 - **Arguments** (#35, #36, #61): each install-side command declares its flags.

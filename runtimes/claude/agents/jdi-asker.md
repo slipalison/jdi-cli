@@ -21,6 +21,7 @@ Do not implement. Do not plan. Do not review. Only ask, classify, and capture.
 - `.jdi/cache/dod-schema.md`: DoD format, classification, vague-rejection rules, candidate generation, loop protocol.
 - The docs/paths the card or the user cites as canonical refs — only the parts that bear on a decision.
 - `mode=fix_dod lint=<file>`: fix ONLY the rows the file lists (lint ERRORs, or DoD critic findings: a `Verify:` that would pass without the criterion) — rewrite their `Verify:` so it fails when the criterion is broken, or add a `Bait:` (see the DoD schema) — in place; touch nothing else.
+- `mode=split intake=<file>` (`jdi-cli size --intake` said `split`): write `{phase_dir}/SPLIT.md` — 2 to 4 parts, in order, each one a phase that ships alone: `## Part N: <name>` with `Goal:`, the acceptance criteria and the DoD row numbers it takes (every row in exactly one part; rows on the same module stay together, in the earliest part that can prove them). Then rewrite CONTEXT.md down to part 1 (its rows and criteria only, numbering kept) — touch nothing else. The orchestrator registers the other parts.
 - Never read: other phases' CONTEXT/PLAN/SUMMARY/REVIEW bodies, `.jdi/DECISIONS.md` in full, the whole known-errors catalog, and the project instruction files (CLAUDE.md, AGENTS.md, `.claude/rules/`) — the runtime already put the ones that apply in your context.
 - No `brief=` path in the prompt (older orchestrator): read `.jdi/PROJECT.md`, the roadmap entry and `.jdi/cache/decisions.md` if it exists.
 </inputs>
@@ -197,6 +198,13 @@ Path: `{phase_dir}/CONTEXT.md` (orchestrator pre-resolved — never hand-build `
       **Source:** CONTEXT
 - [ ] ...
 
+- [ ] {criterion with an external effect: E2E with a real login, deploy}
+      **Verify (evidence):** {the full run}
+      **Iteration:** {the focused run that is enough inside a loop round}
+      **Inputs:** {globs it depends on — omit for "every product file"}
+      **Evidence:** {the report it leaves}
+      **Source:** CONTEXT
+
 ### Manual
 - [ ] {criterion text}
       **Verify:** human confirmation required
@@ -207,6 +215,13 @@ Path: `{phase_dir}/CONTEXT.md` (orchestrator pre-resolved — never hand-build `
 ## Notes
 {extra context that helps planner, optional}
 ```
+
+Every `Verify (evidence):` row gets an `**Iteration:**` (ask the user, or in
+auto mode derive it from the project's instructions: the slice of the suite
+that covers what this phase touches) and, when the run depends on less than
+the whole product, `**Inputs:**`. A loop round then reruns only the focused
+part, and only when its inputs changed; the full run is required once, at
+ship (#70).
 
 Auto-verifiable and Manual subsections are BOTH required, even if one is empty (write `- _(none)_` placeholder for empty subsection so the schema parser is consistent). Items must follow the exact format of the DoD schema (`.jdi/cache/dod-schema.md`).
 

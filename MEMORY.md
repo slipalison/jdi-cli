@@ -80,6 +80,9 @@ Priority order: most advanced artifact wins. `ROADMAP.md` carries no status line
 |   |   +-- SHIPPED.md   output of /jdi-ship — per-phase done marker
 |   |   +-- LOOP.md      audit trail of /jdi-loop (only if ralph mode was used)
 |   |   +-- verify/      dod-N.sh: long DoD `Verify:` bodies (`jdi-cli dod extract`)
+|   |   +-- evidence/    dod-N.<iteration|ship>.json: recorded runs of `Verify (evidence):` rows (`jdi-cli evidence record`)
+|   |   +-- reviews/     round-N.md: replaced reviews, only with `loop.record_commits: "at_ship"`
+|   |   +-- SPLIT.md     the parts of a phase split at intake (`size --intake`, asker `mode=split`)
 |   +-- 02-old-phase/               v1 legacy layout preserved post-migration (NEVER renamed)
 |   +-- ...
 +-- archive/             old phases moved by `jdi-cli phases archive`. The DIR LISTING is the
@@ -249,19 +252,24 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
     "critic": "lean",
     "incremental_verify": true,
     "wave_suite": true,
-    "sizing": true
+    "sizing": true,
+    "gate_cache": true
   },
   "sizing": {
     "lite_max_tasks": 3,
     "lite_max_files": 6,
     "lite_max_dod_rows": 6,
+    "split_max_dod_rows": 12,
+    "split_max_areas": 3,
+    "split_max_criteria": 8,
     "sensitive_globs": []
   },
   "compaction": {
     "archive_after": 5
   },
   "loop": {
-    "non_product_globs": []
+    "non_product_globs": [],
+    "record_commits": "per_round"
   },
   "orchestration": {
     "mode": "standard",
@@ -283,6 +291,9 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
 - `economy.incremental_verify` — multi-stack: carry a reviewer whose scope did not change since its last run (the DoD owner always runs).
 - `economy.wave_suite` — build + tests of the touched stacks after each non-final wave of `/jdi-do`, through the gates runner.
 - `economy.sizing` + `sizing.*` — a phase within every `lite_max_*` limit, on one stack and with no file in `sensitive_globs`, runs all its tasks in one doer spawn (`jdi-cli size`). `false` = always full.
+- `economy.gate_cache` — reuse a gate (or DoD row) that PASSED on exactly the same inputs instead of running it again; the report says `reused`. A FAIL is never reused; `gates run --fresh` / `/jdi-verify --full` run everything. Stack keys: `inputs` (narrow the product files a stack's gates depend on; default all of them) and `cache_key_cmd` (toolchain versions in the key).
+- `sizing.split_max_dod_rows` / `split_max_areas` / `split_max_criteria` — `jdi-cli size --intake` says `split` above any of them; `/jdi-discuss` offers the split, `/jdi-issue` splits.
+- `loop.record_commits` — `per_round` (default: `/jdi-verify` commits REVIEW.md each round) or `at_ship` (REVIEW.md, `reviews/round-N.md` and LOOP.md stay on disk and go into the ship commit; product commits stay atomic).
 - `loop.non_product_globs` — files that do not count as a product change for the ralph loop's convergence rule (`.jdi/**` never counts). E.g. `["docs/**", "*.md"]`.
 - `orchestration.max_resets_autonomous` — reset cap of the loop under `/jdi-issue` (no human at the gate); reaching it kills the loop.
 - `chars_per_token` — per language, used to estimate tokens. Measured: Claude tokenizes pt-BR JDI artifacts at 2.0-2.4 chars/token (the old "4 chars/token" undercounted twice).

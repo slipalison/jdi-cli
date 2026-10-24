@@ -1,7 +1,7 @@
 'use strict';
 
 // `jdi-cli gates run <phase> [--stack <name>] [--only build,test,coverage,lint,dod]
-//                    [--changed-since <sha>] [--json]`
+//                    [--changed-since <sha>] [--fresh] [--json]`
 // `jdi-cli gates show <phase> [--stack <name>] [--failures]`
 //
 // Runs the deterministic quality gates (build, tests, coverage, lint) and the
@@ -18,10 +18,21 @@
 // Stack config: .jdi/stacks/<name>.json (`jdi-cli template stack`): gate
 // commands, env, path_prepend, coverage_runs_tests (run the suite once),
 // evidence_only (commands never executed here — e.g. E2E with a real login;
-// judged from recorded evidence), timeout_min.
+// judged from recorded evidence), timeout_min, inputs, cache_key_cmd.
+//
+// Reuse (#69, `economy.gate_cache`, on by default): a gate that PASSED on
+// exactly the same inputs is not run again — its result comes back marked
+// `reused` (when, on which commit). The key is the command, the stack config,
+// the content of the inputs (every product file: tracked and untracked, outside
+// .jdi/ and `loop.non_product_globs`; a stack may narrow it with `inputs`) and
+// the output of `cache_key_cmd` (toolchain versions); for a DoD row, also the
+// row's own hash (criterion, Verify, Bait, script). A FAIL is never reused,
+// and `--fresh` runs everything (`/jdi-verify --full`). A loop round that only
+// touched docs/ or .jdi/ no longer rebuilds and retests the product.
 
 const fs = require('node:fs');
 const os = require('node:os');
+const crypto = require('node:crypto');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const core = require('./jdi-core');
@@ -120,12 +131,114 @@ function skippedResults(root, stack, opts, only) {
   return ORDER.filter((g) => stack.gates?.[g] && (!only || only.has(g))).map((g) => ({ gate: g, status: 'SKIPPED', reason: `nothing changed in ${scope} since ${opts.changedSince}` }));
 }
 
+// --------------------------------------------------------------------------
+// Reuse
+// --------------------------------------------------------------------------
+
+const sha = (text) => crypto.createHash('sha256').update(text).digest('hex');
+
+function gitList(root, args) {
+  const r = core.git([...args, '-z'], root);
+  return r.code === 0 ? r.stdout.split('\0').filter(Boolean) : null;
+}
+
+// Content fingerprint of every product file in the working tree: the index
+// blob id for an unmodified tracked file, a hash of the bytes otherwise.
+function treeFingerprint(root) {
+  const staged = gitList(root, ['ls-files', '-s']);
+  if (staged === null) return null;
+  const files = new Map();
+  for (const e of staged) {
+    const tab = e.indexOf('\t');
+    files.set(e.slice(tab + 1), e.slice(0, tab));
+  }
+  const dirty = [...(gitList(root, ['ls-files', '-m']) || []), ...(gitList(root, ['ls-files', '-o', '--exclude-standard']) || [])];
+  for (const f of dirty) {
+    const abs = path.join(root, f);
+    files.set(f, fs.existsSync(abs) && fs.statSync(abs).isFile() ? 'w ' + sha(fs.readFileSync(abs)) : 'deleted');
+  }
+  return files;
+}
+
+// Files a command names: an exact path, a directory (everything under it) or
+// a glob. A DoD row that greps docs/api.md must see docs/api.md change, even
+// though docs/ is outside the product.
+function namedFiles(tree, cmd) {
+  const tokens = cmd.split(/[\s'"`|;&()<>]+/).map((t) => t.replace(/^\.\//, '').replace(/\/+$/, '')).filter((t) => t.length > 1);
+  const out = new Set();
+  for (const t of tokens) {
+    const glob = t.includes('*');
+    for (const f of tree.keys()) {
+      if (f === t || f.startsWith(t + '/') || (glob && core.matchesAny(f, [t]))) out.add(f);
+    }
+  }
+  return out;
+}
+
+function inputHash(ctx, globs, cmd = null) {
+  if (!ctx.tree) return null;
+  const ignore = ['.jdi/**', ...(ctx.nonProduct || [])];
+  const named = cmd ? namedFiles(ctx.tree, cmd) : new Set();
+  const lines = [...ctx.tree]
+    .filter(([f]) => named.has(f) || (!core.matchesAny(f, ignore) && (!globs?.length || core.matchesAny(f, globs))))
+    .map(([f, id]) => `${id} ${f}`)
+    .sort(core.compareStr);
+  return sha(lines.join('\n'));
+}
+
+// Input hash outside a gates run (evidence records, #70): the product files,
+// or `globs` when given, plus every file `cmd` names.
+function productHash(root, { globs = null, cmd = null } = {}) {
+  const config = core.loadConfig(root);
+  return inputHash({ tree: treeFingerprint(root), nonProduct: config.loop?.non_product_globs || [] }, globs, cmd);
+}
+
+function stackInputs(stack, gate) {
+  const inp = stack?.inputs;
+  if (Array.isArray(inp)) return inp;
+  return (inp && (inp[gate] || inp['*'])) || null;
+}
+
+// The reuse key of one command, or null when reuse is off or impossible.
+function reuseKey(ctx, cmd, gate, extra = '') {
+  if (!ctx.reuse) return null;
+  const inputs = inputHash(ctx, stackInputs(ctx.stack, gate), gate === 'dod' ? cmd : null);
+  if (!inputs) return null;
+  return sha(JSON.stringify({ cmd, gate, stack: ctx.stackHash, inputs, toolchain: ctx.toolchain, extra })).slice(0, 24);
+}
+
+const reusePath = (ctx, key) => path.join(ctx.root, core.JDI_DIR, 'cache', 'gates', '_reuse', `${key}.json`);
+
+function reused(ctx, key) {
+  if (!key || ctx.fresh) return null;
+  const hit = core.readJson(reusePath(ctx, key), null);
+  if (hit?.result?.status !== 'PASS') return null;
+  return { ...hit.result, duration_s: 0, reused: { key: key.slice(0, 12), from_head: hit.head, at: hit.at } };
+}
+
+function remember(ctx, key, result) {
+  if (!key || result.status !== 'PASS') return;
+  core.writeFileEnsured(reusePath(ctx, key), JSON.stringify({ head: ctx.head, at: new Date().toISOString(), result }) + '\n', ctx.root);
+}
+
+// The toolchain part of the key: what `cache_key_cmd` prints (e.g.
+// `rustc -V; node -v`). It runs once per `gates run`.
+function toolchainOf(ctx, stack) {
+  if (!stack?.cache_key_cmd) return '';
+  const log = path.join(ctx.gateDir, ctx.label, 'cache-key.log');
+  return sha(run(stack.cache_key_cmd, { root: ctx.root, env: ctx.env, shell: ctx.shell, timeoutMin: 2, log }).out);
+}
+
 function execGate(ctx, name, cmd) {
+  const key = reuseKey(ctx, cmd, name);
+  const hit = reused(ctx, key);
+  if (hit) return hit;
   const log = path.join(ctx.gateDir, ctx.label, `${name}.log`);
   const r = run(cmd, { root: ctx.root, env: ctx.env, shell: ctx.shell, timeoutMin: ctx.timeoutMin, log });
   const status = r.exit === 0 ? 'PASS' : 'FAIL';
   const res = { gate: name, status, exit: r.exit, duration_s: r.duration, log: path.relative(ctx.root, log).split(path.sep).join('/') };
   if (status === 'FAIL') res.excerpt = (r.error ? r.error + '\n' : '') + tail(r.out);
+  remember(ctx, key, res);
   return res;
 }
 
@@ -164,11 +277,26 @@ function dodResult(ctx, it, evidence) {
   if (DOD_STATIC[it.type]) return { ...base, status: DOD_STATIC[it.type] };
   if (!it.verify) return { ...base, status: 'INCONCLUSIVE', reason: 'no Verify' };
   if (it.evidence || isEvidenceOnly(it.verify.command, evidence)) return { ...base, status: 'EVIDENCE', reason: 'not executed here (external effect) — judge by the recorded evidence' };
+  const key = reuseKey(ctx, it.verify.command, 'dod', dod.rowHash(it, ctx.root));
+  const hit = reused(ctx, key);
+  if (hit) return { ...hit, ...base };
   const log = path.join(ctx.gateDir, 'dod', `${it.source.toLowerCase()}-${it.id}.log`);
   const r = run(it.verify.command, { root: ctx.root, env: ctx.env, shell: ctx.shell, timeoutMin: ctx.timeoutMin, log });
   const res = { ...base, status: r.exit === 0 ? 'PASS' : 'FAIL', exit: r.exit, duration_s: r.duration, log: path.relative(ctx.root, log).split(path.sep).join('/') };
   if (res.status === 'FAIL') res.excerpt = (r.error ? r.error + '\n' : '') + tail(r.out, 12);
+  remember(ctx, key, res);
   return res;
+}
+
+// EVIDENCE rows get the freshness of their recorded runs (#70): the reviewer
+// sees "fresh" or what changed, instead of asking for the whole suite again.
+function attachEvidence(root, phase, rows) {
+  if (!rows.some((r) => r.status === 'EVIDENCE')) return;
+  const ev = require('./evidence').status(root, phase);
+  for (const r of rows.filter((x) => x.status === 'EVIDENCE')) {
+    const e = ev.find((x) => x.source === r.source && x.row === (r.source === 'PROJECT' ? `project-${r.id}` : String(r.id)));
+    if (e) r.evidence = { iteration: e.iteration.status, ship: e.ship.status, ...(e.ship.reason ? { reason: e.ship.reason } : {}) };
+  }
 }
 
 function runGates(phase, opts, root = process.cwd()) {
@@ -180,13 +308,23 @@ function runGates(phase, opts, root = process.cwd()) {
   if (!opts.stack && !wantDod) throw new core.JdiError('--stack <name> is required (or --only dod for the Definition of Done)', 1);
   const gateDir = path.join(root, core.JDI_DIR, 'cache', 'gates', phase.slug);
   const label = stack ? stack.id : 'dod';
-  const ctx = { root, gateDir, label, env: envFor(stack ? [stack] : stacks), shell: shellFor(stack || stacks[0]), timeoutMin: (stack || stacks[0])?.timeout_min || 30 };
+  const config = core.loadConfig(root);
   const head = core.git(['rev-parse', 'HEAD'], root).stdout || null;
+  const ctx = { root, gateDir, label, head, stack, env: envFor(stack ? [stack] : stacks), shell: shellFor(stack || stacks[0]), timeoutMin: (stack || stacks[0])?.timeout_min || 30 };
+  ctx.reuse = config.economy?.gate_cache !== false && Boolean(head);
+  ctx.fresh = Boolean(opts.fresh);
+  if (ctx.reuse) {
+    ctx.tree = treeFingerprint(root);
+    ctx.nonProduct = config.loop?.non_product_globs || [];
+    ctx.stackHash = sha(JSON.stringify(stack || stacks));
+    ctx.toolchain = toolchainOf(ctx, stack);
+  }
   const report = { phase: phase.slug, stack: label, head, started: new Date().toISOString(), base: opts.changedSince || null, results: [], dod: [] };
   if (stack) report.results = skippedResults(root, stack, opts, only) || stackResults(ctx, stack, only);
   if (wantDod) {
     const evidence = [...new Set(stacks.flatMap((s) => s.evidence_only || []))];
     report.dod = dodItems(root, phase).map((it) => dodResult(ctx, it, evidence));
+    attachEvidence(root, phase, report.dod);
   }
   const failed = report.results.some((x) => x.status === 'FAIL') || report.dod.some((x) => x.status === 'FAIL');
   report.finished = new Date().toISOString();
@@ -197,18 +335,24 @@ function runGates(phase, opts, root = process.cwd()) {
   return report;
 }
 
+// `reused <key> from <head>, <when>` — never to be read as re-measured.
+function reusedNote(r) {
+  return r.reused ? ` (reused ${r.reused.key}: passed on ${String(r.reused.from_head).slice(0, 10)} at ${r.reused.at}, same inputs)` : '';
+}
+
 function resultLine(r) {
-  const took = r.duration_s === undefined ? '' : ` ${r.duration_s}s`;
+  const took = r.duration_s === undefined || r.reused ? '' : ` ${r.duration_s}s`;
   const why = r.reason ? ` (${r.reason})` : '';
-  return `  ${r.gate.padEnd(9)} ${r.status}${took}${why}`;
+  return `  ${r.gate.padEnd(9)} ${r.status}${took}${why}${reusedNote(r)}`;
 }
 
 function dodLines(dodRows) {
   if (!dodRows.length) return [];
   const c = (s) => dodRows.filter((d) => d.status === s).length;
   return [
-    `  dod       PASS ${c('PASS')} · FAIL ${c('FAIL')} · EVIDENCE ${c('EVIDENCE')} · MANUAL ${c('MANUAL_REQUIRED')} · INCONCLUSIVE ${c('INCONCLUSIVE')}`,
+    `  dod       PASS ${c('PASS')} (reused ${dodRows.filter((d) => d.reused).length}) · FAIL ${c('FAIL')} · EVIDENCE ${c('EVIDENCE')} · MANUAL ${c('MANUAL_REQUIRED')} · INCONCLUSIVE ${c('INCONCLUSIVE')}`,
     ...dodRows.filter((x) => x.status === 'FAIL').map((d) => `    FAIL ${d.source} ${d.id}: ${d.log}`),
+    ...dodRows.filter((x) => x.evidence).map((d) => `    EVIDENCE ${d.source} ${d.id}: iteration ${d.evidence.iteration} · ship ${d.evidence.ship}${d.evidence.reason ? ` (${d.evidence.reason})` : ''}`),
   ];
 }
 
@@ -225,6 +369,7 @@ function parseArgs(rest) {
     else if (a === '--only') opts.only = rest[++i].split(',').map((x) => x.trim());
     else if (a === '--changed-since') opts.changedSince = rest[++i];
     else if (a === '--json') opts.json = true;
+    else if (a === '--fresh') opts.fresh = true;
     else if (a === '--failures') opts.failures = true;
     else if (a.startsWith('--')) throw new core.JdiError(`unknown flag: ${a}`, 1);
     else id = a;
@@ -272,4 +417,4 @@ function main(argv) {
   return report.status === 'PASS' ? 0 : 1;
 }
 
-module.exports = { main, runGates, loadStacks, findStack, summary, run, envFor, shellFor, tail, dodItems, changedInScope };
+module.exports = { main, runGates, loadStacks, findStack, summary, run, envFor, shellFor, tail, dodItems, changedInScope, treeFingerprint, productHash };

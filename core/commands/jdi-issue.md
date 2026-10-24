@@ -95,6 +95,12 @@ Resolve the card content through the first rung that works:
 3. **Pasted text**: anything else → the argument IS the card (first line =
    title). This rung always works — no provider dependency.
 
+More than one card in the argument (several URLs/ids, or pasted text with
+more than one card): they become SEQUENTIAL phases, never one phase — register
+each (Step 3, `--after` the previous one) and run the chain for the FIRST
+only; the others wait in the roadmap and the final report names them. Two
+cards on the same module in one phase is how a phase took 6 h (#72).
+
 If rungs 1-2 both fail for a URL (no gh, no MCP): print ONE instruction —
 "paste the card text: /jdi-issue \"<title>\n<body>\"" — and exit 0. This is
 the only stop before the chain starts.
@@ -140,6 +146,10 @@ critic=on   (Step 4.6 preflight runs: hollow proofs are fixed before any code)
   surfaced in the PR body (Step 7). No human means no MANUAL_REQUIRED rows —
   and no silent waivers either: deferred items stay visible to the PR reviewer.
 - Research caps apply as always (context7/web, max 2 lookups).
+- `/jdi-discuss` Step 4.7 (`size --intake`) says `split`: split without
+  asking. This session ships part 1; the PR body lists the parts under
+  `## Split` (from SPLIT.md), and HANDOFF.md names the next part's
+  `/jdi-issue` for a fresh session — one phase, one session.
 
 ### Step 5: Plan + loop (autonomous variant, fuses intact)
 
@@ -169,6 +179,9 @@ critic=on   (Step 4.6 preflight runs: hollow proofs are fixed before any code)
 Interactive mode asks "ship anyway?" on APPROVED_WITH_WARNINGS. Autonomous
 mode does better: dispatch ONE extra doer pass targeting the warnings
 (`mode=fix_blockers` semantics, warnings as the work list), then ONE re-verify.
+Skip it when the loop's last fix round already had these warnings in its work
+list (`review blockers` carries blockers AND warnings) and they persisted: a
+second pass on the same list is the round the loop just spent (#71).
 - Warnings cleared → proceed as APPROVED.
 - Warnings persist → proceed, but every remaining warning is listed in the PR
   body under `## Shipped with warnings` (the PR reviewer sees exactly what the
@@ -179,7 +192,7 @@ mode does better: dispatch ONE extra doer pass targeting the warnings
 
 | Outcome | Action |
 |---|---|
-| APPROVED (incl. warnings cleared in Step 6) | follow `/jdi-ship $SLUG` — with `--pr` unless `--no-pr` |
+| APPROVED (incl. warnings cleared in Step 6) | follow `/jdi-ship $SLUG` — with `--pr` unless `--no-pr`; its evidence step runs the full `Verify (evidence):` rows that are not fresh, once, and records them (never `--allow-stale-evidence`) |
 | APPROVED_WITH_WARNINGS (persisting) | ship `--pr`; PR body gains `## Shipped with warnings` |
 | Loop `killed` / `escalated` | NO ship. Full stop report with LOOP.md state |
 

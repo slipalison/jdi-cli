@@ -6,13 +6,15 @@
 //                     [--before <slug> | --after <slug>] [--unique]   (layout v3)
 //   --unique: a taken slug gets -2, -3 … instead of exit 3 (unattended intake)
 //   jdi-cli ship <phase> [--learnings-file <f>] [--allow-stale "<reason>"]
+//                [--allow-stale-evidence "<reason>"]
 //   jdi-cli phases archive [--dry-run] [--keep N] [--rewrite-refs]
 //
 // add-phase stamps `created_with: <version>` in the roadmap entry — the budget
 // rules of 0.17+ apply only to phases created from then on.
 // ship refuses BLOCKED / pending-manual phases and a stale review (product
 // files changed after the verify commit; exit 4 — `--allow-stale` records the
-// reason in SHIPPED.md), writes SHIPPED.md (learnings:
+// reason in SHIPPED.md), evidence rows without a fresh full run (phases
+// created with 0.19+; exit 5 — `--allow-stale-evidence`), writes SHIPPED.md (learnings:
 // at most 5 one-line bullets, from the file the command's model wrote) and
 // updates the advisory STATE.md. It prints JSON with the paths to commit.
 //
@@ -225,17 +227,33 @@ function freshness(root, phase, allowStale) {
   return `stale_review: ${fresh.files.length} product file(s) changed after ${fresh.since.slice(0, 10)} — ${String(allowStale).replaceAll(/\s+/g, ' ')}`;
 }
 
-function ship(root, phase, { learningsFile, allowStale = null } = {}) {
+// Evidence rows need a fresh ship-scope record (`jdi-cli evidence record`,
+// #70) — only on phases created with 0.19+, which were discussed knowing it.
+function evidenceGate(root, phase, allowStaleEvidence) {
+  const budgets = require('./budgets');
+  const created = budgets.createdWith(root, phase.slug);
+  if (!created || !budgets.semverGte(created, '0.19.0')) return null;
+  const problems = require('./evidence').shipProblems(root, phase);
+  if (!problems.length) return null;
+  if (!allowStaleEvidence) {
+    throw new core.JdiError(`${problems.length} evidence row(s) without a fresh full run: ${problems.join('; ')} — run the evidence and \`jdi-cli evidence record ${phase.slug} --row N --scope ship\`, or ship with --allow-stale-evidence "<reason>"`, 5);
+  }
+  return `stale_evidence: ${problems.join('; ')} — ${String(allowStaleEvidence).replaceAll(/\s+/g, ' ')}`;
+}
+
+function ship(root, phase, { learningsFile, allowStale = null, allowStaleEvidence = null } = {}) {
   const shipped = path.join(phase.absDir, 'SHIPPED.md');
   if (fs.existsSync(shipped)) return { status: 'already-shipped', phase: phase.slug };
   const reviewFile = path.join(phase.absDir, 'REVIEW.md');
   if (!fs.existsSync(reviewFile)) throw new core.JdiError(`REVIEW.md missing — /jdi-verify ${phase.slug}`, 1);
   const verdict = shippableVerdict(phase, fs.readFileSync(reviewFile, 'utf8'));
   const staleNote = freshness(root, phase, allowStale);
+  const evidenceNote = evidenceGate(root, phase, allowStaleEvidence);
   const learnings = readLearnings(learningsFile);
   const by = core.git(['config', 'user.name'], root).stdout || 'unknown';
   const body = [`shipped_at: ${new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')}`, `verdict: ${verdict}`, `by: ${by}`];
   if (staleNote) body.push(staleNote);
+  if (evidenceNote) body.push(evidenceNote);
   if (learnings.length) body.push('', '## Learnings', ...learnings);
   fs.writeFileSync(shipped, body.join('\n') + '\n');
   const list = core.listPhases(root);
@@ -250,7 +268,7 @@ function main(cmd, argv) {
     const i = argv.indexOf(n);
     return i === -1 ? undefined : argv[i + 1];
   };
-  const valued = new Set(['--slug', '--goal', '--reason', '--before', '--after', '--learnings-file', '--allow-stale', '--keep']);
+  const valued = new Set(['--slug', '--goal', '--reason', '--before', '--after', '--learnings-file', '--allow-stale', '--allow-stale-evidence', '--keep']);
   const first = argv.find((a, i) => !a.startsWith('--') && !valued.has(argv[i - 1]));
   let out;
   if (cmd === 'add-phase') {
@@ -259,7 +277,7 @@ function main(cmd, argv) {
   } else if (cmd === 'ship') {
     // --no-archive is accepted and ignored: ship no longer archives (#73).
     if (!first) throw new core.JdiError('usage: jdi ship <phase> [--learnings-file f] [--allow-stale "<reason>"]', 1);
-    out = ship(root, core.resolvePhase(first, root), { learningsFile: opt('--learnings-file'), allowStale: opt('--allow-stale') || null });
+    out = ship(root, core.resolvePhase(first, root), { learningsFile: opt('--learnings-file'), allowStale: opt('--allow-stale') || null, allowStaleEvidence: opt('--allow-stale-evidence') || null });
   } else if (cmd === 'phases') {
     if (first !== 'archive') throw new core.JdiError('usage: jdi phases archive [--dry-run] [--keep N] [--rewrite-refs]', 1);
     out = archive(root, { dryRun: argv.includes('--dry-run'), keep: opt('--keep'), rewrite: argv.includes('--rewrite-refs') });
