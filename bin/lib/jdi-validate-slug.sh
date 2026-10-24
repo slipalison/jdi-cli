@@ -65,13 +65,9 @@ if [[ "$CHECK_UNIQUE" == true ]]; then
     exit 3
   fi
 
-  if [[ ! -d .jdi/phases ]]; then
-    # No phases yet — definitely unique
-    echo "$SLUG"
-    exit 0
-  fi
-
-  # Folder collision: any folder whose canonical slug equals $SLUG
+  # Folder collision: any folder whose canonical slug equals $SLUG. No
+  # .jdi/phases yet is not "unique" by itself: a legacy ROADMAP.md may already
+  # list the slug (checked below, as the .ps1 twin does — #48).
   COLLISIONS=""
   for dir in .jdi/phases/*/; do
     [[ -d "$dir" ]] || continue

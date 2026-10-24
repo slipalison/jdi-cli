@@ -148,7 +148,7 @@ Schema v2 (default in new projects) uses the **slug** as the canonical phase ide
 
 - **STATE.md** carries `schema_version: 2` + `current_phase_slug: <slug>`. The `current_phase` (int) field is kept as a display mirror.
 - **Folder** = `.jdi/phases/<slug>/` (v2) or `.jdi/phases/NN-<slug>/` (v1 legacy, preserved).
-- **Resolver** (`npx -y jdi-cli resolve-phase`, backed by `bin/lib/jdi-resolve-phase.{sh,ps1}`) normalizes any input (int OR slug) into a resolved path. Every command MD calls the resolver in Step 2 — a cross-runtime invariant.
+- **Resolver** (`npx -y jdi-cli resolve-phase`, Node: `resolvePhase` in `bin/lib/jdi-core.js` — one implementation for every platform) normalizes any input (int OR slug) into a resolved path. Every command MD calls the resolver in Step 2 — a cross-runtime invariant.
 - **Validator** (`npx -y jdi-cli validate-slug`) enforces shape + reserved words + uniqueness before `/jdi-add-phase` creates a phase.
 - **Triggers (Antigravity):** `/jdi-do auth-flow` and `/jdi-do 2` both fire the same skill — prose triggers accept both forms.
 - **Slash commands (Claude/Copilot/OpenCode):** `argument_hint: "<slug|position>"`.
@@ -198,12 +198,14 @@ jdi/
 |   |   +-- frontend-rules/      +-- frontend-validator/    +-- hexagonal/
 |   |   +-- kiss/  +-- onion/  +-- solid/  +-- the-method/
 |   |   +-- vertical-slice/  +-- yagni/
-|   +-- templates/                 5 templates
+|   +-- templates/                 7 templates
 |       +-- agent.md              base for a generic agent
 |       +-- skill.md              base for a skill
 |       +-- doer-specialist.md    used by architect specialist mode
 |       +-- reviewer-specialist.md idem
 |       +-- dod-schema.md         canonical Definition-of-Done spec
+|       +-- instructions.md       the managed block of CLAUDE.md / AGENTS.md / copilot-instructions.md
+|       +-- lang-directive.pt-BR.md  injected by --lang pt-BR
 |
 +-- runtimes/                      generated, never edit by hand
 |   +-- claude/
@@ -215,6 +217,8 @@ jdi/
 |   +-- copilot/
 |   |   +-- agents/                .github/agents/<n>.agent.md
 |   |   +-- prompts/               .github/prompts/<n>.prompt.md
+|   |   +-- skills/                .github/skills/<n>/SKILL.md
+|   |   +-- workflows/             jdi-artifacts-gate.yml (merge-point gate)
 |   |   +-- copilot-instructions.md
 |   +-- antigravity/
 |   |   +-- skills/                each agent/command becomes <name>/SKILL.md
@@ -225,17 +229,21 @@ jdi/
 |   |   +-- skills/                .opencode/skills/<n>/SKILL.md
 |   |   +-- AGENTS.md
 |   |   +-- opencode.example.jsonc
+|   +-- junie/
+|   |   +-- agents/                .junie/agents/<n>.md
+|   |   +-- skills/                .junie/skills/<n>/SKILL.md
+|   |   +-- AGENTS.md
 |
 +-- bin/
 |   +-- jdi.js                     all-in-one CLI (build/install/doctor/update/uninstall + helper subcommands)
 |   +-- jdi-build.sh / .ps1        builds runtimes/ from core/
 |   +-- jdi-install.sh / .ps1      installs into ~/.claude, .github/, ~/.gemini/, .opencode/ (+ --githooks opt-in)
-|   +-- jdi-doctor.sh / .ps1       9-section diagnostic
+|   +-- jdi-doctor.sh / .ps1       sectioned diagnostic (dependencies, runtimes, adapters, token economy, ...)
 |   +-- jdi-update.sh / .ps1       refreshes runtime files in an installed project
 |   +-- jdi-uninstall.sh / .ps1    removes JDI from a project (keeps .jdi/ unless --purge)
 |   +-- jdi-install-caveman.sh / .ps1     optional: caveman plugin for Claude Code
 |   +-- jdi-install-playwright.sh / .ps1  optional: Playwright + MCP config for UI validation
-|   +-- lib/                       helper implementations (resolve-phase, validate-slug, truncate, monitor × .sh/.ps1 + ui.js)
+|   +-- lib/                       helpers: Node (*.js — one implementation for every platform: jdi-core, gates, dod, loop, ...) and .sh/.ps1 twins (validate-slug, validate-phase, render, migrate-layout, sync-specialists, truncate, monitor, agent-emit)
 |   +-- git-hooks/                 no-op pre-commit/post-commit shipped for --githooks opt-in
 |
 +-- README.md
@@ -336,7 +344,7 @@ Real implementation: **pure bash — frontmatter-bounded inline parser, no yq/jq
 
 ## Install script (`bin/jdi-install.{sh,ps1}`)
 
-> **Illustrative, simplified.** The real script covers all 4 runtimes (including OpenCode), copies skills (`runtimes/claude/skills/` → `.claude/skills/`, reused by OpenCode), generates `opencode.jsonc` from the example, and supports the `--githooks` opt-in that copies the no-op hooks from `bin/git-hooks/` to the project's `.githooks/`.
+> **Illustrative, simplified.** The real script covers all 5 runtimes (including OpenCode and Junie), copies skills (`runtimes/claude/skills/` → `.claude/skills/`, reused by OpenCode), generates `opencode.jsonc` from the example, and supports the `--githooks` opt-in that copies the no-op hooks from `bin/git-hooks/` to the project's `.githooks/`.
 
 ```bash
 #!/usr/bin/env bash
@@ -467,7 +475,7 @@ cd jdi
 
 Or via the npm package, no clone needed: `npx -y jdi-cli install <runtime> [--scope user|project] [--githooks]`.
 
-For new projects: `jdi install all --scope project` leaves all 4 runtimes ready in the project. Add `--githooks` to also copy the no-op git hooks to `.githooks/` (opt-in).
+For new projects: `jdi install all --scope project` leaves all 5 runtimes ready in the project. Add `--githooks` to also copy the no-op git hooks to `.githooks/` (opt-in).
 
 ### `.sh` / `.ps1` equivalence
 

@@ -2,7 +2,9 @@
 # jdi-truncate.sh — markdown-aware truncation pra context budget
 #
 # Uso:
-#   jdi-truncate.sh <path> [char_budget]
+#   jdi-truncate.sh <path> [budget]
+#
+# The budget is in BYTES, on both twins (#48).
 #
 # Estrategia:
 #   - Preserva YAML frontmatter inteiro
@@ -19,7 +21,7 @@ PATH_IN="${1:-}"
 BUDGET="${2:-8192}"
 
 if [[ -z "$PATH_IN" ]]; then
-  echo "uso: jdi-truncate.sh <path> [char_budget]" >&2
+  echo "uso: jdi-truncate.sh <path> [budget_bytes]" >&2
   exit 1
 fi
 
@@ -60,8 +62,9 @@ BEGIN {
     next
   }
 
-  # Heading — sempre preserva
-  if (line ~ /^#{1,6}[[:space:]]/) {
+  # Heading — sempre preserva. No {1,6} interval: older mawk (Debian 11,
+  # Ubuntu 22.04) and old macOS awk do not support it (#59).
+  if (line ~ /^#+[[:space:]]/ && match(line, /^#+/) && RLENGTH <= 6) {
     if (omitted > 0) {
       print "[... " omitted " lines omitted]"
       omitted = 0

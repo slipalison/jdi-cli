@@ -494,11 +494,15 @@ tells the agent to re-read them makes every task pay for them twice.
 
 ```bash
 # bash
+# a .gitignore without a final newline would glue the next pattern onto its last line
+if [ -s .gitignore ] && [ -n "$(tail -c 1 .gitignore)" ]; then echo >> .gitignore; fi
 grep -q '^\.jdi/cache/' .gitignore 2>/dev/null || echo '.jdi/cache/' >> .gitignore
 ```
 
 ```powershell
 # PowerShell
+# a .gitignore without a final newline would glue the pattern onto its last line
+if ((Test-Path .gitignore) -and ((Get-Content -Raw .gitignore) -match '[^\n]\z')) { Add-Content .gitignore '' }
 if (-not (Test-Path .gitignore) -or -not (Select-String -Path .gitignore -Pattern '^\.jdi/cache/' -Quiet)) {
   Add-Content .gitignore '.jdi/cache/'
 }
@@ -800,7 +804,7 @@ Compare proposal against anti-patterns (see CREATE.md):
 - Specialist per feature ("auth") -> redirect to a phase
 - Skill > 500 estimated lines -> suggest agent
 - Agent without decision loop -> suggest skill
-- Soft cap: > 15 agents or > 25 skills -> warn, do not block
+- Soft cap: > 8 agents or > 25 skills -> warn, do not block
 - Name collides with existing agent/skill -> require renaming
 
 ### Step 5: Draft plan
@@ -953,7 +957,7 @@ git commit -m "feat(jdi-create): add {type} jdi-{name}"
 - Never skip integration points — orphan agent is useless
 - Never skip build+install — without it, runtime doesn't see the new agent
 - Never commit without user approving the plan
-- Soft cap (15 agents / 25 skills): warn, do not block
+- Soft cap (8 agents / 25 skills): warn, do not block
 </rules>
 
 <fallbacks>

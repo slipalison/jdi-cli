@@ -65,7 +65,7 @@ jobs:
           node-version: "22"
           # Registry URL eh OBRIGATORIO aqui — define onde o NPM_TOKEN injeta
           registry-url: "https://registry.npmjs.org"
-          # cache: 'npm'  # JDI nao tem package-lock.json (zero deps)
+          # sem cache: zero dependencias, nada a baixar
 
       - name: Upgrade npm CLI (staged publishing / trusted publishing)
         shell: bash
@@ -102,6 +102,7 @@ jobs:
           test -d runtimes/copilot/agents
           test -d runtimes/antigravity/skills
           test -d runtimes/opencode/agents
+          test -d runtimes/junie/agents
           echo "runtimes/ presentes — usando o que esta commitado"
 
       - name: Verify shell scripts carry the exec bit

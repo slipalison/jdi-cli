@@ -148,7 +148,7 @@ install_view() {
     fi
     return 0
   fi
-  if [[ -f "$target" ]] && [[ "$(head -n 1 "$target")" != "$BANNER" ]]; then
+  if [[ -f "$target" ]] && [[ "$(head -n 1 "$target" | tr -d '\r')" != "$BANNER" ]]; then
     say "[skip] $target exists without the GENERATED banner — legacy file untouched (run migrate-layout first)"
     WARNINGS=$((WARNINGS + 1))
     return 0

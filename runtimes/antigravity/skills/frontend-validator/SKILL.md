@@ -46,6 +46,8 @@ test -f .jdi/PROJECT.md || { echo "PROJECT.md missing"; exit 1; }
 mkdir -p .jdi/cache/screenshots
 
 # .gitignore guarantee
+# a .gitignore without a final newline would glue the next pattern onto its last line
+if [ -s .gitignore ] && [ -n "$(tail -c 1 .gitignore)" ]; then echo >> .gitignore; fi
 grep -q '^\.jdi/cache/' .gitignore 2>/dev/null || echo '.jdi/cache/' >> .gitignore
 ```
 
@@ -56,6 +58,8 @@ if (-not (Test-Path .jdi/PROJECT.md)) { Write-Error "PROJECT.md missing"; exit 1
 
 New-Item -ItemType Directory -Force -Path .jdi/cache/screenshots | Out-Null
 
+# a .gitignore without a final newline would glue the pattern onto its last line
+if ((Test-Path .gitignore) -and ((Get-Content -Raw .gitignore) -match '[^\n]\z')) { Add-Content .gitignore '' }
 if (-not (Test-Path .gitignore) -or -not (Select-String -Path .gitignore -Pattern '^\.jdi/cache/' -Quiet)) {
   Add-Content .gitignore '.jdi/cache/'
 }
@@ -502,13 +506,6 @@ NEVER commit `.jdi/cache/`.
 - Running parallel (workers > 1) - local dev server doesn't scale, and race conditions confuse findings
 - Using `--headed` in CI - always headless
 - Trusting Playwright exit code - findings come from afterAll, even with test failure
-
-## References
-
-- `references/playwright-setup.md` - Detailed install per package manager + troubleshoot
-- `references/dev-server-detection.md` - Heuristics for detecting ready (curl, wait-on, polling)
-- `references/axe-rules.md` - Mapping of axe rule IDs -> WCAG -> severity
-- `references/auth-flows.md` - Roadmap for authenticated flows (future)
 
 ## Examples
 

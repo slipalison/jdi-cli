@@ -17,7 +17,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROJECT_DIR="$(pwd)"
-USER_HOME="${HOME:-$HOME}"
+USER_HOME="${HOME:-${USERPROFILE:-}}"
 
 FORCE_SPECIALISTS=0
 SKIP_SPECIALISTS=0
@@ -33,7 +33,7 @@ for arg in "$@"; do
 done
 
 # Le versao nova do package.json shipado
-NEW_VERSION=$(grep -oE '"version":\s*"[^"]+"' "$ROOT/package.json" | head -1 | sed 's/.*"\([^"]*\)"/\1/')
+NEW_VERSION=$(grep -oE '"version":[[:space:]]*"[^"]+"' "$ROOT/package.json" | head -1 | sed 's/.*"\([^"]*\)"/\1/')
 
 # Idioma: JDI_LANG so chega setado quando o usuario passou --lang em
 # `jdi update` (ver bin/jdi.js). Sem override explicito, cai no idioma

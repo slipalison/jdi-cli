@@ -112,7 +112,7 @@ override_block() {
     r && $0 == "    " sub_key ":" { b = 1; next }
     b && /^    [a-z_]+:/ { b = 0 }
     b && /^[[:space:]]*-[[:space:]]+/ { sub(/^[[:space:]]*/, "  "); print; next }
-    b && /^      / { sub(/^[[:space:]]{6}/, "  "); print }
+    b && /^      / { sub(/^      /, "  "); print }
   ' "$file"
   return $?
 }
@@ -214,7 +214,7 @@ emit_junie_content() {
   if [[ -n "$tools" ]]; then
     tools_filtered=$(echo "$tools" | tr -d '[]' | tr ',' '\n' \
       | sed 's/^ *//; s/ *$//' \
-      | grep -E '^(Read|Bash|Glob|Grep|Write|Edit|WebSearch|AskUserQuestion)$' \
+      | { grep -E '^(Read|Bash|Glob|Grep|Write|Edit|WebSearch|AskUserQuestion)$' || true; } \
       | tr '\n' ',' | sed 's/,$//; s/,/, /g')
   fi
 

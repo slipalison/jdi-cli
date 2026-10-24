@@ -60,7 +60,8 @@ fi
 if [[ -d "$TARGET" ]]; then
   if [[ "$FORCE" != "1" ]]; then
     echo "  Target exists."
-    read -p "  Overwrite? (y/N) " ans
+    # Closed stdin (CI, an agent) = No, not a silent `set -e` exit (#49).
+    read -r -p "  Overwrite? (y/N) " ans || ans=""
     case "$ans" in
       [yY]*) ;;
       *) echo "  Skipped."; exit 0 ;;

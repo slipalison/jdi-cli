@@ -3,6 +3,8 @@
 # Uso:
 #   pwsh -File jdi-truncate.ps1 -Path <path> [-Budget 8192]
 #
+# The budget is in BYTES (UTF-8), the same unit as the .sh (#48).
+#
 # Estrategia:
 #   - Preserva YAML frontmatter inteiro
 #   - Preserva TODAS as linhas de heading (#, ##, ...)
@@ -29,12 +31,15 @@ if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
 $content = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
 if ($null -eq $content) { $content = "" }
 
-if ($content.Length -le $Budget) {
-  Write-Output $content
+if ([System.Text.Encoding]::UTF8.GetByteCount($content) -le $Budget) {
+  # As is: Write-Output would add a newline the .sh (cat) does not.
+  [Console]::Out.Write($content)
   exit 0
 }
 
-$lines = $content -split "`r?`n"
+# Drop the final newline first, or the split yields a phantom empty last
+# line that the .sh (awk) never sees.
+$lines = ($content -replace "`r?`n\z", '') -split "`r?`n"
 $inFrontmatter = $false
 $paragraphKept = $false
 $omitted = 0

@@ -92,7 +92,11 @@ run() {
 ignore_add() {
   local pattern="$1"
   if grep -qxF "$pattern" .gitignore 2>/dev/null; then return 0; fi
-  if [[ "$DRY" -eq 1 ]]; then act "would: gitignore $pattern"; else echo "$pattern" >> .gitignore; fi
+  if [[ "$DRY" -eq 1 ]]; then act "would: gitignore $pattern"; return 0; fi
+  # A .gitignore without a trailing newline would glue the pattern onto its
+  # last line (`.DS_Store.jdi/ROADMAP.md`) and leave the view tracked (#44).
+  if [[ -s .gitignore && -n "$(tail -c 1 .gitignore)" ]]; then echo >> .gitignore; fi
+  echo "$pattern" >> .gitignore
   return 0
 }
 

@@ -689,6 +689,8 @@ Deletes `.jdi/` after confirmation. Recreates from scratch. **CAUTION** — lose
 
 Quick reference of every flag per subcommand:
 
+Every subcommand also takes `--no-color` (also honors `NO_COLOR`), `--lang <en|pt-BR>`, `-h`/`--help` and `-V`/`--version`, before or after the subcommand. A flag a subcommand does not know is an error (exit 1) before anything runs — `--dryrun` never turns into a real run. `JDI_ANIMATE=off` skips the banner animation (it is also skipped without a TTY, with `CI` set or with no color).
+
 ### `install <runtime>` — install JDI into the project
 
 | Flag | Values | Default | Purpose |
@@ -750,6 +752,7 @@ Update does NOT refresh Playwright dep, MCP configs, or Caveman plugin. Re-run t
 
 | Flag | Values | Default | Purpose |
 |---|---|---|---|
+| `--runtime` | runtime name | all | Same as the positional; without either, every runtime is removed |
 | `--scope` | `user` \| `project` \| `both` | `both` | Limit removal scope |
 | `--dry-run` | flag | false | Preview without applying |
 | `--yes` | flag | false | Skip all interactive prompts |
@@ -763,7 +766,7 @@ Update does NOT refresh Playwright dep, MCP configs, or Caveman plugin. Re-run t
 
 ### `build` — regenerate runtimes/ from core/ (contributors only)
 
-No flags. Used inside the JDI source repo after editing `core/`.
+`build [runtime]` — no flags; without a runtime it rebuilds all 5. Used inside the JDI source repo after editing `core/`.
 
 ### Plumbing subcommands (used by the slash commands)
 
@@ -1166,7 +1169,7 @@ Pull requests: describe the problem (who needs this? how many users?) before add
 
 ## Publishing to npm (maintainers)
 
-Create a **GitHub Release** with tag `vX.Y.Z` — the workflow (`.github/workflows/npm-publish.yml`) fires on `release: published`, verifies the tag matches `package.json`, and runs `npm publish --provenance --access public`:
+Push a tag `vX.Y.Z` — the workflow (`.github/workflows/npm-publish.yml`) fires on the tag push (`gh release create` below creates and pushes the tag, so the Release and the publish go together; a bare `git push origin vX.Y.Z` publishes without release notes), verifies the tag matches `package.json`, and runs `npm publish --provenance --access public`:
 
 ```bash
 # 1. Bump version (package.json + package-lock.json)
@@ -1179,7 +1182,7 @@ node bin/jdi.js build
 git checkout -b release/X.Y.Z && git add -A && git commit -m "chore(release): X.Y.Z"
 gh pr create && gh pr merge --merge
 
-# 4. Create the release (triggers the publish workflow)
+# 4. Create the release — it pushes the tag, which triggers the publish workflow
 gh release create vX.Y.Z --title "vX.Y.Z — short description" --notes "..."
 
 # 5. Watch

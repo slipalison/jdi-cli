@@ -672,6 +672,8 @@ Apaga o `.jdi/` após confirmação. Recria do zero. **CUIDADO** — você perde
 
 Referência rápida de cada flag por subcomando:
 
+Todo subcomando aceita também `--no-color` (vale também `NO_COLOR`), `--lang <en|pt-BR>`, `-h`/`--help` e `-V`/`--version`, antes ou depois do subcomando. Uma flag que o subcomando não conhece é erro (exit 1) antes de qualquer coisa rodar — `--dryrun` nunca vira uma execução de verdade. `JDI_ANIMATE=off` pula a animação do banner (ela também é pulada sem TTY, com `CI` definido ou sem cor).
+
 ### `install <runtime>` — instala o JDI no projeto
 
 | Flag | Valores | Padrão | Objetivo |
@@ -733,6 +735,7 @@ O update NÃO atualiza a dependência do Playwright, as configs de MCP nem o plu
 
 | Flag | Valores | Padrão | Objetivo |
 | --- | --- | --- | --- |
+| `--runtime` | nome do runtime | todos | O mesmo que o posicional; sem nenhum dos dois, remove todos os runtimes |
 | `--scope` | `user` \| `project` \| `both` | `both` | Limita o escopo da remoção |
 | `--dry-run` | flag | false | Prévia sem aplicar |
 | `--yes` | flag | false | Pula todos os prompts interativos |
@@ -746,7 +749,7 @@ O update NÃO atualiza a dependência do Playwright, as configs de MCP nem o plu
 
 ### `build` — regenera `runtimes/` a partir de `core/` (só para contribuidores)
 
-Sem flags. Usado dentro do repositório fonte do JDI depois de editar `core/`.
+`build [runtime]` — sem flags; sem runtime, reconstrói os 5. Usado dentro do repositório fonte do JDI depois de editar `core/`.
 
 ### Subcomandos de plumbing (usados pelos slash commands)
 
@@ -1163,7 +1166,7 @@ Pull requests: descreva o problema (quem precisa disso? quantos usuários?) ante
 
 ## Publicando no npm (mantenedores)
 
-Crie um **GitHub Release** com a tag `vX.Y.Z` — o workflow (`.github/workflows/npm-publish.yml`) dispara em `release: published`, verifica se a tag casa com o `package.json` e roda `npm publish --provenance --access public`:
+Empurre uma tag `vX.Y.Z` — o workflow (`.github/workflows/npm-publish.yml`) dispara no push da tag (o `gh release create` abaixo cria e empurra a tag, então o Release e a publicação andam juntos; um `git push origin vX.Y.Z` sozinho publica sem notas de release), verifica se a tag casa com o `package.json` e roda `npm publish --provenance --access public`:
 
 ```bash
 # 1. Suba a versão (package.json + package-lock.json)
@@ -1176,7 +1179,7 @@ node bin/jdi.js build
 git checkout -b release/X.Y.Z && git add -A && git commit -m "chore(release): X.Y.Z"
 gh pr create && gh pr merge --merge
 
-# 4. Crie o release (dispara o workflow de publicação)
+# 4. Crie o release — ele empurra a tag, que dispara o workflow de publicação
 gh release create vX.Y.Z --title "vX.Y.Z — descrição curta" --notes "..."
 
 # 5. Acompanhe

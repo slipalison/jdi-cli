@@ -33,14 +33,14 @@ if [[ -z "$PHASE_ID" ]]; then
   exit 1
 fi
 
-# Invoke via `bash <path>` (not direct exec) so this works regardless of the
-# resolver's file mode — consistent with how bin/jdi.js spawns every script,
-# and immune to a lost exec bit in the published tarball.
+# The one phase resolver is the Node one (`jdi resolve-phase`, since 0.17):
+# the old shell twins disagreed on CRLF roadmaps and empty STATE.md (#41,
+# #48). bin/jdi.js passes its own node binary in JDI_NODE.
 # `set +e` around the call: under `set -e` an assignment whose command
 # substitution fails aborts the script immediately, before we can inspect the
 # resolver's exit code.
 set +e
-RESOLVED="$(bash "$SCRIPT_DIR/jdi-resolve-phase.sh" "$PHASE_ID" 2>/dev/null)"
+RESOLVED="$("${JDI_NODE:-node}" "$SCRIPT_DIR/../jdi.js" resolve-phase "$PHASE_ID" 2>/dev/null)"
 RESOLVE_RC=$?
 set -e
 if [[ "$RESOLVE_RC" -ne 0 || -z "$RESOLVED" ]]; then

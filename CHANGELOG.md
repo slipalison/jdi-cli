@@ -5,6 +5,64 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Fixes from the review batch filed against 0.15.0 (#35-#61), checked again on
+0.18.1: what was still wrong is fixed here.
+
+### Fixed
+- **Arguments** (#35, #36, #61): each install-side command declares its flags.
+  An unknown flag, a value flag without its value or `--flag=<not a boolean>`
+  is a usage error (exit 1) before any script runs: `uninstall --purge --yes
+  --dryrun` used to delete `.jdi/` for real. `uninstall --runtime claude`
+  removes only claude (it fell through to `all`), `install --runtime claude`
+  works, `--purge=false` is false, global flags may come before the command,
+  `-h`/`-V` after a command show help/version instead of running it, `-v` as
+  the first token is the version, `build <runtime>` builds only that runtime,
+  `uninstall --scope` is validated. `jdi-install.sh` reads its flags in any
+  order; `jdi-uninstall.sh` rejects unknown flags and missing values.
+- **A shell that cannot start is a failure** (#38): exit 127 with the error,
+  never the success box with exit 0; a child killed by a signal is exit 1.
+- **`--no-color`** works (#47): it reaches ui.js before its palette is picked,
+  and `jdi-doctor.sh` honors `NO_COLOR`. Errors go to stderr; the summary box
+  title is padded by its visible width (#61).
+- **Banner hold** 5 s → 0.8 s (#52); `JDI_ANIMATE=off` is documented.
+- **Five runtimes everywhere** (#51, #53): doctor counts a Junie-only install
+  as a runtime (it reported FAIL) and lists `runtimes/junie` in section 5;
+  the help lists junie; the build banner names what it built; the publish
+  workflow checks `runtimes/junie/agents` (#58).
+- **One phase resolver** (#41, #48): `validate-phase` uses the Node resolver;
+  `jdi-resolve-phase.{sh,ps1}` are removed (the .sh broke on a CRLF
+  ROADMAP.md, the .ps1 on an empty STATE.md and returned absolute dirs).
+- **sh/ps1 parity** (#43, #48): pt-BR detection in the .ps1 twins scans every
+  file (it kept the first file's verdict); `truncate` counts bytes on both
+  and the .ps1 no longer adds a line or a newline; `validate-slug
+  --check-unique` (.sh) checks a legacy ROADMAP.md even without
+  `.jdi/phases/`.
+- **PowerShell** (#40, #42, #50, #60): `install-playwright.ps1` defines
+  `$UserHome` (Antigravity crashed), installs with `--ignore-scripts`, runs the
+  local `playwright` instead of `npx --yes`, and writes the MCP JSON without a
+  BOM; `update.ps1` runs the install on its own host instead of `pwsh` (PS 5.1
+  only hosts aborted) and stops on a failed install.
+- **Closed stdin** (#49): `install-caveman.ps1` took it as "yes" and deleted
+  the existing install; the .sh exited 1 without a word. Both skip now.
+- **`.gitignore` without a final newline** (#44): `migrate-layout.sh` and the
+  `.gitignore` steps of the researcher, adopter, architect and
+  frontend-validator glued the pattern onto the last line.
+- **`render.sh`** compares the banner without the CR (#45): CRLF views were
+  skipped forever and `--check` never passed.
+- **`jdi-build.sh`** no longer stops silently on a Junie agent whose tools are
+  all filtered out (#46).
+- **Portability** (#59): the pre-commit hook and the CI gate use a literal SOH
+  byte instead of GNU sed's `\x01` (BusyBox/BSD sed turned `src/**` into
+  `^src/x01$`); no awk `{n,m}` intervals (older mawk lost `##` headings); no
+  `\s` in `grep -E`; `${HOME:-${USERPROFILE:-}}`.
+- Orphan pre-0.9 Antigravity files removed from the package (#55); the
+  frontend-validator skill no longer points to four reference files that never
+  existed (#56); `package-lock.json` is at the package version; README release
+  steps match the tag-push trigger (#58); EXTENSION.md and PORTABILITY.md are
+  current (#61); `jdi-doctor.ps1` lists runtimes in the .sh order (#61).
+
 ## [0.18.1] - 2026-10-09
 
 Security and correctness fixes found right after 0.18.0, plus the shared CI.

@@ -59,7 +59,7 @@ core/                    <- shipped, generators (lives in the JDI repo)
   archive/               <- old phases moved by ship compaction + removed-<slug>/ folders
 
 bin/lib/                 <- shared helpers (shipped via npm files whitelist)
-  jdi-resolve-phase.{sh,ps1}    <- int OR slug → {slug, dir, position, schema, exists}
+  jdi-core.js (resolvePhase)    <- int OR slug → {slug, dir, position, schema, exists}
   jdi-validate-slug.{sh,ps1}    <- shape + reserved + --check-unique
   jdi-monitor.{sh,ps1}          <- context budget warm-up
   jdi-truncate.{sh,ps1}         <- max_chars enforce

@@ -32,6 +32,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# The install child runs on THIS host: a hard-coded `pwsh` aborts the update on
+# a Windows with only PowerShell 5.1, which bin/jdi.js falls back to (#42).
+$PsHost = (Get-Process -Id $PID).Path
 
 $Root = Split-Path -Parent $PSScriptRoot
 $ProjectDir = (Get-Location).Path
@@ -59,8 +62,10 @@ if (Test-Path $LangFile) {
   foreach ($pd in $probeDirs) {
     $full = Join-Path $ProjectDir $pd
     if (-not (Test-Path $full)) { continue }
+    # -List: one match per matching file, nothing for the others. -Quiet gave
+    # one boolean PER FILE, and -First 1 kept the first file's verdict (#43).
     $hit = Get-ChildItem -Path $full -Recurse -Filter '*.md' -File -ErrorAction SilentlyContinue |
-      Select-String -SimpleMatch '<!-- jdi:lang-directive -->' -Quiet |
+      Select-String -SimpleMatch '<!-- jdi:lang-directive -->' -List |
       Select-Object -First 1
     if ($hit) { $CurrentLang = 'pt-BR'; break }
   }
@@ -168,7 +173,8 @@ foreach ($runtime in $detected) {
   if ($hasProjectScope) {
     Write-Output "Atualizando $runtime (project scope)..."
     if (-not $DryRun) {
-      & pwsh -NoProfile -ExecutionPolicy Bypass -File $installScript -Runtime $runtime -Scope project | Out-Null
+      & $PsHost -NoProfile -ExecutionPolicy Bypass -File $installScript -Runtime $runtime -Scope project | Out-Null
+      if ($LASTEXITCODE -ne 0) { throw "install $runtime (project) failed (rc=$LASTEXITCODE)" }
       if ($hasProjLegacy) {
         Remove-Item -Recurse -Force $projLegacy -Confirm:$false
         Write-Output "  migrado: skills 1.x removidas de $projLegacy (2.0 usa .agents/skills/)"
@@ -182,7 +188,8 @@ foreach ($runtime in $detected) {
   if ($hasUserScope) {
     Write-Output "Atualizando $runtime (user scope)..."
     if (-not $DryRun) {
-      & pwsh -NoProfile -ExecutionPolicy Bypass -File $installScript -Runtime $runtime -Scope user | Out-Null
+      & $PsHost -NoProfile -ExecutionPolicy Bypass -File $installScript -Runtime $runtime -Scope user | Out-Null
+      if ($LASTEXITCODE -ne 0) { throw "install $runtime (user) failed (rc=$LASTEXITCODE)" }
       if ($hasUserLegacy) {
         Remove-Item -Recurse -Force $userLegacy -Confirm:$false
         Write-Output "  migrado: skills 1.x removidas de $userLegacy (2.0 usa ~/.gemini/config/skills/)"

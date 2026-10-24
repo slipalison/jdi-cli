@@ -14,7 +14,7 @@ set -euo pipefail
 
 PROJECT_DIR="$(pwd)"
 JDI_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-USER_HOME="${HOME:-$HOME}"
+USER_HOME="${HOME:-${USERPROFILE:-}}"
 readonly SCOPE_PROJECT="project"
 
 # Skills universais shipped pelo JDI (runtimes/<rt>/skills/). Mantenha em sync com o ship.
@@ -31,16 +31,30 @@ PURGE=0
 YES=0
 DRY_RUN=0
 
+# A value flag without its value, or a flag this script does not know, is a
+# usage error: a dropped `--dryrun` used to turn into a real purge (#36).
+need_value() {
+  if [[ $# -lt 2 || "$2" == -* ]]; then
+    echo "ERROR: $1 needs a value" >&2
+    exit 1
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --runtime) RUNTIME="$2"; shift 2 ;;
-    --scope)   SCOPE="$2"; shift 2 ;;
+    --runtime) need_value "$@"; RUNTIME="$2"; shift 2 ;;
+    --scope)   need_value "$@"; SCOPE="$2"; shift 2 ;;
     --purge)   PURGE=1; shift ;;
     --yes|-y)  YES=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
-    *) shift ;;
+    *) echo "ERROR: unknown flag: $1" >&2; exit 1 ;;
   esac
 done
+
+case "$SCOPE" in
+  user|project|both) ;;
+  *) echo "ERROR: invalid --scope '$SCOPE' (user|project|both)" >&2; exit 1 ;;
+esac
 
 confirm_action() {
   local msg="$1"

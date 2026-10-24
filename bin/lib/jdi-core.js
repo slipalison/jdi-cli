@@ -196,7 +196,7 @@ function readFrontmatter(file) {
 }
 
 // ---------------------------------------------------------------------------
-// Phases (Node port of jdi-resolve-phase.sh, layout v3 + legacy ROADMAP.md)
+// Phases (layout v3 + legacy ROADMAP.md; the only resolver since the shell twins were removed)
 // ---------------------------------------------------------------------------
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{2,49}$/;

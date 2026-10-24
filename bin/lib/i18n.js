@@ -39,6 +39,7 @@ const CATALOG = {
 
     // Errors / validation
     'error.runtime_required': 'Runtime is required.',
+    'error.one_runtime': 'Give one runtime: a positional or --runtime, not two different ones.',
     'error.runtimes_label': 'Runtimes',
     'error.runtime_invalid': 'Invalid runtime: %s',
     'error.valid_options': 'Valid',
@@ -50,7 +51,6 @@ const CATALOG = {
 
     // install
     'install.header': 'Installing JDI for %s',
-    'install.spinner': 'Installing adapters for %s...',
     'install.success_title': 'JDI installed successfully',
     'install.next1': 'Open your runtime (%s) in the project directory',
     'install.next2': 'Run %s to initialize',
@@ -63,7 +63,7 @@ const CATALOG = {
     // build
     'build.header': 'Building JDI runtimes',
     'build.success_title': 'Build complete',
-    'build.success_line1': '4 runtimes generated (claude, copilot, antigravity, opencode)',
+    'build.success_line1': '%s runtime(s) generated (%s)',
     'build.success_line2': 'Adapters in %s',
     'build.next1': 'Install in project: %s',
     'build.next2': 'Diagnostics: %s',
@@ -137,9 +137,10 @@ const CATALOG = {
     'help.helper.critic': 'DoD critic: which rows to examine (lean cadence); fold findings into REVIEW.md',
     'help.helper.size': 'lite or full, from the plan (one doer spawn for small phases)',
     'help.runtimes_label': 'Runtimes (install):',
-    'help.runtime.all': 'All 4',
+    'help.runtime.all': 'All 5',
     'help.options_label': 'Options:',
-    'help.opt.scope': 'Scope (install default: project; uninstall default: both)',
+    'help.opt.scope': 'Scope: install takes user|project (default project); uninstall also both (its default)',
+    'help.opt.runtime': 'Same as the positional runtime (install, uninstall, install-playwright)',
     'help.opt.githooks': 'Install: copies no-op hooks to .githooks/ (opt-in)',
     'help.opt.lang': 'CLI output language (default: en)',
     'help.opt.verbose': 'Detailed output (doctor only)',
@@ -177,6 +178,7 @@ const CATALOG = {
 
     // Errors / validation
     'error.runtime_required': 'Runtime obrigatório.',
+    'error.one_runtime': 'Informe um runtime só: posicional ou --runtime, não dois diferentes.',
     'error.runtimes_label': 'Runtimes',
     'error.runtime_invalid': 'Runtime inválido: %s',
     'error.valid_options': 'Válidos',
@@ -188,7 +190,6 @@ const CATALOG = {
 
     // install
     'install.header': 'Instalando JDI para %s',
-    'install.spinner': 'Instalando adapters em %s...',
     'install.success_title': 'JDI instalado com sucesso',
     'install.next1': 'Abra seu runtime (%s) no diretório do projeto',
     'install.next2': 'Rode %s pra inicializar',
@@ -201,7 +202,7 @@ const CATALOG = {
     // build
     'build.header': 'Compilando runtimes do JDI',
     'build.success_title': 'Build completo',
-    'build.success_line1': '4 runtimes gerados (claude, copilot, antigravity, opencode)',
+    'build.success_line1': '%s runtime(s) gerado(s) (%s)',
     'build.success_line2': 'Adapters em %s',
     'build.next1': 'Instalar no projeto: %s',
     'build.next2': 'Diagnóstico: %s',
@@ -275,9 +276,10 @@ const CATALOG = {
     'help.helper.critic': 'Critico do DoD: quais itens examinar (cadencia enxuta); aplica os achados no REVIEW.md',
     'help.helper.size': 'lite ou full, a partir do plano (um unico doer para fases pequenas)',
     'help.runtimes_label': 'Runtimes (install):',
-    'help.runtime.all': 'Todos os 4',
+    'help.runtime.all': 'Todos os 5',
     'help.options_label': 'Opções:',
-    'help.opt.scope': 'Escopo (default do install: project; default do uninstall: both)',
+    'help.opt.scope': 'Escopo: install aceita user|project (default project); uninstall também both (o default dele)',
+    'help.opt.runtime': 'O mesmo que o runtime posicional (install, uninstall, install-playwright)',
     'help.opt.githooks': 'Install: copia hooks no-op pra .githooks/ (opt-in)',
     'help.opt.lang': 'Idioma da saída do CLI (default: en)',
     'help.opt.verbose': 'Output detalhado (só no doctor)',

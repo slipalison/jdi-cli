@@ -64,7 +64,7 @@ The architect blocks or warns on:
 - **Specialist per feature** ("auth-specialist") — redirects to a phase
 - **Skill > 500 estimated lines** — suggests an agent
 - **Agent without a decision loop** — suggests a skill
-- **Soft cap > 15 core agents or > 25 skills** — warns, does not block
+- **Soft cap > 8 core agents or > 25 skills** — warns, does not block
 - **Name collides with an existing agent/skill** — forces a rename
 
 ## When to create an agent vs a skill
@@ -112,7 +112,7 @@ After `/jdi-create` runs, check:
 - [ ] `core/agents/jdi-{name}.md` or `core/skills/{name}/SKILL.md` exists
 - [ ] Frontmatter complete (name, description, runtime_intent, tools_canonical, triggers, runtime_overrides)
 - [ ] `<role>`, `<process>`, `<rules>`, `<output>` blocks present
-- [ ] Build ran (runtimes/ has the new agent in all 4 runtimes)
+- [ ] Build ran (runtimes/ has the new agent in all 5 runtimes)
 - [ ] Install ran (active runtime has the agent)
 - [ ] `.jdi/registry.md` has the R-N entry
 
@@ -133,8 +133,8 @@ Recommendation: edit manually for small changes (new conventions). Regenerate on
 
 ## Hard limits
 
-- Soft cap 15 core agents (current: 6) — architect warns above it, does not block
-- Max 5 templates in `core/templates/` (current: 5 — agent, skill, doer-specialist, reviewer-specialist, dod-schema)
+- Soft cap 8 core agents (current: 8) — architect warns above it, does not block
+- Templates in `core/templates/` (current: 7 — agent, skill, doer-specialist, reviewer-specialist, dod-schema, instructions, lang-directive.pt-BR)
 - Soft cap 25 core skills (current: 13 — code-design enforcement + principles + frontend rules)
 - Per-project: no formal limit on specialists (a realistic project has 1-3 pairs)
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# jdi-build: gera runtimes/{claude,copilot,antigravity} a partir de core/.
+# jdi-build: gera runtimes/{claude,copilot,antigravity,opencode,junie} a partir de core/.
 # Uso: ./bin/jdi-build.sh [runtime]
-#   runtime: claude | copilot | antigravity | all (default)
+#   runtime: claude | copilot | antigravity | opencode | junie | all (default)
 #
 # Requer: bash, sed, awk, mkdir.
 # Nao requer yq nem jq — parser inline simples.

@@ -130,7 +130,7 @@ if (Test-Cmd 'opencode') {
   Write-WARN 'OpenCode nao detectado (sem CLI nem ~/.config/opencode/)'
 }
 
-if (-not ($ClaudeOK -or $CopilotOK -or $AntigravityOK -or $OpencodeOK)) {
+if (-not ($ClaudeOK -or $CopilotOK -or $AntigravityOK -or $OpencodeOK -or $JunieOK)) {
   Write-FAIL 'Nenhum runtime detectado. JDI nao serve pra nada sem runtime.'
 }
 
@@ -176,11 +176,13 @@ foreach ($s in @('jdi-build.ps1','jdi-install.ps1')) {
 # ---------------------------------------------------------------------------
 Write-Section '5. Adapters buildados (runtimes/)'
 
-$runtimeChecks = @{
+# [ordered]: the same order as jdi-doctor.sh (a plain hashtable has none).
+$runtimeChecks = [ordered]@{
   'claude'      = @{ Path = "$JdiRoot\runtimes\claude\agents";          Filter = '*.md' }
   'copilot'     = @{ Path = "$JdiRoot\runtimes\copilot\agents";         Filter = '*.agent.md' }
   'antigravity' = @{ Path = "$JdiRoot\runtimes\antigravity\skills";     Filter = 'SKILL.md' }
   'opencode'    = @{ Path = "$JdiRoot\runtimes\opencode\agents";        Filter = '*.md' }
+  'junie'       = @{ Path = "$JdiRoot\runtimes\junie\agents";           Filter = '*.md' }
 }
 
 foreach ($rt in $runtimeChecks.Keys) {

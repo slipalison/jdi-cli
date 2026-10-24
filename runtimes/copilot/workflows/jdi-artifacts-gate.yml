@@ -73,8 +73,12 @@ jobs:
 
           # glob -> ERE ( ** crosses /, * does not )
           glob_to_re() {
+            # `**` placeholder: a literal SOH byte. The `\x01` escape is GNU sed only;
+            # BSD/BusyBox sed turned `src/**` into `^src/x01$` (#59).
+            local soh
+            soh="$(printf '\001')"
             printf '%s' "$1" | sed -e 's/[.[\%^$+()]/\\&/g' \
-              -e 's/\*\*/\x01/g' -e 's/\*/[^\/]*/g' -e 's/\x01/.*/g' \
+              -e "s/\*\*/$soh/g" -e 's/\*/[^\/]*/g' -e "s/$soh/.*/g" \
               -e 's/^/^/' -e 's/$/$/'
           }
 
