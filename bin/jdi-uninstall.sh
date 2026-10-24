@@ -34,10 +34,12 @@ DRY_RUN=0
 # A value flag without its value, or a flag this script does not know, is a
 # usage error: a dropped `--dryrun` used to turn into a real purge (#36).
 need_value() {
-  if [[ $# -lt 2 || "$2" == -* ]]; then
-    echo "ERROR: $1 needs a value" >&2
+  local flag="$1" value="${2:-}"
+  if [[ $# -lt 2 || "$value" == -* ]]; then
+    echo "ERROR: $flag needs a value" >&2
     exit 1
   fi
+  return 0
 }
 
 while [[ $# -gt 0 ]]; do
