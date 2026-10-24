@@ -114,12 +114,12 @@ function dodHash(root, phase) {
   return crypto.createHash('sha256').update(rows.join('\n')).digest('hex').slice(0, 12);
 }
 
-function productChanged(root, since, nonProduct) {
+function productChanged(root, since, nonProduct, { keepJdi = false } = {}) {
   if (!since) return true;
   const r = core.git(['diff', '--name-only', `${since}..HEAD`], root);
   if (r.code !== 0) return true;
   const files = r.stdout.split('\n').filter(Boolean);
-  const ignore = ['.jdi/**', ...(nonProduct || [])];
+  const ignore = [...(keepJdi ? [] : ['.jdi/**']), ...(nonProduct || [])];
   return files.some((f) => !core.matchesAny(f, ignore));
 }
 
@@ -219,6 +219,12 @@ function precheck(phase, { root = process.cwd(), autonomous = false } = {}) {
   if (!fs.existsSync(path.join(phase.absDir, 'REVIEW.md'))) return { status: 'verify', reason: 'no REVIEW.md' };
   if (productChanged(root, st.lastVerifiedCommit, config.loop?.non_product_globs)) return { status: 'verify', reason: `product changed since ${st.lastVerifiedCommit}` };
   if (dodHash(root, phase) !== last.dod) return { status: 'verify', reason: 'a DoD row changed since the last verify' };
+  // A defect may be fixed outside the product (the docs a DoD row reads, a
+  // wrong gate command in .jdi/stacks/): with defects open, any change
+  // outside the phase folders deserves a verify.
+  if (last.defects > 0 && productChanged(root, st.lastVerifiedCommit, ['.jdi/phases/**', '.jdi/archive/**', '.jdi/cache/**'], { keepJdi: true })) {
+    return { status: 'verify', reason: `files changed since ${st.lastVerifiedCommit} (outside the phase folders)` };
+  }
   if (last.defects > 0) {
     const out = { status: 'gate', reason: `the fix round changed no product file and no DoD row since iter ${last.iter} — its ${last.defects} defect(s) are still open`, skipped: 'verify' };
     if (autonomous) out.autonomous = 'take the Continue branch: run `jdi-cli loop reset <phase> --autonomous --reason "<why>"`';

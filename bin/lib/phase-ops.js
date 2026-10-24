@@ -169,16 +169,21 @@ function writeState(root, phase, nextPhase) {
 
 const toPosix = (p) => p.split(path.sep).join('/');
 
+// `dir` as a whole path segment: `.jdi/phases/alpha` in `.../alpha/x.md`,
+// `(.jdi/phases/alpha)` or at the end — never `.jdi/phases/alpha-2`.
+const refRe = (dir) => new RegExp(`${dir.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)}(?![a-z0-9-])`, 'g');
+
 // Tracked files outside the phase folder (and the archive) that mention it.
 function referencesTo(root, dir) {
   const r = core.git(['grep', '-l', '-F', '-e', dir, '--', '.', `:(exclude)${dir}`, ':(exclude).jdi/archive'], root);
-  return r.code === 0 ? r.stdout.split('\n').filter(Boolean) : [];
+  if (r.code !== 0) return [];
+  return r.stdout.split('\n').filter((f) => f && refRe(dir).test(fs.readFileSync(path.join(root, f), 'utf8')));
 }
 
 function rewriteRefs(root, files, from, to) {
   for (const f of files) {
     const abs = path.join(root, f);
-    fs.writeFileSync(abs, fs.readFileSync(abs, 'utf8').replaceAll(from, to));
+    fs.writeFileSync(abs, fs.readFileSync(abs, 'utf8').replace(refRe(from), to));
   }
 }
 
@@ -207,7 +212,7 @@ function archive(root, { dryRun = false, keep, rewrite = false } = {}) {
       continue;
     }
     if (!dryRun) {
-      if (refs.length) rewriteRefs(root, refs, `${from}/`, `${to}/`);
+      if (refs.length) rewriteRefs(root, refs, from, to);
       fs.mkdirSync(path.dirname(path.join(root, to)), { recursive: true });
       fs.renameSync(r.absDir, path.join(root, to));
     }
@@ -230,10 +235,9 @@ function freshness(root, phase, allowStale) {
 // Evidence rows need a fresh ship-scope record (`jdi-cli evidence record`,
 // #70) — only on phases created with 0.19+, which were discussed knowing it.
 function evidenceGate(root, phase, allowStaleEvidence) {
-  const budgets = require('./budgets');
-  const created = budgets.createdWith(root, phase.slug);
-  if (!created || !budgets.semverGte(created, '0.19.0')) return null;
-  const problems = require('./evidence').shipProblems(root, phase);
+  const evidence = require('./evidence');
+  if (!evidence.enforced(root, phase)) return null;
+  const problems = evidence.shipProblems(root, phase);
   if (!problems.length) return null;
   if (!allowStaleEvidence) {
     throw new core.JdiError(`${problems.length} evidence row(s) without a fresh full run: ${problems.join('; ')} — run the evidence and \`jdi-cli evidence record ${phase.slug} --row N --scope ship\`, or ship with --allow-stale-evidence "<reason>"`, 5);

@@ -43,7 +43,7 @@ const rowKey = (it) => (it.source === 'PROJECT' ? `project-${it.id}` : String(it
 const recordPath = (phase, it, scope) => path.join(phase.absDir, 'evidence', `dod-${rowKey(it)}.${scope}.json`);
 
 function fingerprint(root, it) {
-  return gates.productHash(root, { globs: it.inputs, cmd: `${it.verify.command} ${it.iteration || ''}` });
+  return gates.productHash(root, { globs: it.inputs, cmd: `${gates.verifyText(root, it)}\n${it.iteration || ''}` });
 }
 
 function findRow(root, phase, row) {
@@ -104,6 +104,12 @@ function status(root, phase) {
   });
 }
 
+function enforced(root, phase) {
+  const budgets = require('./budgets');
+  const created = budgets.createdWith(root, phase.slug);
+  return Boolean(created && budgets.semverGte(created, '0.19.0'));
+}
+
 // What ship refuses: evidence rows without a fresh ship-scope record.
 function shipProblems(root, phase) {
   return status(root, phase)
@@ -135,7 +141,8 @@ function main(argv) {
   }
   const rows = status(root, phase);
   process.stdout.write((rest.includes('--json') ? JSON.stringify(rows, null, 2) : lines(rows).join('\n')) + '\n');
-  return rows.some((r) => r.ship.status !== 'fresh') ? 2 : 0;
+  // exit 2 only where ship enforces it (phases created with 0.19+)
+  return enforced(root, phase) && rows.some((r) => r.ship.status !== 'fresh') ? 2 : 0;
 }
 
-module.exports = { main, record, status, shipProblems, evidenceRows };
+module.exports = { main, record, status, shipProblems, evidenceRows, enforced };

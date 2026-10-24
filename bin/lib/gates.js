@@ -142,20 +142,31 @@ function gitList(root, args) {
   return r.code === 0 ? r.stdout.split('\0').filter(Boolean) : null;
 }
 
-// Content fingerprint of every product file in the working tree: the index
-// blob id for an unmodified tracked file, a hash of the bytes otherwise.
+// Content fingerprint of every file in the working tree (tracked, and
+// untracked but not ignored): its git blob id — the index's for an unmodified
+// file, `git hash-object` (same clean filters, so CRLF/autocrlf and a later
+// commit give the same id) for a modified or new one. Gitignored files (.env,
+// generated config) are not in it: put what they change in `cache_key_cmd`.
 function treeFingerprint(root) {
   const staged = gitList(root, ['ls-files', '-s']);
   if (staged === null) return null;
   const files = new Map();
   for (const e of staged) {
     const tab = e.indexOf('\t');
-    files.set(e.slice(tab + 1), e.slice(0, tab));
+    files.set(e.slice(tab + 1), e.slice(0, tab).split(' ')[1]);
   }
   const dirty = [...(gitList(root, ['ls-files', '-m']) || []), ...(gitList(root, ['ls-files', '-o', '--exclude-standard']) || [])];
-  for (const f of dirty) {
+  const present = [...new Set(dirty)].filter((f) => {
     const abs = path.join(root, f);
-    files.set(f, fs.existsSync(abs) && fs.statSync(abs).isFile() ? 'w ' + sha(fs.readFileSync(abs)) : 'deleted');
+    if (fs.existsSync(abs) && fs.statSync(abs).isFile()) return true;
+    files.set(f, 'deleted');
+    return false;
+  });
+  if (present.length) {
+    const r = spawnSync(core.program('git'), ['hash-object', '--stdin-paths'], { cwd: root, input: present.join('\n') + '\n', encoding: 'utf8' });
+    const ids = (r.stdout || '').split('\n').filter(Boolean);
+    if (r.status !== 0 || ids.length !== present.length) return null; // no fingerprint: no reuse
+    present.forEach((f, i) => files.set(f, ids[i]));
   }
   return files;
 }
@@ -164,7 +175,10 @@ function treeFingerprint(root) {
 // a glob. A DoD row that greps docs/api.md must see docs/api.md change, even
 // though docs/ is outside the product.
 function namedFiles(tree, cmd) {
-  const tokens = cmd.split(/[\s'"`|;&()<>]+/).map((t) => t.replace(/^\.\//, '').replace(/\/+$/, '')).filter((t) => t.length > 1);
+  const tokens = cmd
+    .split(/[\s'"`|;&()<>=]+/)
+    .map((t) => t.replaceAll('\\', '/').replace(/^\.\//, '').replace(/\/+$/, ''))
+    .filter((t) => t.length > 1);
   const out = new Set();
   for (const t of tokens) {
     const glob = t.includes('*');
@@ -179,8 +193,11 @@ function inputHash(ctx, globs, cmd = null) {
   if (!ctx.tree) return null;
   const ignore = ['.jdi/**', ...(ctx.nonProduct || [])];
   const named = cmd ? namedFiles(ctx.tree, cmd) : new Set();
+  // explicit globs are the whole input set (they may point at docs/ or
+  // .jdi/ on purpose); the ignore list only shapes the default.
+  const inScope = (f) => (globs?.length ? core.matchesAny(f, globs) : !core.matchesAny(f, ignore));
   const lines = [...ctx.tree]
-    .filter(([f]) => named.has(f) || (!core.matchesAny(f, ignore) && (!globs?.length || core.matchesAny(f, globs))))
+    .filter(([f]) => named.has(f) || inScope(f))
     .map(([f, id]) => `${id} ${f}`)
     .sort(core.compareStr);
   return sha(lines.join('\n'));
@@ -272,12 +289,19 @@ function stackResults(ctx, stack, only) {
 
 const DOD_STATIC = { manual: 'MANUAL_REQUIRED', deferred: 'DEFERRED' };
 
+// The command plus the script it calls (`dod extract`): the files the
+// script reads are inputs too.
+function verifyText(root, it) {
+  const script = it.script ? core.readIf(path.join(root, it.script)) || '' : '';
+  return `${it.verify.command}\n${script}`;
+}
+
 function dodResult(ctx, it, evidence) {
   const base = { id: it.id, source: it.source, type: it.type, criterion: it.criterion.slice(0, 160) };
   if (DOD_STATIC[it.type]) return { ...base, status: DOD_STATIC[it.type] };
   if (!it.verify) return { ...base, status: 'INCONCLUSIVE', reason: 'no Verify' };
   if (it.evidence || isEvidenceOnly(it.verify.command, evidence)) return { ...base, status: 'EVIDENCE', reason: 'not executed here (external effect) — judge by the recorded evidence' };
-  const key = reuseKey(ctx, it.verify.command, 'dod', dod.rowHash(it, ctx.root));
+  const key = reuseKey(ctx, verifyText(ctx.root, it), 'dod', dod.rowHash(it, ctx.root));
   const hit = reused(ctx, key);
   if (hit) return { ...hit, ...base };
   const log = path.join(ctx.gateDir, 'dod', `${it.source.toLowerCase()}-${it.id}.log`);
@@ -417,4 +441,4 @@ function main(argv) {
   return report.status === 'PASS' ? 0 : 1;
 }
 
-module.exports = { main, runGates, loadStacks, findStack, summary, run, envFor, shellFor, tail, dodItems, changedInScope, treeFingerprint, productHash };
+module.exports = { main, runGates, loadStacks, findStack, summary, run, envFor, shellFor, tail, dodItems, changedInScope, treeFingerprint, productHash, namedFiles, verifyText };

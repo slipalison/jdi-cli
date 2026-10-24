@@ -71,3 +71,12 @@ test('ship moves no other phase and keeps adopted: true in STATE.md (#73)', () =
   assert.ok(!fs.existsSync(path.join(root, '.jdi', 'archive')));
   assert.match(fs.readFileSync(path.join(root, '.jdi/STATE.md'), 'utf8'), /^adopted: true$/m);
 });
+
+test('phases archive: references match whole path segments; a bare link is rewritten too (#73)', () => {
+  const root = project();
+  write(root, 'docs/roadmap.md', 'see [p1](.jdi/phases/p1-x) and .jdi/phases/p2-x-old/notes\n');
+  git(root, 'commit', '-qam', 'links');
+  const out = JSON.parse(jdi(root, ['phases', 'archive', '--keep', '3', '--rewrite-refs']).stdout);
+  assert.deepEqual(out.moved.map((m) => [m.phase, m.rewritten.length]), [['p1-x', 1], ['p2-x', 0], ['p3-x', 0]]);
+  assert.equal(fs.readFileSync(path.join(root, 'docs/roadmap.md'), 'utf8'), 'see [p1](.jdi/archive/p1-x) and .jdi/phases/p2-x-old/notes\n');
+});

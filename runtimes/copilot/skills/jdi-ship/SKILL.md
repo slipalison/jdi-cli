@@ -76,7 +76,7 @@ The evidence rows (`Verify (evidence):`) need a full run on the code being
 shipped — inside the loop a focused run was enough:
 
 ```bash
-npx -y jdi-cli@0.18.1 evidence status "$PHASE_SLUG"; EVID_RC=$?   # 2 = a row without a fresh `ship` run
+npx -y jdi-cli@0.18.1 evidence status "$PHASE_SLUG"; EVID_RC=$?   # 2 = a row without a fresh `ship` run (phases created with 0.19+)
 ```
 
 `EVID_RC` = 2 → AskUserQuestion: "Run the full evidence now (recommended) /

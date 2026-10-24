@@ -315,3 +315,42 @@ test('size --intake: too many DoD rows or areas -> split, with reasons (#72)', (
   write(root, '.jdi/config.json', JSON.stringify({ sizing: { split_max_dod_rows: 20, split_max_areas: 2 } }));
   assert.match(jdi(root, ['size', 'alpha', '--intake']).stdout, /^split — 3 areas \(/);
 });
+
+test('reuse/evidence regressions: extracted script inputs, explicit globs, commit keeps evidence fresh (#69, #70)', () => {
+  const { root, g, ran } = gatesRepo();
+  // 1. a row whose script reads a non-product file
+  write(root, '.jdi/phases/alpha/verify/dod-1.sh', 'echo dod >> .jdi/cache/ran\ngrep -q notes docs/notes.md\n');
+  write(root, '.jdi/phases/alpha/CONTEXT.md', CTX_GATES.replace(/\*\*Verify:\*\* `[^`]*`/, '**Verify:** `bash .jdi/phases/alpha/verify/dod-1.sh`'));
+  g('add', '-A');
+  g('commit', '-qm', 'script');
+  assert.equal(jdi(root, ['gates', 'run', 'alpha', '--only', 'dod']).code, 0);
+  write(root, 'docs/notes.md', 'gone\n');
+  g('commit', '-qam', 'docs');
+  assert.equal(jdi(root, ['gates', 'run', 'alpha', '--only', 'dod']).code, 1, 'the script reads docs/notes.md');
+  // 2. explicit stack inputs on a non-product path
+  write(root, '.jdi/stacks/docs.json', JSON.stringify({ name: 'docs', inputs: ['docs/**'], gates: { lint: 'echo lint >> .jdi/cache/ran' } }));
+  jdi(root, ['gates', 'run', 'alpha', '--stack', 'docs']);
+  write(root, 'docs/notes.md', 'changed again\n');
+  jdi(root, ['gates', 'run', 'alpha', '--stack', 'docs']);
+  assert.equal(ran().filter((x) => x === 'lint').length, 2, 'docs/** is the input set');
+  // 4. the same content, committed, keeps evidence fresh
+  const ev = evidenceRepo();
+  write(ev.root, 'src/a.js', 'login(2);\n');
+  write(ev.root, 'src/b.js', 'new\n');
+  jdi(ev.root, ['evidence', 'record', 'alpha', '--row', '1', '--scope', 'ship']);
+  ev.g('add', '-A');
+  ev.g('commit', '-qm', 'commit the same bytes');
+  assert.equal(evStatus(ev.root).ship.status, 'fresh');
+});
+
+test('loop precheck: a defect fixed in a non-product file gets a verify (#69)', () => {
+  const { root, g } = gatesRepo();
+  const core = require('../bin/lib/jdi-core');
+  const loop = require('../bin/lib/loop');
+  const phase = core.resolvePhase('alpha', root);
+  write(root, '.jdi/phases/alpha/REVIEW.md', reviewOf('BLOCKED', ['[defect] docs/notes.md misses the 429']));
+  loop.record(phase, { root });
+  write(root, 'docs/notes.md', '429 documented\n');
+  g('commit', '-qam', 'fix docs');
+  assert.equal(loop.precheck(phase, { root }).status, 'verify');
+});

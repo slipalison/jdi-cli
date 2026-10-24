@@ -111,7 +111,7 @@ function acceptanceCriteria(text) {
   let n = 0;
   for (const l of text.split('\n')) {
     if (/^#{2,4}\s/.test(l)) inSec = ACCEPTANCE_RE.test(l);
-    else if (inSec && /^\s{0,3}([-*]|\d+\.)\s/.test(l)) n++;
+    else if (inSec && /^([-*]|\d+\.)\s/.test(l)) n++; // top-level items only
   }
   return n;
 }
