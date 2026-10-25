@@ -47,7 +47,12 @@ time, even when the gates were already red.
   behaviour — prove it with a test (`Verify (test):`). The proofs critics kept
   finding holes in were these.
 - `config.json`: `economy.parallel_review`, `economy.parallel_gates`; stack
-  template: `gates.audit`, `test_report`, `requires`.
+  template: `gates.audit`, `audit_blocks`, `test_report`, `requires`.
+- **DOD-S4** (WARN): `Verify (test):` with a bare test name (it matches any
+  test of that name).
+- **Parallel waves without races:** the doers of a parallel wave
+  (`wave=parallel`) stage only their own files and leave PLAN.md and
+  SUMMARY.md to the orchestrator, which writes them after the wave.
 
 ### Changed
 - **Never wait in a loop.** The managed instruction block, the doer and the
@@ -61,7 +66,20 @@ time, even when the gates were already red.
 - **Waves run in parallel from 2 independent tasks** (was 3); the planner puts
   tasks with no file in common in the same wave.
 - `/jdi-verify` runs the stack gates before the DoD gate (the DoD reads their
-  test reports).
+  test reports); after a fix pass that committed, it plans the review again (a
+  carried reviewer's scope may have changed).
+- A `Verify (test):` row whose proof cannot be read (no `test_report`, the
+  stack not gated at HEAD, a runner that wrote no fresh report) is `ENV`, not
+  a defect; a carried stack's report still proves its rows when nothing in its
+  scope changed; a testcase cut off by a killed run is a failure.
+- `gates run --stack a,b` resolves every name first (a reviewer without a
+  stack file is skipped with a note), writes a report for a child that
+  crashed, and runs stacks that share a `test_report` path one after the
+  other. The DoD gate checks only the `requires` of the stacks its rows name.
+- `review merge` refuses a parallel review with a silent reviewer; `review
+  from-gates` writes one `## Reviewer:` segment per stack, so each stack's
+  doer gets only its failures; `loop record` without a REVIEW.md is a clear
+  error (the verify stopped on the environment) and `/jdi-loop` pauses on ENV.
 
 ### Fixed
 - On Windows, `path_prepend` created a second `PATH` key next to `Path` and

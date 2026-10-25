@@ -21,6 +21,7 @@
 //   DOD-S1 ERROR auto item without `Verify:`; WARN manual item without `Evidence:`
 //   DOD-S2 WARN/ERROR inline `Verify:` longer than budgets.verify_inline_chars
 //   DOD-S3 ERROR `Verify:` calls a verify script that does not exist
+//   DOD-S4 WARN  `Verify (test):` with a bare test name (no class/module)
 //   DOD-L1 ERROR test runner with a name filter and no count check (exit 0 on zero tests)
 //   DOD-L2 WARN  positive grep over a directory/glob as the whole proof
 //   DOD-L3 WARN  E2E/real-login run inside an auto `Verify:` — mark it `Verify (evidence):`
@@ -309,7 +310,12 @@ function lintItem(it, ctx, add) {
   if (it.type === 'manual' && !it.hasEvidenceField) add(it.line, 'WARN', 'DOD-S1', `item manual ${it.id} sem \`Evidence:\``);
   if (!it.verify || it.type !== 'auto') return;
   if (it.testRef) {
-    if (!it.verify.command.trim()) add(it.verifyLine, 'ERROR', 'DOD-S1', `item ${it.id}: \`Verify (test):\` sem o nome do teste`);
+    const id = it.verify.command.trim();
+    if (!id) add(it.verifyLine, 'ERROR', 'DOD-S1', `item ${it.id}: \`Verify (test):\` sem o nome do teste`);
+    // a bare name matches ANY test with that name (another module's test_create)
+    else if (!['::', '.', '/', ' '].some((sep) => id.includes(sep))) {
+      add(it.verifyLine, 'WARN', 'DOD-S4', `item ${it.id}: \`${id}\` sem classe/modulo casa qualquer teste com esse nome — qualifique (\`modulo::${id}\`)`);
+    }
     return; // a test name, not a command: nothing to run or lint
   }
   const cmd = it.verify.command;

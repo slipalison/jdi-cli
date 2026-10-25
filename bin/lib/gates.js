@@ -289,7 +289,8 @@ function execGate(ctx, name, cmd) {
   if (status === 'FAIL') res.excerpt = (r.error ? r.error + '\n' : '') + tail(r.out);
   if (name === 'test' || name === 'coverage') {
     const report = snapshotTestReport(ctx, started);
-    if (report) res.test_report = report;
+    if (report?.stale) res.test_report_missing = true; // ran, wrote no fresh JUnit
+    else if (report) res.test_report = report;
   }
   remember(ctx, key, res);
   return res;
@@ -307,7 +308,7 @@ function snapshotTestReport(ctx, startedMs) {
   const globs = [ctx.stack?.test_report || []].flat();
   if (!globs.length) return null;
   const files = reportFiles(ctx.root, globs).filter((f) => fs.statSync(f).mtimeMs >= startedMs - 1000);
-  if (!files.length) return null;
+  if (!files.length) return { stale: true };
   const xml = files.map((f) => fs.readFileSync(f, 'utf8')).join('\n');
   const rel = `${core.JDI_DIR}/cache/gates/_reports/${sha(xml).slice(0, 16)}.xml`;
   core.writeFileEnsured(path.join(ctx.root, rel), xml, ctx.root);
@@ -324,7 +325,7 @@ function reportFiles(root, globs) {
       continue;
     }
     const base = g.slice(0, g.indexOf('*')).replace(/[^/]*$/, '');
-    for (const f of walk(path.join(root, base), 4)) {
+    for (const f of walk(path.join(root, base))) {
       const rel = path.relative(root, f).split(path.sep).join('/');
       if (core.matchesAny(rel, [g])) out.add(f);
     }
@@ -332,15 +333,19 @@ function reportFiles(root, globs) {
   return [...out];
 }
 
-function walk(dir, depth) {
-  if (depth < 0) return [];
+const WALK_SKIP = new Set(['.git', 'node_modules', '.jdi']);
+
+function walk(dir) {
   let entries;
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
   } catch {
     return [];
   }
-  return entries.flatMap((e) => (e.isDirectory() ? walk(path.join(dir, e.name), depth - 1) : [path.join(dir, e.name)]));
+  return entries.flatMap((e) => {
+    if (!e.isDirectory()) return [path.join(dir, e.name)];
+    return WALK_SKIP.has(e.name) ? [] : walk(path.join(dir, e.name));
+  });
 }
 
 const XML_ENTITIES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'" };
@@ -366,12 +371,14 @@ function parseJunit(xml) {
     if (end === -1) break;
     const tag = xml.slice(i, end + 1);
     let body = '';
+    let cut = false;
     if (!tag.endsWith('/>')) {
       const close = xml.indexOf('</testcase>', end);
-      body = close === -1 ? '' : xml.slice(end + 1, close);
+      cut = close === -1; // the run was killed mid-test: never a pass
+      body = cut ? '' : xml.slice(end + 1, close);
     }
     let status = 'passed';
-    if (body.includes('<failure') || body.includes('<error')) status = 'failed';
+    if (cut || body.includes('<failure') || body.includes('<error')) status = 'failed';
     else if (body.includes('<skipped')) status = 'skipped';
     cases.push({ name: xmlAttr(tag, 'name'), classname: xmlAttr(tag, 'classname'), status });
   }
@@ -386,26 +393,46 @@ function matchesTest(c, id) {
 
 // The reports a `Verify (test):` row may be proven by: the stacks' gate
 // results AT HEAD (its `Stack:` only, when it names one).
+// A stack report valid for HEAD: measured at HEAD, or at an older commit
+// with nothing changed in the stack's scope since (a carried reviewer's stack
+// is not gated again, and its proof still holds).
+function validReport(ctx, s) {
+  const rep = core.readJson(path.join(ctx.gateDir, `${s.id}.json`), null);
+  if (!rep?.head) return null;
+  if (rep.head === ctx.head) return rep;
+  const changed = changedInScope(ctx.root, rep.head, [s.file_glob || []].flat());
+  return changed?.length === 0 ? rep : null;
+}
+
 function headReports(ctx, it, stacks) {
   const wanted = it.stack ? stacks.filter((s) => [s.id, s.name, s.agent].includes(it.stack)) : stacks;
-  const out = [];
-  for (const s of wanted.filter((x) => x.test_report)) {
-    const rep = core.readJson(path.join(ctx.gateDir, `${s.id}.json`), null);
-    const r = rep?.head === ctx.head ? (rep.results || []).find((x) => x.test_report) : null;
-    out.push({ stack: s.id, file: r ? path.join(ctx.root, r.test_report) : null });
-  }
-  return out;
+  return wanted
+    .filter((x) => x.test_report)
+    .map((s) => {
+      const rep = validReport(ctx, s);
+      const suite = (rep?.results || []).filter((x) => x.gate === 'test' || x.gate === 'coverage');
+      const r = suite.find((x) => x.test_report);
+      const file = r ? path.join(ctx.root, r.test_report) : null;
+      return { stack: s.id, measured: Boolean(rep), file: file && fs.existsSync(file) ? file : null, suiteFailed: suite.some((x) => x.status === 'FAIL' || x.status === 'SKIPPED'), noReport: suite.some((x) => x.test_report_missing) };
+    });
+}
+
+// Why no report can prove the row: the suite failed (the stack gate already
+// says so: SKIPPED here), or the setup is wrong (ENV: no doer can fix it).
+function noProofResult(reports, base) {
+  if (reports.some((r) => r.suiteFailed)) return { ...base, status: 'SKIPPED', reason: 'Verify (test): the suite failed or did not run — see the stack gates' };
+  const unmeasured = reports.filter((r) => !r.measured).map((r) => r.stack);
+  if (unmeasured.length) return { ...base, status: 'ENV', reason: `Verify (test): no gate results for ${unmeasured.join(',')} at HEAD — run \`gates run --stack ${unmeasured.join(',')}\` before the DoD` };
+  const why = reports.some((r) => r.noReport) ? 'the test gate ran but wrote no fresh JUnit at `test_report` (an incremental runner that skipped the run?)' : 'the stack results carry no test report';
+  return { ...base, status: 'ENV', reason: `Verify (test): ${why} — fix the gate command or \`test_report\`` };
 }
 
 function testRowResult(ctx, it, stacks, base) {
   const id = it.verify.command.trim();
   const reports = headReports(ctx, it, stacks);
-  if (!reports.length) return { ...base, status: 'FAIL', reason: 'Verify (test): no stack declares `test_report` (JUnit) — nothing can prove it' };
-  const missing = reports.filter((r) => !r.file || !fs.existsSync(r.file));
-  if (missing.length === reports.length) {
-    return { ...base, status: 'FAIL', reason: `Verify (test): no test report at HEAD — run \`gates run --stack ${missing.map((r) => r.stack).join(',')}\` first` };
-  }
-  const cases = reports.filter((r) => r.file && fs.existsSync(r.file)).flatMap((r) => parseJunit(fs.readFileSync(r.file, 'utf8')));
+  if (!reports.length) return { ...base, status: 'ENV', reason: 'Verify (test): no stack declares `test_report` (JUnit) — nothing can prove it' };
+  if (!reports.some((r) => r.file)) return noProofResult(reports, base);
+  const cases = reports.filter((r) => r.file).flatMap((r) => parseJunit(fs.readFileSync(r.file, 'utf8')));
   const hits = cases.filter((c) => matchesTest(c, id));
   if (!hits.length) return { ...base, status: 'FAIL', reason: `Verify (test): no testcase named \`${id}\` in the report — the proof does not exist` };
   const bad = hits.filter((c) => c.status !== 'passed');
@@ -430,6 +457,8 @@ function stackResults(ctx, stack, only) {
   const want = (k) => g[k] && (!only || only.has(k));
   // the audit reads the lockfiles, not the build: it runs either way
   const audit = want('audit') ? [execGate(ctx, 'audit', g.audit)] : [];
+  // `audit_blocks: false`: an advisory (or an offline registry) is a warning
+  if (audit[0]?.status === 'FAIL' && stack.audit_blocks === false) audit[0].status = 'WARN';
   const results = want('build') ? [execGate(ctx, 'build', g.build)] : [];
   if (results.some((x) => x.status === 'FAIL')) {
     return [...results, ...['test', 'coverage', 'lint'].filter(want).map((k) => ({ gate: k, status: 'SKIPPED', reason: 'build failed (fail-fast)' })), ...audit];
@@ -548,7 +577,7 @@ function runGates(phase, opts, root = process.cwd()) {
   }
   const report = { phase: phase.slug, stack: label, head, started: new Date().toISOString(), base: opts.changedSince || null, results: [], dod: [] };
   const skipped = stack ? skippedResults(root, stack, opts, only) : null;
-  const problems = skipped ? [] : preflightProblems(ctx, stack ? [stack] : stacks);
+  const problems = skipped ? [] : preflightProblems(ctx, stack ? [stack] : dodStacks(root, phase, stacks));
   if (problems.length) {
     report.preflight = problems;
     report.finished = new Date().toISOString();
@@ -563,8 +592,17 @@ function runGates(phase, opts, root = process.cwd()) {
   }
   const failed = report.results.some((x) => x.status === 'FAIL') || report.dod.some((x) => x.status === 'FAIL');
   report.finished = new Date().toISOString();
-  report.status = failed ? 'FAIL' : 'PASS';
+  // a setup problem first: fixing code cannot make an ENV row pass
+  if (report.dod.some((x) => x.status === 'ENV')) report.status = 'ENV';
+  else report.status = failed ? 'FAIL' : 'PASS';
   return writeReport(root, gateDir, label, report);
+}
+
+// The stacks whose `requires` the DoD needs: the ones its rows name with
+// `Stack:` — not every stack of the repo (one may not run on this machine).
+function dodStacks(root, phase, stacks) {
+  const named = new Set(dodItems(root, phase).filter((it) => it.type === 'auto' && it.stack).map((it) => it.stack));
+  return stacks.filter((s) => named.has(s.id) || named.has(s.name) || named.has(s.agent));
 }
 
 function writeReport(root, gateDir, label, report) {
@@ -589,7 +627,8 @@ function dodLines(dodRows) {
   if (!dodRows.length) return [];
   const c = (s) => dodRows.filter((d) => d.status === s).length;
   return [
-    `  dod       PASS ${c('PASS')} (reused ${dodRows.filter((d) => d.reused).length}) · FAIL ${c('FAIL')} · EVIDENCE ${c('EVIDENCE')} · MANUAL ${c('MANUAL_REQUIRED')} · INCONCLUSIVE ${c('INCONCLUSIVE')}`,
+    `  dod       PASS ${c('PASS')} (reused ${dodRows.filter((d) => d.reused).length}) · FAIL ${c('FAIL')} · EVIDENCE ${c('EVIDENCE')} · MANUAL ${c('MANUAL_REQUIRED')} · INCONCLUSIVE ${c('INCONCLUSIVE')}` + (c('ENV') ? ` · ENV ${c('ENV')}` : '') + (c('SKIPPED') ? ` · SKIPPED ${c('SKIPPED')}` : ''),
+    ...dodRows.filter((x) => x.status === 'ENV').map((d) => `    ENV ${d.source} ${d.id}: ${d.reason}`),
     ...dodRows.filter((x) => x.status === 'FAIL').map((d) => `    FAIL ${d.source} ${d.id}: ${d.log}`),
     ...dodRows.filter((x) => x.evidence).map((d) => `    EVIDENCE ${d.source} ${d.id}: iteration ${d.evidence.iteration} · ship ${d.evidence.ship}` + (d.evidence.reason ? ' (' + d.evidence.reason + ')' : '')),
   ];
@@ -639,19 +678,14 @@ function headReportsOf(root, phase) {
 function allFailuresCmd(root, phase) {
   const reports = headReportsOf(root, phase);
   if (!reports.length) throw new core.JdiError(`no gate results at HEAD for ${phase.slug} — run \`gates run\` first`, 2);
-  let code = 0;
-  for (const r of reports) {
-    if (r.status === 'ENV') {
-      console.log(`- ENV ${r.stack}: ${(r.preflight || []).join('; ')}`);
-      code = Math.max(code, 5);
-    } else if (failuresCmd(r) !== 0) code = Math.max(code, 1);
-  }
-  return code;
+  return Math.max(...reports.map(failuresCmd));
 }
 
 function showCmd(root, phase, opts) {
   if (opts.failures && opts.all) return allFailuresCmd(root, phase);
-  const f = path.join(root, core.JDI_DIR, 'cache', 'gates', phase.slug, `${opts.stack || 'dod'}.json`);
+  // a reviewer name resolves to its stack file, as in `run`
+  const label = opts.stack ? findStack(loadStacks(root), opts.stack)?.id || opts.stack : 'dod';
+  const f = path.join(root, core.JDI_DIR, 'cache', 'gates', phase.slug, `${label}.json`);
   const report = core.readJson(f, null);
   if (!report) throw new core.JdiError(`no gate results at ${path.relative(root, f)}`, 2);
   report.file = path.relative(root, f);
@@ -661,7 +695,16 @@ function showCmd(root, phase, opts) {
 }
 
 // The work list of a fix round: only what failed, with its excerpt.
+// The environment problems of a report (preflight, ENV DoD rows).
+function envLines(report) {
+  return [...(report.preflight || []), ...(report.dod || []).filter((x) => x.status === 'ENV').map((x) => `DoD ${x.source} ${x.id}: ${x.reason}`)];
+}
+
 function failuresCmd(report) {
+  if (report.status === 'ENV') {
+    for (const l of envLines(report)) console.log(`- ENV ${report.stack}: ${l}`);
+    return 5;
+  }
   const gateFails = (report.results || []).filter((x) => x.status === 'FAIL').map((x) => ({ ...x, what: `${report.stack}/${x.gate}` }));
   const dodFails = (report.dod || []).filter((x) => x.status === 'FAIL').map((x) => ({ ...x, what: `DoD ${x.source} ${x.id}: ${x.criterion}` }));
   const fails = [...gateFails, ...dodFails];
@@ -696,7 +739,11 @@ function runChildren(phase, stackIds, rest) {
             try {
               resolve(JSON.parse(out));
             } catch {
-              resolve({ phase: phase.slug, stack: s, status: 'FAIL', results: [{ gate: 'run', status: 'FAIL', excerpt: tail(err || out) }], dod: [], file: '-', exit: code });
+              // a child that died still leaves a report: `show --failures --all` must see it
+              const root = process.cwd();
+              const head = core.git(['rev-parse', 'HEAD'], root).stdout || null;
+              const report = { phase: phase.slug, stack: s, head, status: 'FAIL', results: [{ gate: 'run', status: 'FAIL', exit: code, excerpt: tail(err || out) }], dod: [] };
+              resolve(writeReport(root, path.join(root, core.JDI_DIR, 'cache', 'gates', phase.slug), s, report));
             }
           });
         }),
@@ -717,12 +764,26 @@ function main(argv) {
   const phase = core.resolvePhase(id, root);
   if (sub === 'show') return showCmd(root, phase, opts);
   if (sub !== 'run') throw new core.JdiError('usage: jdi gates <run|show> <phase> ...', 1);
-  const stackIds = String(opts.stack || '').split(',').map((s) => s.trim()).filter(Boolean);
-  if (stackIds.length <= 1) return printReports([runGates(phase, opts, root)], opts.json);
-  if (core.loadConfig(root).economy?.parallel_gates === true) {
-    return runChildren(phase, stackIds, rest).then((reports) => printReports(reports, opts.json));
+  const names = String(opts.stack || '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (names.length <= 1) return printReports([runGates(phase, opts, root)], opts.json);
+  // every name resolved before anything runs; a reviewer without a stack
+  // file runs its own gates (as before .jdi/stacks/ existed for it)
+  const stacks = loadStacks(root);
+  const known = names.map((n) => findStack(stacks, n)).filter(Boolean);
+  for (const n of names.filter((x) => !findStack(stacks, x))) console.error(`note: no stack file for '${n}' — skipped (its reviewer runs its own gates)`);
+  if (!known.length) throw new core.JdiError(`no stack file for ${names.join(', ')} in .jdi/stacks/`, 3);
+  const ids = known.map((s) => s.id);
+  if (core.loadConfig(root).economy?.parallel_gates === true && ids.length > 1) {
+    if (!sharedReports(known)) return runChildren(phase, ids, rest).then((reports) => printReports(reports, opts.json));
+    console.error('note: stacks share a test_report path — run one after the other, so each proof is its own run');
   }
-  return printReports(stackIds.map((s) => runGates(phase, { ...opts, stack: s }, root)), opts.json);
+  return printReports(ids.map((s) => runGates(phase, { ...opts, stack: s }, root)), opts.json);
+}
+
+// Two stacks whose test_report paths can name the same file.
+function sharedReports(stacks) {
+  const prefixes = stacks.flatMap((s) => [s.test_report || []].flat().map((g) => (g.includes('*') ? g.slice(0, g.indexOf('*')) : g)));
+  return prefixes.some((a, i) => prefixes.some((b, j) => i !== j && (a.startsWith(b) || b.startsWith(a))));
 }
 
 module.exports = { main, runGates, loadStacks, findStack, summary, run, envFor, shellFor, tail, dodItems, changedInScope, treeFingerprint, productHash, namedFiles, verifyText, parseJunit, headReportsOf };

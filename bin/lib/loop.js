@@ -192,7 +192,8 @@ function record(phase, { root = process.cwd(), autonomous = false } = {}) {
   const config = core.loadConfig(root);
   const st = init(phase);
   if (['converged', 'killed'].includes(st.status)) return { status: st.status, reason: `LOOP.md already ${st.status}` };
-  const text = fs.readFileSync(path.join(phase.absDir, 'REVIEW.md'), 'utf8');
+  const text = core.readIf(path.join(phase.absDir, 'REVIEW.md'));
+  if (text === null) throw new core.JdiError(`${phase.dir}/REVIEW.md not found — the verify stopped before a review (environment? gates exit 5): fix it and verify again; nothing recorded`, 2);
   const v = review.verdictOf(text);
   if (!v.verdict) throw new core.JdiError('REVIEW.md has no verdict — malformed review', 2);
   const f = review.findings(text);

@@ -248,13 +248,20 @@ function planReview(phase, reviewers, { full = false } = {}, root = process.cwd(
   fs.rmSync(reviewFile, { force: true });
   fs.rmSync(segDir(root, phase), { recursive: true, force: true });
   const parallelOn = core.loadConfig(root).economy?.parallel_review !== false;
-  out.parallel = parallelOn && out.run.length > 1 && out.run.every((r) => writesSegments(root, r));
+  // only when the gates run outside the reviewers (a stack file per reviewer):
+  // a reviewer without one runs its own build/test, and two of those in one
+  // tree collide on ports, locks and output dirs
+  const gates = require('./gates');
+  const stacks = gates.loadStacks(root);
+  const gated = (r) => Boolean(gates.findStack(stacks, r));
+  out.parallel = parallelOn && out.run.length > 1 && out.run.every((r) => writesSegments(root, r) && gated(r));
   if (out.parallel) {
     fs.mkdirSync(segDir(root, phase), { recursive: true });
     out.segments = Object.fromEntries(out.run.map((r) => [r, path.relative(root, path.join(segDir(root, phase), `${r}.md`)).split(path.sep).join('/')]));
   }
   for (const r of out.run) ctx.state.reviewers[r] = { head };
   ctx.state.order = reviewers;
+  ctx.state.parallel_run = out.parallel ? out.run : [];
   core.writeFileEnsured(stateFile(root, phase), JSON.stringify(ctx.state, null, 2) + '\n', root);
   return out;
 }
@@ -290,8 +297,12 @@ function stamp(reviewFile, root) {
 function mergeReview(phase, root = process.cwd()) {
   const carryFile = carryFileOf(root, phase);
   const reviewFile = path.join(phase.absDir, 'REVIEW.md');
-  const order = (core.readJson(stateFile(root, phase), null) || {}).order;
-  const segs = collectSegments(root, phase, order);
+  const st = core.readJson(stateFile(root, phase), null) || {};
+  const segs = collectSegments(root, phase, st.order);
+  // a parallel reviewer that wrote nothing would drop out of the worst-case
+  // verdict: refuse, so the orchestrator spawns it again
+  const silent = (st.parallel_run || []).filter((r) => !fs.existsSync(path.join(segDir(root, phase), `${r}.md`)));
+  if (segs.length && silent.length) throw new core.JdiError(`no segment from ${silent.join(', ')} — spawn it again (never merge a review with a silent reviewer)`, 2);
   if (segs.length) {
     const base = core.readIf(reviewFile);
     const present = new Set(segments(base || '').map((x) => x.name));
@@ -393,16 +404,27 @@ function planCmd(phase, rest) {
 function fromGates(phase, root = process.cwd()) {
   const gates = require('./gates');
   const reports = gates.headReportsOf(root, phase);
-  const blockers = [];
+  const stacks = gates.loadStacks(root);
+  // one `## Reviewer: <agent>` segment per stack, so `review blockers --stack`
+  // gives each stack's doer only its failures; DoD failures stay outside the
+  // segments (they go to the DoD owner, `--dod-owner`)
+  const segs = [];
+  const dodBlockers = [];
   for (const r of reports) {
-    for (const x of (r.results || []).filter((y) => y.status === 'FAIL')) blockers.push(`- [defect] gate ${r.stack}/${x.gate} failed — log: ${x.log || '-'}`);
-    for (const x of (r.dod || []).filter((y) => y.status === 'FAIL')) blockers.push(`- [defect] DoD ${x.source} ${x.id} FAIL: ${x.criterion}${x.reason ? ' — ' + x.reason : ''}${x.log ? ' — log: ' + x.log : ''}`);
+    const fails = (r.results || []).filter((y) => y.status === 'FAIL').map((x) => `- [defect] gate ${r.stack}/${x.gate} failed — log: ${x.log || '-'}`);
+    if (fails.length) {
+      const st = gates.findStack(stacks, r.stack);
+      segs.push([`## Reviewer: ${st?.agent || r.stack}`, '', '**Verdict:** BLOCKED', '', '### Blockers', ...fails, ''].join('\n'));
+    }
+    for (const x of (r.dod || []).filter((y) => y.status === 'FAIL')) dodBlockers.push(`- [defect] DoD ${x.source} ${x.id} FAIL: ${x.criterion}${x.reason ? ' — ' + x.reason : ''}${x.log ? ' — log: ' + x.log : ''}`);
   }
-  if (!blockers.length) throw new core.JdiError(`no failed gate at HEAD for ${phase.slug} — nothing to block on (spawn the reviewers)`, 2);
+  if (!segs.length && !dodBlockers.length) throw new core.JdiError(`no failed gate at HEAD for ${phase.slug} — nothing to block on (spawn the reviewers)`, 2);
   const reviewFile = path.join(phase.absDir, 'REVIEW.md');
-  const text = [`# Review (slug: ${phase.slug})`, '', '**Verdict:** BLOCKED', '', 'The gates are red at HEAD after the fix pass; no reviewer was spawned (judgment waits for green gates).', '', '### Blockers', ...blockers, ''].join('\n');
-  fs.writeFileSync(reviewFile, text);
-  return { verdict: 'BLOCKED', blockers: blockers.length, verified: stamp(reviewFile, root) };
+  const head = [`# Review (slug: ${phase.slug})`, '', '**Verdict:** BLOCKED', '', 'The gates are red at HEAD after the fix pass; no reviewer was spawned (judgment waits for green gates).', ''];
+  const dodPart = dodBlockers.length ? ['### Blockers', ...dodBlockers, ''] : [];
+  fs.writeFileSync(reviewFile, [...head, ...dodPart, ...segs].join('\n'));
+  const count = dodBlockers.length + segs.reduce((n, t) => n + t.split('\n').filter((l) => l.startsWith('- [defect]')).length, 0);
+  return { verdict: 'BLOCKED', blockers: count, verified: stamp(reviewFile, root) };
 }
 
 function main(argv) {

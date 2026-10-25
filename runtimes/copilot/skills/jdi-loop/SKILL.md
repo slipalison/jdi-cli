@@ -129,6 +129,11 @@ loop:
   # --- Step B: verify = /jdi-verify Steps 4-5 (gates run, briefs, reviewers) ---
   # gates PASSed on the same inputs come back `reused` (economy.gate_cache)
 
+  # The verify stopped on the environment (gates exit 5 — a stack's
+  # `requires`, a test report that cannot be read): PAUSE, record nothing —
+  # LOOP.md `status: paused`, show the ENV lines, and resume with /jdi-loop
+  # once the environment is fixed. It is not a code defect: no doer, no reset.
+
   # --- Step C: record the iteration and get the decision ---
   DECISION=$(npx -y jdi-cli@0.20.0 loop record "$PHASE_SLUG")   # add --autonomous under /jdi-issue
 ```

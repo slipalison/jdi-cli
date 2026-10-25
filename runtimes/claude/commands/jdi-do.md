@@ -175,10 +175,16 @@ TASK_SPECIALIST = <task.specialist field from PLAN.md> OR <single doer fallback>
 Agent(
   subagent_type="${TASK_SPECIALIST}",
   description="Execute T-{X} phase $PHASE_SLUG",
-  prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, task=T-{X}, mode=single_task, brief=$BRIEF_TX",
+  prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, task=T-{X}, mode=single_task, wave=parallel, brief=$BRIEF_TX",
   run_in_background: true
 )
 ```
+
+`wave=parallel`: the doers of a parallel wave share one tree, so none of them
+writes PLAN.md or SUMMARY.md (a read-modify-write there would lose the other
+doer's line) and each stages only its own files. When the wave returns, YOU
+write each task's `Status:` line in PLAN.md and its SUMMARY.md line from the
+return messages, and commit them (`docs($PHASE_SLUG): wave {W} status`).
 
 Within a wave, multi-stack projects may spawn DIFFERENT specialists in parallel (different file scopes, disjoint `files_modified`).
 
@@ -224,9 +230,12 @@ before the wave:
 ```bash
 mkdir -p .jdi/cache
 STACKS=$(ls .jdi/stacks/*.json | xargs -n1 basename | sed 's/\.json$//' | paste -sd, -)
-npx -y jdi-cli@0.20.0 gates run "$PHASE_SLUG" --stack "$STACKS" --only build,test --changed-since "$WAVE_BASE" >/dev/null
+npx -y jdi-cli@0.20.0 gates run "$PHASE_SLUG" --stack "$STACKS" --only build,test --changed-since "$WAVE_BASE" >/dev/null; GRUN_RC=$?
 npx -y jdi-cli@0.20.0 gates show "$PHASE_SLUG" --failures --all > .jdi/cache/wave-failures.txt; WAVE_RC=$?
 ```
+
+`GRUN_RC` other than 0, 1 or 5: STOP — the suite did not run (no stack
+resolved, a crash), and an empty failures list is not a pass.
 
 (A stack with nothing changed in its scope is SKIPPED; with
 `economy.parallel_gates` the stacks run at the same time.) `WAVE_RC` = 5: the

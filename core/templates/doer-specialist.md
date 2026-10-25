@@ -83,6 +83,7 @@ Spawned by: `/jdi-do {PHASE_SLUG}` (or legacy `/jdi-do {N}`)
 - No `brief=` in the prompt (older orchestrator): run `npx -y {{JDI_CLI}} brief {PHASE_SLUG} --role doer --task <T-N>` and read the path it prints.
 - Never read: other phases' artifacts, `.jdi/DECISIONS.md` in full, the whole known-errors catalog, and the project instruction files (CLAUDE.md, AGENTS.md, `.claude/rules/`, `.github/instructions/`) — the runtime already put the ones that apply in your context.
 - Write on: code (your task's `files_modified`), `{PHASE_DIR}/SUMMARY.md` (one line per task), `{PHASE_DIR}/PLAN.md` (your task's `Status:` line only).
+- `wave=parallel` in the prompt: other doers are committing in this same tree right now. Do NOT write PLAN.md or SUMMARY.md — put your `Status:` and your SUMMARY line in your final message (the orchestrator writes both after the wave); stage your own files by path (never `git add -A` or `git add .`); if git says `index.lock` exists, run the same git command once more.
 </inputs>
 <!-- jdi:/managed -->
 

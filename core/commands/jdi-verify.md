@@ -104,17 +104,21 @@ inside a large reviewer context waiting on them; with
 
 ```bash
 if [ -d .jdi/stacks ]; then
+  GRUN_RC=0
   STACKS=$(echo $RUN | tr ' ' ',')                             # carried reviewers: no gates
-  [ -n "$STACKS" ] && npx -y {{JDI_CLI}} gates run "$PHASE_SLUG" --stack "$STACKS" ${FULL:+--fresh}
+  if [ -n "$STACKS" ]; then npx -y {{JDI_CLI}} gates run "$PHASE_SLUG" --stack "$STACKS" ${FULL:+--fresh}; GRUN_RC=$?; fi
   npx -y {{JDI_CLI}} gates run "$PHASE_SLUG" --only dod ${FULL:+--fresh}   # DoD once (E2E/real-login rows: EVIDENCE, never executed)
   npx -y {{JDI_CLI}} gates show "$PHASE_SLUG" --failures --all > .jdi/cache/gate-failures.txt; GATES_RC=$?
 fi
 ```
 
+`GRUN_RC` other than 0, 1 or 5 (no stack could be resolved, a crash): STOP —
+the gates did not run, and an empty failures list is not a pass.
 `GATES_RC` = 5 (status `ENV`: a stack's `requires` — env var, command, free
-disk, its `check` — is not met): STOP and show `.jdi/cache/gate-failures.txt`.
-The environment is not a code defect: no doer, no reviewer, no loop round
-until it is fixed.
+disk, its `check` — is not met, or a `Verify (test):` row has no report to
+read): STOP and show `.jdi/cache/gate-failures.txt`. The environment is not a
+code defect: no doer, no reviewer, no loop round until it is fixed (under
+`/jdi-loop`: the loop pauses, nothing is recorded).
 
 `EVIDENCE` rows are never run by the gates: the `dod` report carries the
 freshness of their recorded runs (`evidence: {iteration, ship}`,
@@ -134,9 +138,13 @@ never reused, nor the `audit`; `--full` runs everything).
 DoD row failed): a failing test, lint or coverage needs no reviewer to say so —
 spawning reviewers and the critic now buys a BLOCKED verdict and a whole loop
 round. ONE fix pass first: a FRESH doer per stack with failures (the doer
-paired with that reviewer; DoD failures go to the first stack's doer), each with
-`mode=fix_wave failures=.jdi/cache/gate-failures.txt`, then 4a again (what
-passed is reused). Still red: no reviewer —
+paired with that reviewer), each with its own list —
+`npx -y {{JDI_CLI}} gates show "$PHASE_SLUG" --failures --stack <stack> > .jdi/cache/gate-failures-<stack>.txt`
+and `mode=fix_wave failures=.jdi/cache/gate-failures-<stack>.txt`; the DoD
+failures (`gates show "$PHASE_SLUG" --failures`, the `dod` report) go to the
+first stack's doer. A fix that committed changes what `review plan` decided
+(a carried reviewer's scope may now have changed): run Step 4 again from
+`review plan` (what passed is reused). Still red: no reviewer —
 
 ```bash
 npx -y {{JDI_CLI}} review from-gates "$PHASE_SLUG"   # REVIEW.md BLOCKED, one [defect] per failure, stamped
