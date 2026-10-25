@@ -4,6 +4,13 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
+// --no-color has to be in the environment before ui.js loads: it picks the
+// palette and the banner animation once, at require time (#47). The child
+// .sh scripts read the same variable.
+if (process.argv.includes('--no-color')) process.env.NO_COLOR = '1';
+// The shell helpers that call back into Node (validate-phase -> resolve-phase)
+// use this binary, not whatever `node` the PATH has.
+process.env.JDI_NODE = process.execPath;
 const ui = require('./lib/ui');
 const i18n = require('./lib/i18n');
 const { c, sym } = ui;
@@ -14,6 +21,9 @@ const isWindows = process.platform === 'win32';
 
 const VALID_RUNTIMES = ['claude', 'copilot', 'antigravity', 'opencode', 'junie', 'all'];
 const VALID_SCOPES = ['user', 'project'];
+// uninstall also takes `both`, its default.
+const UNINSTALL_SCOPES = [...VALID_SCOPES, 'both'];
+const RUNTIME_NAMES = VALID_RUNTIMES.filter((r) => r !== 'all');
 
 // Idioma resolvido uma vez em main() e usado por todo o dispatcher.
 let cliLang = i18n.DEFAULT_LANG;
@@ -30,45 +40,108 @@ function tr(key, ...args) {
 const FLAG_ALIAS = {
   '-s': 'scope', '--scope': 'scope',
   '-v': 'verbose', '--verbose': 'verbose',
+  '-V': 'version', '--version': 'version',
   '-h': 'help', '--help': 'help',
+  '-y': 'yes',
   '--no-color': 'noColor',
 };
-const BOOL_FLAGS = new Set(['verbose', 'help', 'version', 'noColor']);
-// Flags whose value is the NEXT token (`--flag value`), besides `--flag=value`.
-// Without this, `--runtime claude` parsed as {runtime:true} + positional
-// "claude" and broke the shell delegation.
-const VALUE_FLAGS = new Set(['scope', 'runtime', 'repo', 'antigravity-scope', 'lang']);
+
+// Flags every command accepts. `value` takes the next token (or `=value`);
+// `bool` takes no value, or an explicit `=true|false`.
+const GLOBAL_FLAGS = { noColor: 'bool', lang: 'value', help: 'bool', version: 'bool' };
+
+// The flags each install-side command accepts on top of the global ones.
+// Anything else is a usage error, before any script runs: a typo such as
+// `--dryrun` used to be dropped and the purge it guarded ran for real (#36),
+// and one global set of value flags made `uninstall --runtime claude` fall
+// back to `all` (#35). The plumbing helpers are not listed: they get the raw
+// argv and parse it themselves.
+const COMMAND_FLAGS = {
+  install: { scope: 'value', runtime: 'value', githooks: 'bool' },
+  update: { 'force-specialists': 'bool', 'skip-specialists': 'bool', 'dry-run': 'bool', yes: 'bool' },
+  uninstall: { runtime: 'value', scope: 'value', purge: 'bool', yes: 'bool', 'dry-run': 'bool' },
+  build: {},
+  'install-playwright': { 'skip-browser': 'bool', 'skip-mcp': 'bool', runtime: 'value', 'antigravity-scope': 'value' },
+  'install-caveman': { repo: 'value', scope: 'value', force: 'bool' },
+  doctor: { verbose: 'bool' },
+  help: {},
+};
+const COMMAND_ALIAS = {
+  upgrade: 'update', remove: 'uninstall', playwright: 'install-playwright', caveman: 'install-caveman',
+};
+
+const BOOL_VALUES = { true: true, 1: true, yes: true, false: false, 0: false, no: false };
+
+// Leading global flags (`jdi --no-color install claude`) are skipped to find
+// the command; `-h`, `-V`/`-v` and their long forms ARE the command there.
+function findCommand(args) {
+  let i = 0;
+  while (i < args.length) {
+    const a = args[i];
+    if (a === '--no-color' || a.startsWith('--lang=')) { i++; continue; }
+    if (a === '--lang') { i += 2; continue; }
+    break;
+  }
+  return i;
+}
 
 function parseArgs(argv) {
   const args = argv.slice(2);
-  if (args.length === 0) return { cmd: 'help' };
+  const cmdIndex = findCommand(args);
+  if (cmdIndex >= args.length) return { cmd: 'help', positional: [], flags: parseFlags(args, null).flags, errors: [], cmdIndex };
 
-  const cmd = args[0];
-  const rest = args.slice(1);
+  const raw = args[cmdIndex];
+  const cmd = COMMAND_ALIAS[raw] || raw;
+  const spec = Object.hasOwn(COMMAND_FLAGS, cmd) ? COMMAND_FLAGS[cmd] : null;
+  const rest = [...args.slice(0, cmdIndex), ...args.slice(cmdIndex + 1)];
+  return { cmd, ...parseFlags(rest, spec), cmdIndex };
+}
+
+// One `-x` / `--x[=v]` token -> { key, kind, name, value }; value is
+// undefined without `=`.
+function flagToken(a, spec) {
+  const eq = a.indexOf('=');
+  const name = eq === -1 ? a : a.slice(0, eq);
+  const key = FLAG_ALIAS[name] || name.replace(/^--?/, '');
+  return { key, name, kind: GLOBAL_FLAGS[key] || spec?.[key], value: eq === -1 ? undefined : a.slice(eq + 1) };
+}
+
+// A boolean flag: bare, or `=true|false` (`--purge=false` used to purge).
+function boolFlag(t, flags, errors) {
+  if (t.value === undefined) {
+    flags[t.key] = true;
+    return;
+  }
+  const v = BOOL_VALUES[t.value.toLowerCase()];
+  if (v === undefined) errors.push(`${t.name} takes no value (or =true|false)`);
+  else flags[t.key] = v;
+}
+
+// spec null = a plumbing helper: only the global flags matter here, and
+// unknown ones are left to the helper.
+function parseFlags(tokens, spec) {
   const flags = {};
   const positional = [];
+  const errors = [];
 
-  for (let i = 0; i < rest.length; i++) {
-    const a = rest[i];
-    if (!a.startsWith('-')) { positional.push(a); continue; }
-
-    const eq = a.indexOf('=');
-    const raw = eq === -1 ? a : a.slice(0, eq);
-    const key = FLAG_ALIAS[raw] || raw.replace(/^--?/, '');
-
-    if (eq !== -1) { flags[key] = a.slice(eq + 1); continue; }
-    if (BOOL_FLAGS.has(key)) { flags[key] = true; continue; }
-
-    const next = rest[i + 1];
-    if (VALUE_FLAGS.has(key) && next !== undefined && !next.startsWith('-')) {
-      flags[key] = next;
-      i++;
+  for (let i = 0; i < tokens.length; i++) {
+    const a = tokens[i];
+    if (!a.startsWith('-') || a === '-') { positional.push(a); continue; }
+    const t = flagToken(a, spec);
+    if (!t.kind) {
+      if (spec) errors.push(`unknown flag: ${t.name}`);
+    } else if (t.kind === 'bool') {
+      boolFlag(t, flags, errors);
+    } else if (t.value !== undefined) {
+      flags[t.key] = t.value;
+    } else if (tokens[i + 1] === undefined || tokens[i + 1].startsWith('-')) {
+      errors.push(`${t.name} needs a value`);
     } else {
-      flags[key] = true;
+      flags[t.key] = tokens[++i];
     }
   }
 
-  return { cmd, positional, flags };
+  return { positional, flags, errors };
 }
 
 // =================================================================
@@ -159,7 +232,18 @@ function runShellScript(scriptName, scriptArgs = []) {
     cwd: process.cwd(),
   });
 
-  return { code: result.status ?? 0 };
+  return { code: exitCodeOf(result, cmd) };
+}
+
+// Only status 0 is success. A shell that could not start (ENOENT: no bash, a
+// broken Git Bash) has status null and used to print the success box with
+// exit 0 (#38); a child killed by a signal has status null too.
+function exitCodeOf(result, cmd) {
+  if (result.error) {
+    ui.fail(`${cmd}: ${result.error.message}`);
+    return 127;
+  }
+  return result.status ?? 1;
 }
 
 // =================================================================
@@ -198,7 +282,7 @@ function runLibScript(baseName, scriptArgs = [], opts = {}) {
     stdio: opts.capture ? ['ignore', 'pipe', 'inherit'] : 'inherit',
   });
 
-  return { code: result.status ?? 0, stdout: opts.capture ? (result.stdout || '') : '' };
+  return { code: exitCodeOf(result, cmd), stdout: opts.capture ? (result.stdout || '') : '' };
 }
 
 // resolve-phase runs in Node since 0.17.0 (one implementation: the .sh/.ps1
@@ -268,8 +352,10 @@ function cmdLibZeroArg(baseName, rawArgs) {
 // global flags jdi.js consumes itself (--no-color, --lang <x>). The helpers
 // never declare those, so forwarding them broke every helper on Windows
 // (`validate-slug --no-color` -> binder error on `-NoColor`, #33).
+let libArgStart = 3;
+
 function libArgs() {
-  const raw = process.argv.slice(3);
+  const raw = process.argv.slice(libArgStart);
   const out = [];
   for (let i = 0; i < raw.length; i++) {
     const a = raw[i];
@@ -317,33 +403,44 @@ function buildFlagArgs(flags, spec) {
 function ensureRuntime(runtime) {
   if (!runtime) {
     ui.fail(tr('error.runtime_required'));
-    console.log('');
-    console.log(`  ${tr('help.usage_label')} ${c.cyan}jdi install <runtime> [--scope user|project]${c.reset}`);
-    console.log(`  ${tr('error.runtimes_label')}: ${VALID_RUNTIMES.join(', ')}`);
-    console.log('');
+    console.error('');
+    console.error(`  ${tr('help.usage_label')} ${c.cyan}jdi install <runtime> [--scope user|project]${c.reset}`);
+    console.error(`  ${tr('error.runtimes_label')}: ${VALID_RUNTIMES.join(', ')}`);
+    console.error('');
     process.exit(1);
   }
   if (!VALID_RUNTIMES.includes(runtime)) {
     ui.fail(tr('error.runtime_invalid', runtime));
-    console.log(`  ${tr('error.valid_options')}: ${VALID_RUNTIMES.join(', ')}`);
+    console.error(`  ${tr('error.valid_options')}: ${VALID_RUNTIMES.join(', ')}`);
     process.exit(1);
   }
 }
 
-function ensureScope(scope) {
-  if (scope && !VALID_SCOPES.includes(scope)) {
+function ensureScope(scope, valid = VALID_SCOPES) {
+  if (scope && !valid.includes(scope)) {
     ui.fail(tr('error.scope_invalid', scope));
-    console.log(`  ${tr('error.valid_options')}: ${VALID_SCOPES.join(', ')}`);
+    console.error(`  ${tr('error.valid_options')}: ${valid.join(', ')}`);
     process.exit(1);
   }
+}
+
+// The runtime is the one positional; `--runtime <name>` is the same thing
+// (the shell scripts document it). Both, and disagreeing, is an error.
+function runtimeArg({ positional, flags }) {
+  if (positional.length > 1 || (positional[0] && flags.runtime && positional[0] !== flags.runtime)) {
+    ui.fail(tr('error.one_runtime'));
+    process.exit(1);
+  }
+  return positional[0] || flags.runtime;
 }
 
 // =================================================================
 // Commands
 // =================================================================
 
-async function cmdInstall({ positional, flags }) {
-  const runtime = positional[0];
+async function cmdInstall(parsed) {
+  const { flags } = parsed;
+  const runtime = runtimeArg(parsed);
   const scope = flags.scope || 'project';
 
   ensureRuntime(runtime);
@@ -361,9 +458,6 @@ async function cmdInstall({ positional, flags }) {
     ? ['-Runtime', runtime, '-Scope', scope]
     : [runtime, '--scope', scope];
   if (flags.githooks) args.push(isWindows ? '-Githooks' : '--githooks');
-
-  const sp = ui.spinner(tr('install.spinner', runtime));
-  sp.stop();
 
   const { code } = runShellScript('jdi-install', args);
 
@@ -391,7 +485,11 @@ async function cmdInstall({ positional, flags }) {
   }
 }
 
-async function cmdBuild({ flags }) {
+async function cmdBuild(parsed) {
+  // `build <runtime>` rebuilds only that runtime (both builders take it).
+  const runtime = runtimeArg(parsed) || 'all';
+  ensureRuntime(runtime);
+
   await ui.bannerAnimated();
 
   ui.header(tr('build.header'));
@@ -399,12 +497,13 @@ async function cmdBuild({ flags }) {
   ui.info(`${tr('label.output')}: ${c.dim}${PKG_ROOT}/runtimes/${c.reset}`);
   console.log('');
 
-  const { code } = runShellScript('jdi-build');
+  const { code } = runShellScript('jdi-build', isWindows ? ['-Target', runtime] : [runtime]);
 
   if (code === 0) {
     const runtimesDir = `${c.dim}runtimes/${c.reset}`;
+    const built = runtime === 'all' ? RUNTIME_NAMES : [runtime];
     ui.successSummary(tr('build.success_title'), [
-      `${sym.success} ${tr('build.success_line1')}`,
+      `${sym.success} ${tr('build.success_line1', built.length, built.join(', '))}`,
       `${sym.success} ${tr('build.success_line2', runtimesDir)}`,
     ]);
     ui.nextSteps([
@@ -437,15 +536,19 @@ async function cmdUpdate({ flags }) {
   }
 }
 
-async function cmdUninstall({ positional, flags }) {
+async function cmdUninstall(parsed) {
+  const { flags } = parsed;
+  // No runtime given = all of them (documented); `--runtime claude` is claude
+  // only — it used to fall through to `all` (#35).
+  const runtime = runtimeArg(parsed) || 'all';
+  ensureRuntime(runtime);
+  ensureScope(flags.scope, UNINSTALL_SCOPES);
+
   await ui.bannerAnimated();
 
   ui.header(tr('uninstall.header'));
   ui.info(`${tr('label.directory')}: ${c.dim}${process.cwd()}${c.reset}`);
   console.log('');
-
-  const runtime = positional[0] || 'all';
-  ensureRuntime(runtime);
 
   const args = (isWindows ? ['-Runtime', runtime] : ['--runtime', runtime]).concat(
     buildFlagArgs(flags, [
@@ -555,7 +658,7 @@ async function cmdHelp() {
   console.log(`  ${c.cyan}install${c.reset} ${c.gray}<runtime>${c.reset}      ${tr('help.cmd.install')}`);
   console.log(`  ${c.cyan}update${c.reset}                 ${tr('help.cmd.update')}`);
   console.log(`  ${c.cyan}uninstall${c.reset} ${c.gray}[runtime]${c.reset}    ${tr('help.cmd.uninstall')}`);
-  console.log(`  ${c.cyan}build${c.reset}                  ${tr('help.cmd.build')}`);
+  console.log(`  ${c.cyan}build${c.reset} ${c.gray}[runtime]${c.reset}        ${tr('help.cmd.build')}`);
   console.log(`  ${c.cyan}doctor${c.reset}                 ${tr('help.cmd.doctor')}`);
   console.log(`  ${c.cyan}install-playwright${c.reset}     ${tr('help.cmd.install_playwright')}`);
   console.log(`  ${c.cyan}install-caveman${c.reset}        ${tr('help.cmd.install_caveman')}`);
@@ -596,11 +699,13 @@ async function cmdHelp() {
   console.log(`  ${c.cyan}copilot${c.reset}                GitHub Copilot`);
   console.log(`  ${c.cyan}antigravity${c.reset}            Google Antigravity`);
   console.log(`  ${c.cyan}opencode${c.reset}               OpenCode`);
+  console.log(`  ${c.cyan}junie${c.reset}                  JetBrains Junie`);
   console.log(`  ${c.cyan}all${c.reset}                    ${tr('help.runtime.all')}`);
   console.log('');
 
   console.log(`${c.bold}${tr('help.options_label')}${c.reset}`);
   console.log(`  ${c.cyan}--scope${c.reset} ${c.gray}<user|project|both>${c.reset}  ${tr('help.opt.scope')}`);
+  console.log(`  ${c.cyan}--runtime${c.reset} ${c.gray}<name>${c.reset}       ${tr('help.opt.runtime')}`);
   console.log(`  ${c.cyan}--githooks${c.reset}             ${tr('help.opt.githooks')}`);
   console.log(`  ${c.cyan}--lang${c.reset} ${c.gray}<en|pt-BR>${c.reset}     ${tr('help.opt.lang')}`);
   console.log(`  ${c.cyan}--verbose${c.reset}              ${tr('help.opt.verbose')}`);
@@ -647,10 +752,7 @@ function cmdVersion() {
 
 async function main() {
   const parsed = parseArgs(process.argv);
-
-  if (parsed.flags?.noColor) {
-    process.env.NO_COLOR = '1';
-  }
+  libArgStart = 2 + parsed.cmdIndex + 1;
 
   try {
     cliLang = i18n.resolveLang(parsed.flags);
@@ -668,9 +770,26 @@ async function main() {
     process.env.JDI_LANG = cliLang;
   }
 
-  if (parsed.flags?.version) {
-    cmdVersion();
-    return;
+  // Usage errors stop here, before any banner or script (#36).
+  if (parsed.errors.length > 0) {
+    const helpCmd = `${c.cyan}npx jdi-cli help${c.reset}`;
+    for (const e of parsed.errors) ui.fail(e);
+    console.error(`  ${tr('error.see_help', helpCmd)}`);
+    process.exit(1);
+  }
+
+  // `-h` / `-V` after an install-side command: help or version, never the
+  // command itself (`install claude -h` used to install). The plumbing
+  // helpers get their argv untouched.
+  if (Object.hasOwn(COMMAND_FLAGS, parsed.cmd)) {
+    if (parsed.flags.help) {
+      await cmdHelp();
+      return;
+    }
+    if (parsed.flags.version) {
+      cmdVersion();
+      return;
+    }
   }
 
   switch (parsed.cmd) {
@@ -678,22 +797,18 @@ async function main() {
       await cmdInstall(parsed);
       break;
     case 'update':
-    case 'upgrade':
       await cmdUpdate(parsed);
       break;
     case 'uninstall':
-    case 'remove':
       await cmdUninstall(parsed);
       break;
     case 'build':
       await cmdBuild(parsed);
       break;
     case 'install-playwright':
-    case 'playwright':
       await cmdInstallPlaywright(parsed);
       break;
     case 'install-caveman':
-    case 'caveman':
       await cmdInstallCaveman(parsed);
       break;
     case 'doctor':
@@ -771,18 +886,23 @@ async function main() {
       break;
     case '--version':
     case '-V':
+    case '-v':
       cmdVersion();
       break;
     default: {
       const helpCmd = `${c.cyan}npx jdi-cli help${c.reset}`;
       ui.fail(tr('error.unknown_command', parsed.cmd));
-      console.log(`  ${tr('error.see_help', helpCmd)}`);
+      console.error(`  ${tr('error.see_help', helpCmd)}`);
       process.exit(1);
     }
   }
 }
 
-main().catch((err) => {
-  ui.fail(err?.message ? err.message : String(err));
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((err) => {
+    ui.fail(err?.message ? err.message : String(err));
+    process.exit(1);
+  });
+}
+
+module.exports = { parseArgs, exitCodeOf };

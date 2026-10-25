@@ -50,6 +50,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProjectDir = (Get-Location).Path
+$UserHome   = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
+# Out-File -Encoding UTF8 writes a BOM on Windows PowerShell 5.1, and a BOM'd
+# JSON breaks JSON.parse in the MCP clients (#60).
+$Utf8NoBom  = New-Object System.Text.UTF8Encoding($false)
 
 function Detect-PackageManager {
   if (Test-Path (Join-Path $ProjectDir 'pnpm-lock.yaml')) { return 'pnpm' }
@@ -82,11 +86,13 @@ function Install-PlaywrightDep {
   $pm = Detect-PackageManager
   Write-Information -MessageData "  Installing @playwright/test via $pm..." -InformationAction Continue
 
+  # --ignore-scripts (S6505), as in the .sh: @playwright/test needs no
+  # lifecycle scripts -- browsers install via the explicit step below (#50).
   switch ($pm) {
-    'pnpm' { & pnpm add -D '@playwright/test' }
-    'yarn' { & yarn add -D '@playwright/test' }
-    'bun'  { & bun add -d '@playwright/test' }
-    default { & npm install --save-dev '@playwright/test' }
+    'pnpm' { & pnpm add -D --ignore-scripts '@playwright/test' }
+    'yarn' { & yarn add -D --ignore-scripts '@playwright/test' }
+    'bun'  { & bun add -d --ignore-scripts '@playwright/test' }
+    default { & npm install --save-dev --ignore-scripts '@playwright/test' }
   }
 
   return ($LASTEXITCODE -eq 0)
@@ -98,7 +104,11 @@ function Install-ChromiumBrowser {
     return $true
   }
   Write-Information -MessageData "  Installing chromium browser (~170MB, may take a minute)..." -InformationAction Continue
-  & npx --yes playwright install chromium
+  # Run the locally installed binary -- no on-demand npx package execution
+  # (S6505), as in the .sh (#50). On Windows the .bin shim is a .cmd.
+  $playwright = Join-Path $ProjectDir 'node_modules/.bin/playwright'
+  if ($env:OS -eq 'Windows_NT') { $playwright += '.cmd' }
+  & $playwright install chromium
   return ($LASTEXITCODE -eq 0)
 }
 
@@ -143,7 +153,7 @@ function Inject-ClaudeMcp {
   $settings['mcpServers'] = $mcp
 
   $json = $settings | ConvertTo-Json -Depth 8
-  $json | Out-File -FilePath $settingsPath -Encoding UTF8 -NoNewline
+  [System.IO.File]::WriteAllText($settingsPath, $json, $Utf8NoBom)
   Write-Output "  -> wrote .claude/settings.local.json (mcpServers.playwright)"
 }
 
@@ -196,7 +206,7 @@ function Inject-OpencodeMcp {
   $newJson = $obj | ConvertTo-Json -Depth 8
   $header = "// OpenCode config - JDI managed (mcp.playwright managed; rest is yours)`n"
   $output = $header + $newJson + "`n"
-  $output | Out-File -FilePath $configPath -Encoding UTF8 -NoNewline
+  [System.IO.File]::WriteAllText($configPath, $output, $Utf8NoBom)
   Write-Output "  -> wrote .opencode/opencode.jsonc (mcp.playwright)"
 }
 
@@ -237,7 +247,7 @@ function Inject-CopilotMcp {
   }
   $settings['servers'] = $servers
 
-  ($settings | ConvertTo-Json -Depth 8) | Out-File -FilePath $f -Encoding UTF8 -NoNewline
+  [System.IO.File]::WriteAllText($f, ($settings | ConvertTo-Json -Depth 8), $Utf8NoBom)
   Write-Output "  -> wrote .vscode/mcp.json (servers.playwright) for Copilot"
 }
 
@@ -293,7 +303,7 @@ function Inject-AntigravityMcp {
   }
   $settings['mcpServers'] = $mcp
 
-  ($settings | ConvertTo-Json -Depth 8) | Out-File -FilePath $f -Encoding UTF8 -NoNewline
+  [System.IO.File]::WriteAllText($f, ($settings | ConvertTo-Json -Depth 8), $Utf8NoBom)
   Write-Output "  -> wrote $f (mcpServers.playwright) for Antigravity"
 }
 

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  jdi-build (Windows): gera runtimes/{claude,copilot,antigravity,opencode} a partir de core/.
+  jdi-build (Windows): gera runtimes/{claude,copilot,antigravity,opencode,junie} a partir de core/.
 
 .DESCRIPTION
   Equivalente PowerShell de bin/jdi-build.sh. Funciona em Windows sem precisar de bash/awk/sed.

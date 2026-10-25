@@ -103,7 +103,7 @@ inject_claude_mcp() {
   fi
 
   local f="$dir/settings.local.json"
-  if [[ -f "$f" ]] && grep -qE '"playwright"\s*:' "$f"; then
+  if [[ -f "$f" ]] && grep -qE '"playwright"[[:space:]]*:' "$f"; then
     echo "  [skip] mcpServers.playwright already present in settings.local.json"
     return
   fi

@@ -55,7 +55,9 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 if (Test-Path $target) {
   if (-not $Force) {
     Write-Output "  Target exists."
-    $answer = Read-Host "  Overwrite? (y/N)"
+    # [string]: Read-Host returns $null when stdin is closed (CI, an agent),
+    # and `$null -notmatch` is false -- it used to delete and re-clone (#49).
+    $answer = [string](Read-Host "  Overwrite? (y/N)")
     if ($answer -notmatch '^[yY]') {
       Write-Output "  Skipped."
       exit 0

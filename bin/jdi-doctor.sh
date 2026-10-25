@@ -27,8 +27,8 @@ readonly JDI_AGENT_GLOB='jdi-*.md'
 readonly SKILL_FILE_NAME='SKILL.md'
 readonly PLAYWRIGHT_KEY='"playwright"'
 
-# Cores (sem cor se nao for tty)
-if [[ -t 1 ]]; then
+# Cores (sem cor se nao for tty, nem com NO_COLOR / --no-color)
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   GRN=$'\033[32m'; YLW=$'\033[33m'; RED=$'\033[31m'; DIM=$'\033[2m'; RST=$'\033[0m'
 else
   GRN=""; YLW=""; RED=""; DIM=""; RST=""
@@ -122,7 +122,7 @@ else
   warn "OpenCode nao detectado (sem CLI nem ~/.config/opencode/)"
 fi
 
-if ! $CLAUDE_OK && ! $COPILOT_OK && ! $ANTIGRAVITY_OK && ! $OPENCODE_OK; then
+if ! $CLAUDE_OK && ! $COPILOT_OK && ! $ANTIGRAVITY_OK && ! $OPENCODE_OK && ! $JUNIE_OK; then
   fail "Nenhum runtime detectado. JDI nao serve pra nada sem runtime."
 fi
 
@@ -179,13 +179,14 @@ fi
 # ---------------------------------------------------------------------------
 section "5. Adapters buildados (runtimes/)"
 
-for rt in claude copilot antigravity opencode; do
+for rt in claude copilot antigravity opencode junie; do
   if [[ -d "$JDI_ROOT/runtimes/$rt" ]]; then
     case "$rt" in
       claude)      count=$(find "$JDI_ROOT/runtimes/claude/agents" -name "*.md" 2>/dev/null | wc -l | tr -d ' ') ;;
       copilot)     count=$(find "$JDI_ROOT/runtimes/copilot/agents" -name "*.agent.md" 2>/dev/null | wc -l | tr -d ' ') ;;
       antigravity) count=$(find "$JDI_ROOT/runtimes/antigravity/skills" -name "$SKILL_FILE_NAME" 2>/dev/null | wc -l | tr -d ' ') ;;
       opencode)    count=$(find "$JDI_ROOT/runtimes/opencode/agents" -name "*.md" 2>/dev/null | wc -l | tr -d ' ') ;;
+      junie)       count=$(find "$JDI_ROOT/runtimes/junie/agents" -name "*.md" 2>/dev/null | wc -l | tr -d ' ') ;;
       *)           count=0 ;;
     esac
 

@@ -13,7 +13,7 @@ Field `schema_version` in `STATE.md` indicates the phase identification model:
 | 1 (legacy) | numeric position (`current_phase: 5`) | `.jdi/phases/NN-slug/` | NO — numeric positions collide across branches |
 | 2 (current) | canonical slug (`current_phase_slug: auth-flow`) | `.jdi/phases/<slug>/` | YES — slug is unique; slug collision surfaces as a visible git conflict |
 
-v1 projects can migrate via `/jdi-migrate-phases` (non-destructive: does not rename folders, just stamps `schema_version: 2` + `current_phase_slug` in STATE.md — no manifest file is needed or written). Every JDI command accepts slug OR integer position in v2; the resolver helper (`npx -y jdi-cli resolve-phase`, backed by `bin/lib/jdi-resolve-phase.{sh,ps1}`) normalizes.
+v1 projects can migrate via `/jdi-migrate-phases` (non-destructive: does not rename folders, just stamps `schema_version: 2` + `current_phase_slug` in STATE.md — no manifest file is needed or written). Every JDI command accepts slug OR integer position in v2; the resolver helper (`npx -y jdi-cli resolve-phase`, Node: `resolvePhase` in `bin/lib/jdi-core.js`) normalizes.
 
 When `schema_version` is absent, default = 1 (compatibility).
 

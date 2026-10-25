@@ -414,6 +414,8 @@ EOF
 
 # The single-file views and STATE.md are per-clone artifacts — never
 # versioned, never a merge conflict (commands regenerate them):
+# a .gitignore without a final newline would glue the next pattern onto its last line
+if [ -s .gitignore ] && [ -n "$(tail -c 1 .gitignore)" ]; then echo >> .gitignore; fi
 for p in .jdi/STATE.md .jdi/ROADMAP.md .jdi/DECISIONS.md .jdi/todos.md \
          .jdi/registry.md .jdi/specialists.md .jdi/reviewers.md .jdi/skills-registry.md; do
   grep -qxF "$p" .gitignore 2>/dev/null || echo "$p" >> .gitignore

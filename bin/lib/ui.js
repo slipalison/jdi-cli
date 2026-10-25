@@ -246,7 +246,9 @@ async function bannerAnimated() {
 
   // Hold the banner for HOLD_MS so the user can see it before the command continues.
   // Use a small spinner under the tagline to signal that the CLI is alive and not frozen.
-  const HOLD_MS = 5000;
+  // Short: every interactive command pays it (5 s made `help` take 5.8 s, #52).
+  // JDI_ANIMATE=off, NO_COLOR or --no-color skip the animation entirely.
+  const HOLD_MS = 800;
   const SPIN_INTERVAL = 100;
   const SPIN_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
   const purple = synthwave.purple;
@@ -276,15 +278,18 @@ function banner() {
 // Box drawing
 function box(title, lines, opts = {}) {
   const color = opts.color || c.cyan;
+  // The title may carry ANSI codes (successSummary colors it): pad by its
+  // visible length, or the title row comes out short of the border.
+  const titleLen = stripAnsi(title).length;
   const width = Math.max(
-    title.length + 4,
+    titleLen + 4,
     ...lines.map((l) => stripAnsi(l).length + 4),
     50
   );
 
   const top = `${color}╭${'─'.repeat(width - 2)}╮${c.reset}`;
   const bottom = `${color}╰${'─'.repeat(width - 2)}╯${c.reset}`;
-  const titleLine = `${color}│${c.reset} ${c.bold}${title}${c.reset}${' '.repeat(width - 3 - title.length)}${color}│${c.reset}`;
+  const titleLine = `${color}│${c.reset} ${c.bold}${title}${c.reset}${' '.repeat(width - 3 - titleLen)}${color}│${c.reset}`;
   const sep = `${color}├${'─'.repeat(width - 2)}┤${c.reset}`;
 
   console.log(top);
@@ -320,8 +325,9 @@ function step(msg) {
 function ok(msg) {
   console.log(`  ${sym.success} ${msg}`);
 }
+// Errors go to stderr, so `2>/dev/null` and pipes behave.
 function fail(msg) {
-  console.log(`  ${sym.error} ${c.red}${msg}${c.reset}`);
+  console.error(`  ${sym.error} ${c.red}${msg}${c.reset}`);
 }
 function warn(msg) {
   console.log(`  ${sym.warn} ${c.yellow}${msg}${c.reset}`);

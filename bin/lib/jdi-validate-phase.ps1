@@ -39,9 +39,12 @@ if ([string]::IsNullOrWhiteSpace($PhaseId)) {
 
 function Say([string]$msg) { if (-not $Quiet) { Write-Output $msg } }
 
-# --- Resolve phase via sibling resolver (KEY='value' lines) ---
-$resolver = Join-Path $PSScriptRoot 'jdi-resolve-phase.ps1'
-$resolved = & $resolver $PhaseId 2>$null
+# --- Resolve the phase with the Node resolver (KEY='value' lines) ---
+# One implementation since 0.17; the old .ps1 twin crashed on an empty
+# STATE.md (#41). bin/jdi.js passes its own node binary in JDI_NODE.
+$node = if ($env:JDI_NODE) { $env:JDI_NODE } else { 'node' }
+$jdiJs = Join-Path (Split-Path -Parent $PSScriptRoot) 'jdi.js'
+$resolved = & $node $jdiJs resolve-phase $PhaseId 2>$null
 $resolveRc = $LASTEXITCODE
 if ($resolveRc -ne 0 -or -not $resolved) {
   # Mirror the .sh: rc 2 = resolver's own "not found in ROADMAP"; anything

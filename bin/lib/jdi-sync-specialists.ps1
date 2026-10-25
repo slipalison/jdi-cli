@@ -80,8 +80,9 @@ function Get-ProjectLang {
     # pt-BR copy would keep re-inferring pt-BR after the project switched.
     foreach ($pd in @('.claude\commands', '.github\prompts', '.opencode\commands', '.agents\skills\jdi-new', '.junie\skills\jdi-new')) {
       if (-not (Test-Path $pd)) { continue }
+      # -List: one match per matching file, nothing for the others (#43).
       $hit = Get-ChildItem -Path $pd -Recurse -Filter '*.md' -File -ErrorAction SilentlyContinue |
-        Select-String -SimpleMatch $script:LangDirectiveMarker -Quiet |
+        Select-String -SimpleMatch $script:LangDirectiveMarker -List |
         Select-Object -First 1
       if ($hit) { $lang = $script:LangPtBr; break }
     }

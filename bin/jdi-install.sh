@@ -11,22 +11,27 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RUNTIME="${1:?runtime obrigatorio: claude | copilot | antigravity | opencode | junie | all}"
-SCOPE_ARG="${2:---scope project}"
-
-case "$SCOPE_ARG" in
-  --scope=user|--scope\ user)    SCOPE=user ;;
-  --scope=project|--scope\ project) SCOPE=project ;;
-  *)                                SCOPE=project ;;
+shift
+SCOPE=project
+GITHOOKS=0
+# Flags in any order: `claude --githooks --scope user` used to install into
+# the project, because only $2/$3 were read (#61).
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --scope)
+      if [[ $# -lt 2 ]]; then echo "ERROR: --scope needs a value" >&2; exit 1; fi
+      SCOPE="$2"; shift 2 ;;
+    --scope=*) SCOPE="${1#--scope=}"; shift ;;
+    --githooks) GITHOOKS=1; shift ;;
+    *) echo "ERROR: unknown flag: $1" >&2; exit 1 ;;
+  esac
+done
+case "$SCOPE" in
+  user|project) ;;
+  *) echo "ERROR: invalid --scope '$SCOPE' (user|project)" >&2; exit 1 ;;
 esac
 
-[[ "${2:-}" == "--scope" ]] && SCOPE="${3:-project}"
-
 readonly SCOPE_PROJECT="project"
-
-GITHOOKS=0
-for arg in "$@"; do
-  [[ "$arg" == "--githooks" ]] && GITHOOKS=1
-done
 
 # Idioma de instalacao — vem de bin/jdi.js via env (JDI_LANG=en|pt-BR),
 # nunca de flag deste script (mantem os .sh/.ps1 sem --lang proprio).
@@ -294,7 +299,7 @@ fi
 
 # Escreve .jdi/VERSION pra rastreio em updates futuros
 if [[ -d "$PWD/.jdi" ]]; then
-  pkg_version=$(grep -oE '"version":\s*"[^"]+"' "$ROOT/package.json" | head -1 | sed 's/.*"\([^"]*\)"/\1/')
+  pkg_version=$(grep -oE '"version":[[:space:]]*"[^"]+"' "$ROOT/package.json" | head -1 | sed 's/.*"\([^"]*\)"/\1/')
   printf '%s' "$pkg_version" > "$PWD/.jdi/VERSION"
   # Escreve .jdi/LANG pra jdi update reaplicar a diretiva sem exigir --lang de novo
   printf '%s' "$JDI_LANG" > "$PWD/.jdi/LANG"
