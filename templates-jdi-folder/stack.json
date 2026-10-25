@@ -10,9 +10,17 @@
   "path_prepend": ["~/.cargo/bin"],
   "gates": {
     "build": "cargo build --manifest-path backend/Cargo.toml",
-    "test": "cargo test --manifest-path backend/Cargo.toml",
-    "coverage": "cargo llvm-cov --manifest-path backend/Cargo.toml --fail-under-lines 80",
-    "lint": "cargo clippy --manifest-path backend/Cargo.toml -- -D warnings"
+    "test": "cargo nextest run --manifest-path backend/Cargo.toml --profile ci",
+    "coverage": "cargo llvm-cov nextest --manifest-path backend/Cargo.toml --profile ci --fail-under-lines 80",
+    "lint": "cargo clippy --manifest-path backend/Cargo.toml -- -D warnings",
+    "audit": "cargo audit --file backend/Cargo.lock"
+  },
+  "test_report": ["backend/target/nextest/ci/junit.xml"],
+  "_test_report_note": "JUnit the test/coverage gate writes; nextest needs `[profile.ci.junit] path = \"junit.xml\"` in backend/.config/nextest.toml. vitest: --reporter=junit --outputFile=...; jest: jest-junit; pytest: --junitxml=...; go: gotestsum --junitfile ...",
+  "requires": {
+    "env": [],
+    "commands": ["cargo"],
+    "disk_free_mb": 2048
   },
   "coverage_runs_tests": true,
   "lint_blocks": false,

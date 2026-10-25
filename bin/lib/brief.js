@@ -156,6 +156,7 @@ function fileTouches(item, files) {
 function verifyRef(item, ctxRel, limit) {
   if (!item.verify) return 'no Verify';
   if (item.evidence) return `evidence: ${item.verify.command.slice(0, 160)}`;
+  if (item.testRef) return `test: \`${item.verify.command.slice(0, 160)}\` (must exist and pass in the test report)`;
   if (item.script) return `\`bash ${item.script}\``;
   if (item.verify.command.length <= limit) return `\`${item.verify.command}\``;
   return `inline, ${item.verify.command.length} chars — ${ctxRel}:${item.verifyLine}`;

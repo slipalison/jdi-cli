@@ -19,8 +19,11 @@
 // (criterion + Verify + Bait + script). A CAUGHT row is not re-run until its
 // hash changes; the DoD critic skips rows with a bait result.
 //
-// The worktree lives in .jdi/cache/bait/ (gitignored, removed after each row)
-// — never in /tmp, which is memory on small dev boxes. Untracked dependency
+// The worktree lives in .jdi/cache/bait/ (gitignored) — never in /tmp, which
+// is memory on small dev boxes. ONE worktree per run, reset between rows
+// (`git reset --hard` + `git clean`, which keeps ignored build output): a new
+// worktree per row started every row from a cold build — a full compile per
+// row in a compiled language (0.20). It is removed at the end of the run. Untracked dependency
 // dirs are linked into it (config `dod.bait_links`, default: every
 // node_modules up to depth 3), and the stack env/path_prepend applies, so a
 // clean checkout can build without a reinstall.
@@ -104,19 +107,27 @@ function mutationCheck(ctx, it, wt) {
   return after.exit === 0 ? { status: 'HOLLOW', reason: 'the Verify still exits 0 with the criterion broken by the Bait' } : { status: 'CAUGHT' };
 }
 
-function baitRow(ctx, it) {
-  const wt = path.join(ctx.root, core.JDI_DIR, 'cache', 'bait', `wt-${it.id}`);
+// The run's worktree, created on the first row that needs it; every later
+// row starts from HEAD again, with the ignored build output kept warm.
+function worktreeFor(ctx) {
+  if (ctx.wt) {
+    core.git(['reset', '--hard', '--quiet', 'HEAD'], ctx.wt);
+    core.git(['clean', '-fdq', ...ctx.links.flatMap((l) => ['-e', l])], ctx.wt);
+    return ctx.wt;
+  }
+  const wt = path.join(ctx.root, core.JDI_DIR, 'cache', 'bait', 'wt');
   if (fs.existsSync(wt)) removeWorktree(ctx.root, wt);
   addWorktree(ctx.root, wt);
-  try {
-    linkDeps(ctx.root, wt, ctx.links);
-    return mutationCheck(ctx, it, wt);
-  } finally {
-    removeWorktree(ctx.root, wt);
-  }
+  linkDeps(ctx.root, wt, ctx.links);
+  ctx.wt = wt;
+  return wt;
 }
 
-const baitable = (it) => it.type === 'auto' && it.bait && it.verify && !it.evidence;
+function baitRow(ctx, it) {
+  return mutationCheck(ctx, it, worktreeFor(ctx));
+}
+
+const baitable = (it) => it.type === 'auto' && it.bait && it.verify && !it.evidence && !it.testRef;
 
 function runBait(phase, opts = {}, root = process.cwd()) {
   const stacks = gates.loadStacks(root);
@@ -131,16 +142,20 @@ function runBait(phase, opts = {}, root = process.cwd()) {
   const prev = readResults(root, phase);
   const results = { head: core.git(['rev-parse', 'HEAD'], root).stdout || null, rows: { ...prev.rows } };
   const report = [];
-  for (const it of contextItems(root, phase).filter((x) => baitable(x) && (!opts.rows || opts.rows.includes(x.id)))) {
-    const hash = dod.rowHash(it, root);
-    const last = prev.rows[it.id];
-    if (!opts.all && last?.hash === hash && last.status === 'CAUGHT') {
-      report.push({ id: it.id, status: 'CAUGHT', cached: true });
-      continue;
+  try {
+    for (const it of contextItems(root, phase).filter((x) => baitable(x) && (!opts.rows || opts.rows.includes(x.id)))) {
+      const hash = dod.rowHash(it, root);
+      const last = prev.rows[it.id];
+      if (!opts.all && last?.hash === hash && last.status === 'CAUGHT') {
+        report.push({ id: it.id, status: 'CAUGHT', cached: true });
+        continue;
+      }
+      const res = baitRow(ctx, it);
+      results.rows[it.id] = { hash, ...res, bait: it.bait, at: new Date().toISOString() };
+      report.push({ id: it.id, ...res });
     }
-    const res = baitRow(ctx, it);
-    results.rows[it.id] = { hash, ...res, bait: it.bait, at: new Date().toISOString() };
-    report.push({ id: it.id, ...res });
+  } finally {
+    if (ctx.wt) removeWorktree(root, ctx.wt);
   }
   core.writeFileEnsured(baitFile(root, phase), JSON.stringify(results, null, 2) + '\n', root);
   return report;

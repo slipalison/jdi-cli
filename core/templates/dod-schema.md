@@ -47,6 +47,7 @@ it so the machine reads exactly what you mean:
 |---|---|
 | `**Verify:** \`<command>\`` | One shell command in backticks, at most `budgets.verify_inline_chars` (300) characters. Its exit status is the result. |
 | `**Verify:** \`bash .jdi/phases/<slug>/verify/dod-N.sh\`` | Anything longer lives in a script (`jdi-cli dod extract <slug>` moves it there verbatim, no `set -e` added). Agents read the criterion, not the script; only the gates runner executes it. |
+| `**Verify (test):** \`<test name>\`` | Proven by the stack's test report (JUnit, `test_report` in `.jdi/stacks/<name>.json`) from the test/coverage gate at the same HEAD: every testcase with that name (or `classname::name`) must exist and pass — none = FAIL. Nothing runs a second time: prefer it whenever the criterion is behaviour a test proves. `Stack:` narrows it to one stack's report. |
 | `**Verify (evidence):**` | External effect (E2E with a real login, deploy, paid API, rate-limited service): never executed by the runner — the reviewer judges the recorded evidence named in `Evidence:`. |
 | `**Inputs:** \`glob, glob\`` | Evidence rows, optional. What the recorded run depends on; default: every product file (outside `.jdi/` and `loop.non_product_globs`) plus the files the command names. A run recorded with `jdi-cli evidence record` stays valid while they do not change. |
 | `**Iteration:** \`<focused command>\`` | Evidence rows, optional. The run that is enough inside a loop round (e.g. only the `.feature` files the phase touched). The full `Verify (evidence):` run is required at ship; without `Iteration:` the full run serves both. |
@@ -63,12 +64,14 @@ Lint rules (ERROR stops `/jdi-discuss` until fixed; WARN is reported):
 | DOD-S1 | ERROR / WARN | auto item without `Verify:` / manual item without `Evidence:` |
 | DOD-S2 | WARN (ERROR with `budgets.enforce: "fail"`) | inline `Verify:` over the character limit — extract it |
 | DOD-S3 | ERROR | `Verify:` calls a `verify/dod-N.sh` that does not exist |
+| DOD-S4 | WARN | `Verify (test):` with a bare test name — it matches any test with that name; qualify it (`module::name`) |
 | DOD-L1 | ERROR | test runner with a name filter and no count check — exits 0 when zero tests match; require "N passed" with N >= 1 |
 | DOD-L2 | WARN | a positive grep over a directory/glob as the whole proof — passes if the text exists anywhere |
 | DOD-L3 | WARN | E2E / real login inside an automatic `Verify:` — mark it `Verify (evidence):` |
 | DOD-L4 | WARN | a grep for a Gherkin tag or keyword (`@smoke`, `Scenario:`) over a directory/glob — any scenario satisfies it; anchor the `.feature` file and the scenario, or run it |
 | DOD-L5 | WARN | the criterion names a document (`docs/api.md`) that the `Verify:` never reads |
 | DOD-L6 | WARN | `grep -A/-B/-C N` window — the matched line may belong to another block; anchor the block |
+| DOD-L7 | WARN | a positive grep over source code as the proof of behaviour — the text can be there without the behaviour; prove it with a test (`Verify (test):`) |
 
 Project-specific rules plug in through `.jdi/config.json` `dod.extra_lint`: a
 program and its arguments, run without a shell (no pipes or redirection) — an

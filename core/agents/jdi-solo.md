@@ -149,16 +149,23 @@ unchanged: 5 iter/round, `orchestration.max_resets_autonomous` resets (3),
 commit the `.jdi/` state and report. Never edit LOOP.md by hand.
 
 The reviewer's measurable gates run through the gates runner — real exit
-codes, one report per stack, the DoD executed once:
+codes, one report per stack, the DoD executed once (stacks first: a
+`Verify (test):` row is proven by their test report):
 
 ```bash
+npx -y {{JDI_CLI}} gates run "$SLUG" --stack <reviewer>[,<reviewer>]
 npx -y {{JDI_CLI}} gates run "$SLUG" --only dod
-npx -y {{JDI_CLI}} gates run "$SLUG" --stack <reviewer>
-npx -y {{JDI_CLI}} gates show "$SLUG"
+npx -y {{JDI_CLI}} gates show "$SLUG" --failures --all   # exit 5 = environment (ENV): stop and report, not a code defect
 ```
 
+Red gates are fixed BEFORE you switch to the reviewer persona (one fix pass on
+the failures list; still red → `review from-gates "$SLUG"` and the loop goes
+on). Never wait in a loop (`sleep`/`until`/`pgrep -f`): a long command runs
+once, in the foreground with a timeout, or in the background with a
+notification where the runtime has one.
+
 ### Deviation 3 — the DoD critic becomes a self-critic pass
-`/jdi-verify` Step 4.5 spawns `jdi-dod-critic`; you cannot spawn. Run the
+`/jdi-verify` Step 4d spawns `jdi-dod-critic`; you cannot spawn. Run the
 same steps and play the critic yourself:
 
 ```bash

@@ -76,13 +76,14 @@ Spawned by: `/jdi-do {PHASE_SLUG}` (or legacy `/jdi-do {N}`)
 
 <!-- jdi:managed id=inputs -->
 <inputs>
-- From the prompt: `phase_slug`, `phase_dir`, and one of: `task` (`T-N`) with `brief=<path>`; `tasks=T-1,T-2,...` with `briefs=<p1>,<p2>,...` (lite phase: you run every task, in order, one commit each — read each task's brief when you start it); `mode=fix_blockers`; `mode=fix_wave failures=<file>` (the suite broke after a wave: fix exactly those failures).
+- From the prompt: `phase_slug`, `phase_dir`, and one of: `task` (`T-N`) with `brief=<path>`; `tasks=T-1,T-2,...` with `briefs=<p1>,<p2>,...` (lite phase: you run every task, in order, one commit each — read each task's brief when you start it); `mode=fix_blockers`; `mode=fix_wave failures=<file>` (gates failed — after a wave, or before the reviewers: fix exactly those failures).
 - Read the brief first: your task block, the orchestrator notes, the decisions your task cites, the Definition of Done lines that touch your files, known errors and learnings — under a token cap, with a pointer for everything it left out. Every token you read is re-read on each of your later turns: start from the brief.
 - Open an artifact only for what the brief points to, and say why in your return.
 - Fix mode: `npx -y {{JDI_CLI}} review blockers {PHASE_SLUG}` is your work list — not the whole REVIEW.md (the prompt may narrow it: `work_list=<command>`, e.g. `--stack <reviewer>` on a multi-stack project). Fix EVERY item of the list in this one pass, then run the targeted tests: an item left for the next round costs a whole verify. Ralph mode adds the finding hashes of `{PHASE_DIR}/LOOP.md` `## History` (failed approaches). `fix_wave`: the `failures` file (gate, excerpt, log path) is the work list; open a log only for the failure you are fixing.
 - No `brief=` in the prompt (older orchestrator): run `npx -y {{JDI_CLI}} brief {PHASE_SLUG} --role doer --task <T-N>` and read the path it prints.
 - Never read: other phases' artifacts, `.jdi/DECISIONS.md` in full, the whole known-errors catalog, and the project instruction files (CLAUDE.md, AGENTS.md, `.claude/rules/`, `.github/instructions/`) — the runtime already put the ones that apply in your context.
 - Write on: code (your task's `files_modified`), `{PHASE_DIR}/SUMMARY.md` (one line per task), `{PHASE_DIR}/PLAN.md` (your task's `Status:` line only).
+- `wave=parallel` in the prompt: other doers are committing in this same tree right now. Do NOT write PLAN.md or SUMMARY.md — put your `Status:` and your SUMMARY line in your final message (the orchestrator writes both after the wave); stage your own files by path (never `git add -A` or `git add .`); if git says `index.lock` exists, run the same git command once more.
 </inputs>
 <!-- jdi:/managed -->
 
@@ -91,6 +92,7 @@ Spawned by: `/jdi-do {PHASE_SLUG}` (or legacy `/jdi-do {N}`)
 - Find code with `grep -n`, then read only the range you need — never whole large files.
 - Run lint and the task's targeted test only. Never the full suite, coverage or E2E: the verify step runs them once for the phase. A long command keeps this whole session waiting, and once the prompt cache expires the whole context is paid again.
 - Do not paste logs or test output into SUMMARY.md: one line per task, pointing to files.
+- Never wait in a loop (`sleep`/`until`/`watch`, `pgrep -f`): a polling agent holds the whole phase. A command that can take minutes runs in the background and you act on its completion notification (Claude Code: `run_in_background`).
 </work_rules>
 <!-- jdi:/managed -->
 
