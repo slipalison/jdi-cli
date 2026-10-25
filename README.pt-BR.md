@@ -1167,24 +1167,23 @@ Pull requests: descreva o problema (quem precisa disso? quantos usuários?) ante
 
 ## Publicando no npm (mantenedores)
 
-Empurre uma tag `vX.Y.Z` — o workflow (`.github/workflows/npm-publish.yml`) dispara no push da tag (o `gh release create` abaixo cria e empurra a tag, então o Release e a publicação andam juntos; um `git push origin vX.Y.Z` sozinho publica sem notas de release), verifica se a tag casa com o `package.json` e roda `npm publish --provenance --access public`:
+Faça o merge de um PR de release. A cada push na main o workflow (`.github/workflows/npm-publish.yml`) confere se a versão do `package.json` já tem tag; quando não tem, publica essa versão (`npm publish --provenance --access public`, ou em stage para aprovação com 2FA quando o token é só de stage), depois cria a tag `vX.Y.Z` no commit do merge e o GitHub Release, com a seção da versão no CHANGELOG como notas. Merge que não sobe a versão não publica nada.
 
 ```bash
 # 1. Suba a versão (package.json + package-lock.json)
 npm version X.Y.Z --no-git-tag-version
 
-# 2. Reconstrua runtimes/ + atualize o CHANGELOG.md
+# 2. Reconstrua runtimes/ (eles fixam jdi-cli@X.Y.Z) + troque `## [Unreleased]` por `## [X.Y.Z] - <data>` no CHANGELOG.md
 node bin/jdi.js build
 
-# 3. Suba para a main via PR (o SonarCloud analisa PRs)
+# 3. Suba para a main via PR (o SonarCloud analisa PRs) — o merge publica
 git checkout -b release/X.Y.Z && git add -A && git commit -m "chore(release): X.Y.Z"
-gh pr create && gh pr merge --merge
+gh pr create
 
-# 4. Crie o release — ele empurra a tag, que dispara o workflow de publicação
-gh release create vX.Y.Z --title "vX.Y.Z — descrição curta" --notes "..."
-
-# 5. Acompanhe
+# 4. Acompanhe
 gh run list --workflow npm-publish.yml --limit 1
 ```
+
+Empurrar uma tag `vX.Y.Z` à mão, ou rodar o workflow com uma tag existente, continua publicando aquela tag.
 
 O selo de provenance aparece na página do npm via sigstore OIDC. O campo `files:` do `package.json` controla o que vai no tarball.
