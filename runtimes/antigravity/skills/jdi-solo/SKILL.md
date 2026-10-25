@@ -120,7 +120,9 @@ later turn.
 ### Deviation 2 — the loop runs inline with its caps intact
 `/jdi-loop` Step 4 (doer) and Step B (reviewer) run inline as above.
 Everything deterministic stays in the CLI, never in your head: `loop init`,
-`loop record "$SLUG" --autonomous` after each verify (verdict parsing,
+`loop precheck "$SLUG" --autonomous` before each verify (anything but
+`verify` is the iteration's decision — skip the verify), `loop record "$SLUG"
+--autonomous` after each verify (verdict parsing,
 finding hash, oscillation, history line), and at a `gate` answer
 `loop reset "$SLUG" --autonomous --reason "<why>"` (per /jdi-issue). Hard caps
 unchanged: 5 iter/round, `orchestration.max_resets_autonomous` resets (3),

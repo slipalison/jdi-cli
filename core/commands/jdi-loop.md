@@ -109,13 +109,25 @@ REVIEWER=$(grep -oE 'jdi-reviewer-[a-z0-9-]+' .jdi/reviewers.md | head -1)
 ```
 loop:
   # --- Step A: doer (fix mode: work list = `jdi-cli review blockers`) ---
+  # ONE batch per round: every finding of every reviewer, the DoD critic
+  # included, goes in this pass — never one finding per round (#71).
   Agent(
     subagent_type=$DOER,
     description="Loop iter {iter} doer phase $PHASE_SLUG",
     prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, mode=ralph_loop"
   )
+  # Multi-stack: one doer per stack whose list is not empty, in sequence —
+  #   work_list="npx -y {{JDI_CLI}} review blockers $PHASE_SLUG --stack <reviewer>"
+  #   (the DoD owner — first reviewer — adds --dod-owner: the critic's and
+  #   orchestrator's items are its), each with its own list in the prompt.
+
+  # --- Step B0: anything new to verify? (no gates, no reviewers when not) ---
+  PRE=$(npx -y {{JDI_CLI}} loop precheck "$PHASE_SLUG")   # add --autonomous under /jdi-issue
+  # PRE.status != "verify": it IS this iteration's decision (Step C table) —
+  # skip Step B and Step C. "verify": go on.
 
   # --- Step B: verify = /jdi-verify Steps 4-5 (gates run, briefs, reviewers) ---
+  # gates PASSed on the same inputs come back `reused` (economy.gate_cache)
 
   # --- Step C: record the iteration and get the decision ---
   DECISION=$(npx -y {{JDI_CLI}} loop record "$PHASE_SLUG")   # add --autonomous under /jdi-issue
@@ -140,7 +152,10 @@ The decision rules live in the CLI (issue #62): a blocker tagged `[defect]`
 commit (`gates run` report) or a BLOCKED review with no readable `Blockers`
 list; one tagged `[hollow DoD N]` blocks once per DoD row; an iteration with
 no open defect and no product change converges; a repeated finding hash in the
-round is oscillation; reaching the reset cap kills the loop.
+round is oscillation; reaching the reset cap kills the loop. `loop precheck`
+applies the same rules BEFORE a verify: a fix round that changed no product
+file and no DoD row converges (no defect left) or goes to the gate (defects
+still open) without spending a verify on the same inputs (#69).
 
 ### Step 6: Abort logic
 
@@ -182,7 +197,7 @@ Next: /jdi-ship $PHASE_SLUG
 <gates>
 - pre: PLAN.md + doer + reviewer registered in specialists.md/reviewers.md
 - post: final status in LOOP.md ∈ {converged, escalated, paused, killed} + STATE updated
-- invariant: each iter = doer commit + reviewer commit (granular audit trail)
+- invariant: each iter = doer commit(s) (`feat`/`fix`/`test`, atomic) + the round's record: a verify commit per round (`loop.record_commits: "per_round"`, default) or, with `"at_ship"`, REVIEW.md / `reviews/round-N.md` / LOOP.md on disk until the ship commit (no lost round: `review plan` snapshots each replaced review)
 </gates>
 
 <errors>

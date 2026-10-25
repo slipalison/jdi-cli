@@ -682,6 +682,7 @@ async function cmdHelp() {
   console.log(`  ${c.cyan}next${c.reset} ${c.gray}[phase] [--loop] [--json] [--status]${c.reset}  ${tr('help.helper.next')}`);
   console.log(`  ${c.cyan}add-phase${c.reset} ${c.gray}"<name>" [--goal g] [--before|--after s] [--unique]${c.reset}  ${tr('help.helper.add_phase')}`);
   console.log(`  ${c.cyan}ship${c.reset} ${c.gray}<phase> [--learnings-file f]${c.reset}  ${tr('help.helper.ship')}`);
+  console.log(`  ${c.cyan}phases archive${c.reset} ${c.gray}[--dry-run] [--keep N] [--rewrite-refs]${c.reset}  ${tr('help.helper.phases')}`);
   console.log(`  ${c.cyan}dod${c.reset} ${c.gray}<parse|lint|extract|bait> <phase>${c.reset}  ${tr('help.helper.dod')}`);
   console.log(`  ${c.cyan}brief${c.reset} ${c.gray}<phase> --role <r> [--task T-N] [--stack s]${c.reset}  ${tr('help.helper.brief')}`);
   console.log(`  ${c.cyan}gates${c.reset} ${c.gray}<run|show> <phase> [--stack s] [--only dod]${c.reset}  ${tr('help.helper.gates')}`);
@@ -691,7 +692,8 @@ async function cmdHelp() {
   console.log(`  ${c.cyan}known-errors${c.reset} ${c.gray}<query|migrate|render|list>${c.reset}  ${tr('help.helper.known_errors')}`);
   console.log(`  ${c.cyan}specialists${c.reset} ${c.gray}<lint|upgrade> [--adopt] [--write]${c.reset}  ${tr('help.helper.specialists')}`);
   console.log(`  ${c.cyan}critic${c.reset} ${c.gray}<plan|apply> <phase> [--preflight]${c.reset}  ${tr('help.helper.critic')}`);
-  console.log(`  ${c.cyan}size${c.reset} ${c.gray}<phase> [--json]${c.reset}  ${tr('help.helper.size')}`);
+  console.log(`  ${c.cyan}size${c.reset} ${c.gray}<phase> [--intake] [--json]${c.reset}  ${tr('help.helper.size')}`);
+  console.log(`  ${c.cyan}evidence${c.reset} ${c.gray}<record|status> <phase> [--row N --scope iteration|ship]${c.reset}  ${tr('help.helper.evidence')}`);
   console.log('');
 
   console.log(`${c.bold}${tr('help.runtimes_label')}${c.reset}`);
@@ -868,10 +870,12 @@ async function main() {
     case 'specialists':
     case 'critic':
     case 'size':
+    case 'evidence':
       runNodeHelper(parsed.cmd, libArgs());
       break;
     case 'add-phase':
-    case 'ship': {
+    case 'ship':
+    case 'phases': {
       const ops = require(path.join(PKG_ROOT, 'bin', 'lib', 'phase-ops.js'));
       runNodeHelper({ main: (a) => ops.main(parsed.cmd, a) }, libArgs());
       break;

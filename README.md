@@ -198,7 +198,7 @@ your-project/
 │   │   │   ├── SHIPPED.md         # from /jdi-ship (completion marker — this is what makes a phase "done")
 │   │   │   └── LOOP.md            # only if /jdi-loop ran (ralph state)
 │   │   └── NN-<slug>/             # v1 legacy layout — NEVER renamed (preserves git history)
-│   ├── archive/                   # old phases moved here by ship compaction (default: keep last 5 active)
+│   ├── archive/                   # old phases moved here by `jdi-cli phases archive` (keeps the last 5; never during a ship)
 │   └── cache/                     # gitignored — gate 7 artifacts (screenshots, JSON findings)
 ├── .claude/                       # (if runtime=claude)
 │   ├── agents/jdi-*.md
@@ -242,7 +242,7 @@ flowchart LR
         STATE["STATE.md — untracked, gitignored<br/>rewritten by every command;<br/>regenerated from artifacts on a fresh clone"]
     end
 
-    PH -- "old phases move to .jdi/archive/<br/>(ship compaction, keep last 5)" --> ARCH["archive/<br/>out of the read path"]
+    PH -- "old phases move to .jdi/archive/<br/>(jdi-cli phases archive, keep last 5)" --> ARCH["archive/<br/>out of the read path"]
 ```
 
 **Read-depth ladder (token economy):** each agent reads only its own slice of the current phase (the doer: its task block and the DoD lines for its files) · other phases' bodies are never read · cross-phase knowledge comes through the CLI: `learnings --last 3` (by ship date, capped) and `decisions --ids/--recent` (never the whole `DECISIONS.md` view) · instruction files the runtime injects (CLAUDE.md, rules) are never re-read. Why it matters: every token an agent reads is re-read on each of its later turns, and files read by one agent are not a cache prefix for the next — each spawn pays for its own reads. `npx jdi-cli cost` measures it from your local transcripts.
@@ -281,7 +281,6 @@ sequenceDiagram
     Note over CMD: /jdi-ship
     PH->>CMD: read REVIEW verdict + SUMMARY blockers
     CMD->>PH: write SHIPPED.md + distill § Learnings (≤5 bullets)
-    CMD->>PH: move old phases → archive/ (keep last 5)
 ```
 
 The cycle: what a phase LEARNS (warnings, blockers, waivers) survives as ≤5 distilled bullets that the NEXT phases' planner and doer consume through `jdi-cli learnings --last 3` (capped) instead of dragging whole REVIEW files forward. Full schema: [MEMORY.md](MEMORY.md).
@@ -784,12 +783,13 @@ The phase helpers ship inside the npm package and are exposed as CLI subcommands
 | `sync-specialists [runtime\|all] [--check] [--quiet] [--porcelain]` | Materialize the per-project specialists (`.jdi/agents/jdi-*.md`) into the agent dir each runtime actually reads — `.claude/agents/`, `.github/agents/*.agent.md`, `.opencode/agents/`, `.agents/skills/*/SKILL.md`, `.junie/agents/` — converting the canonical frontmatter with the same emitter `build` uses. Byte-deterministic, idempotent, `GENERATED` marker. `--check`: exit 1 on a missing/stale copy (doctor, CI, and the `/jdi-do` / `/jdi-verify` self-heal) |
 | `next [phase] [--loop] [--json] [--status]` | Where the project is and which command comes next, derived from the artifacts (the `/jdi-next` ladder). `--status`: the whole `/jdi-status` screen, read-only |
 | `add-phase "<name>" [--slug s] [--goal g] [--reason r] [--before s\|--after s] [--unique]` | Layout v3: validates the slug, computes the fractional `order`, writes the roadmap entry with `created_with` and the optional audit decision. `--unique`: a taken slug gets `-2`, `-3`… |
-| `ship <phase> [--learnings-file f] [--no-archive]` | Refuses BLOCKED and pending-manual phases, writes SHIPPED.md (at most 5 learnings), updates STATE.md, archives old phases; prints the paths to commit |
+| `ship <phase> [--learnings-file f] [--allow-stale "<reason>"]` | Refuses BLOCKED and pending-manual phases, writes SHIPPED.md (at most 5 learnings), updates STATE.md; prints the paths to commit. Moves no other phase |
+| `phases archive [--dry-run] [--keep N] [--rewrite-refs]` | Moves shipped phases older than the last N (`compaction.archive_after`, default 5) to `.jdi/archive/`. A phase still referenced outside its folder (`git grep`) is skipped and listed, unless `--rewrite-refs` points the references to the archive. Never commits: commit it on its own |
 | `dod <parse\|lint\|extract> <phase>` / `validate-dod <phase>` | The Definition of Done as data: parse it, lint it (tests filtered without a count check, hollow greps, E2E in an automatic row, long inline commands), and move long `Verify:` bodies into `verify/dod-N.sh` verbatim |
 | `brief <phase> --role doer\|reviewer\|planner\|asker\|critic [--task T-N] [--stack s]` | The starting context of an agent as one capped file in `.jdi/cache/briefs/` (its task, the decisions it cites, the DoD lines for its files, known errors, learnings) — with a pointer for everything it left out |
-| `gates <run\|show> <phase> [--stack s] [--only dod] [--changed-since sha]` | Build, tests, coverage, lint (per `.jdi/stacks/<name>.json`) and the automatic DoD rows (once) run in this shell, outside any agent's context; results in `.jdi/cache/gates/<slug>/` |
-| `review <verdict\|blockers> <phase>` | Worst-case verdict across REVIEW.md segments (exit 2 when there is none); the blockers and warnings a fix round needs, tagged `[defect]` / `[hollow DoD N]` |
-| `loop <init\|record\|reset\|status> <phase>` | The ralph loop's bookkeeping: verdict, finding hash, oscillation, the once-per-row rule for hollow proofs, convergence when nothing in the product changed, resets and the kill switch |
+| `gates <run\|show> <phase> [--stack s] [--only dod] [--changed-since sha] [--fresh]` | Build, tests, coverage, lint (per `.jdi/stacks/<name>.json`) and the automatic DoD rows (once) run in this shell, outside any agent's context; results in `.jdi/cache/gates/<slug>/`. A gate that passed on exactly the same inputs (product files, files a DoD row names, command, stack config, `cache_key_cmd`) comes back `reused` instead of running again; a FAIL is never reused; `--fresh` runs everything (`economy.gate_cache`) |
+| `review <verdict\|blockers> <phase> [--stack r [--dod-owner]]` | Worst-case verdict across REVIEW.md segments (exit 2 when there is none); the blockers and warnings a fix round needs, tagged `[defect]` / `[hollow DoD N]` — `--stack`: one reviewer's batch (multi-stack fix round) |
+| `loop <init\|precheck\|record\|reset\|status> <phase>` | The ralph loop's bookkeeping: verdict, finding hash, oscillation, the once-per-row rule for hollow proofs, convergence when nothing in the product changed, resets and the kill switch. `precheck`: before a verify, converge (or gate) without one when the fix round changed no product file and no DoD row |
 | `budgets <phase>` / `validate-phase <phase> --budgets` | Token budgets of the phase artifacts (enforced for phases created with 0.17+) |
 | `known-errors <query\|migrate\|render\|list>` | Known errors as one file per entry with stage and globs; `query` returns only the entries for the given files and stage, capped |
 | `specialists <lint\|upgrade> [--adopt] [--write]` | Update the JDI-managed blocks of the project's specialists and keep everything else; `--adopt` brings specialists generated before 0.17 under management; `lint` flags waste |
@@ -797,7 +797,8 @@ The phase helpers ship inside the npm package and are exposed as CLI subcommands
 | `template <name>` · `learnings [--last N]` · `decisions [--ids\|--recent N\|--index]` | Shipped templates, the last learnings by ship date, locked decisions without the whole view |
 | `critic <plan\|apply> <phase> [--preflight]` | The DoD critic's lean cadence: which rows to examine (never examined, proof changed, hollow last time) and its brief; `apply` folds the findings (and surviving baits) into REVIEW.md, tighten-only |
 | `dod bait <phase>` | Mechanical hollow-proof check of rows with a `Bait:`: in a throwaway worktree the Verify must pass, then fail once the Bait breaks the criterion |
-| `size <phase>` | `lite` or `full` from the plan — a lite phase runs all its tasks in one doer spawn |
+| `size <phase> [--intake]` | `lite` or `full` from the plan — a lite phase runs all its tasks in one doer spawn. `--intake` (after discuss): `split` when CONTEXT.md has more DoD rows, areas or acceptance criteria than `sizing.split_max_*` |
+| `evidence <record\|status> <phase> [--row N --scope iteration\|ship] [--artifact f]` | Records a run of a `Verify (evidence):` row (commit, input hash, artifact sha) in the phase folder and says whether it is still `fresh`; a focused `Iteration:` run is enough inside the loop, ship needs a fresh full run (phases created with 0.19+) |
 | `review <plan\|merge\|fresh> <phase>` | Incremental verify on multi-stack projects (carry a reviewer whose scope did not change); `fresh` exits 3 when code changed after the verify commit (ship refuses a stale review) |
 
 You rarely run these by hand — they exist so commands work identically on bash and PowerShell (`migrate-layout` is the exception: you run it once per legacy project).

@@ -17,5 +17,6 @@
   "coverage_runs_tests": true,
   "lint_blocks": false,
   "timeout_min": 30,
+  "cache_key_cmd": "rustc -V && cargo -V",
   "evidence_only": ["npm run e2e", "playwright test"]
 }

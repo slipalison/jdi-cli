@@ -23,7 +23,7 @@ Verifies the phase was delivered correctly. Runs gates defined in the project's 
 
 <arguments>
 - `phase_id` (required): canonical slug, legacy slug, or integer position
-- `--full` (optional): run every reviewer even when an untouched one could be carried (multi-stack incremental verify). Sets `FULL=1`.
+- `--full` (optional): run every reviewer even when an untouched one could be carried (multi-stack incremental verify), and every gate even when a PASS on the same inputs could be reused (`gates run --fresh`). Sets `FULL=1`.
 </arguments>
 
 <process>
@@ -102,14 +102,26 @@ waiting on them:
 
 ```bash
 if [ -d .jdi/stacks ]; then
-  npx -y jdi-cli@0.18.1 gates run "$PHASE_SLUG" --only dod          # DoD once (E2E/real-login rows: EVIDENCE, never executed)
+  npx -y jdi-cli@0.18.1 gates run "$PHASE_SLUG" --only dod ${FULL:+--fresh}   # DoD once (E2E/real-login rows: EVIDENCE, never executed)
   for REVIEWER in $RUN; do                                       # carried reviewers: no gates
-    npx -y jdi-cli@0.18.1 gates run "$PHASE_SLUG" --stack "$REVIEWER"
+    npx -y jdi-cli@0.18.1 gates run "$PHASE_SLUG" --stack "$REVIEWER" ${FULL:+--fresh}
   done
 fi
 ```
 
-A failing gate does not stop the step: the results go into the JSON the
+`EVIDENCE` rows are never run by the gates: the `dod` report carries the
+freshness of their recorded runs (`evidence: {iteration, ship}`,
+`npx -y jdi-cli@0.18.1 evidence status "$PHASE_SLUG"`). A row whose `iteration`
+is `stale` or `missing`: run its `Iteration:` command (the full `Verify
+(evidence):` when it has none) ONCE, here in the shell — never in a retry
+loop: real logins lock accounts — then
+`npx -y jdi-cli@0.18.1 evidence record "$PHASE_SLUG" --row N --scope iteration --artifact <report>`.
+`fresh` = the last run still holds; do not run it again.
+
+A gate that PASSed on exactly the same inputs (product files, the files a DoD
+row names, the command, the stack config) is not run again: its line says
+`reused <key>: passed on <commit> at <time>` (`economy.gate_cache`; a FAIL is
+never reused; `--full` runs everything). A failing gate does not stop the step: the results go into the JSON the
 reviewers read; the verdict comes from the reviewers.
 
 **4b. One brief per reviewer** (scope + changed files, gate results, tasks,
@@ -236,8 +248,12 @@ next_step: {if APPROVED or WITH_WARNINGS: /jdi-ship $PHASE_SLUG; if PENDING_MANU
 ```
 
 ```bash
-git add "$PHASE_DIR/REVIEW.md"; git add .jdi/STATE.md 2>/dev/null || true
-git commit -m "docs($PHASE_SLUG): verify phase ($VERDICT)"
+# loop.record_commits "at_ship": the process record stays out of the product
+# history until the ship commit (`reviews/round-N.md` keeps every round).
+if [ "$(node -p "(require('./.jdi/config.json').loop||{}).record_commits||''" 2>/dev/null)" != "at_ship" ]; then
+  git add "$PHASE_DIR/REVIEW.md"; git add .jdi/STATE.md 2>/dev/null || true
+  git commit -m "docs($PHASE_SLUG): verify phase ($VERDICT)"
+fi
 ```
 
 ### Step 7: Confirm

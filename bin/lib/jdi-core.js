@@ -44,15 +44,19 @@ const CONFIG_DEFAULTS = {
     incremental_verify: true,
     wave_suite: true,
     sizing: true,
+    gate_cache: true,
   },
   sizing: {
     lite_max_tasks: 3,
     lite_max_files: 6,
     lite_max_dod_rows: 6,
+    split_max_dod_rows: 12,
+    split_max_areas: 3,
+    split_max_criteria: 8,
     sensitive_globs: [],
   },
   compaction: { archive_after: 5 },
-  loop: { non_product_globs: [] },
+  loop: { non_product_globs: [], record_commits: 'per_round' },
 };
 
 function isPlainObject(v) {
@@ -271,6 +275,10 @@ function phaseFolder(root, phase) {
     if (any.length === 1) return { dir: path.join(JDI_DIR, 'phases', any[0]), exists: true };
     if (any.length > 1) throw new JdiError(`multiple folder candidates for slug '${phase.slug}': ${any.join(', ')}`, 4);
   }
+  // `phases archive` moved it: still resolvable, read-only by convention.
+  for (const c of candidates) {
+    if (c && fs.existsSync(path.join(root, JDI_DIR, 'archive', c))) return { dir: path.join(JDI_DIR, 'archive', c), exists: true, archived: true };
+  }
   return { dir: path.join(JDI_DIR, 'phases', phase.slug), exists: false };
 }
 
@@ -298,6 +306,7 @@ function resolvePhase(id, root = process.cwd()) {
     dir: folder.dir.split(path.sep).join('/'),
     absDir: path.join(root, folder.dir),
     exists: folder.exists,
+    archived: Boolean(folder.archived),
   };
 }
 

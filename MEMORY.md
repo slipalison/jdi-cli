@@ -80,9 +80,12 @@ Priority order: most advanced artifact wins. `ROADMAP.md` carries no status line
 |   |   +-- SHIPPED.md   output of /jdi-ship — per-phase done marker
 |   |   +-- LOOP.md      audit trail of /jdi-loop (only if ralph mode was used)
 |   |   +-- verify/      dod-N.sh: long DoD `Verify:` bodies (`jdi-cli dod extract`)
+|   |   +-- evidence/    dod-N.<iteration|ship>.json: recorded runs of `Verify (evidence):` rows (`jdi-cli evidence record`)
+|   |   +-- reviews/     round-N.md: replaced reviews, only with `loop.record_commits: "at_ship"`
+|   |   +-- SPLIT.md     the parts of a phase split at intake (`size --intake`, asker `mode=split`)
 |   +-- 02-old-phase/               v1 legacy layout preserved post-migration (NEVER renamed)
 |   +-- ...
-+-- archive/             old phases moved by /jdi-ship compaction. The DIR LISTING is the
++-- archive/             old phases moved by `jdi-cli phases archive`. The DIR LISTING is the
                          index on v3 (index.md is legacy-only, frozen — writers stopped)
 ```
 
@@ -249,19 +252,24 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
     "critic": "lean",
     "incremental_verify": true,
     "wave_suite": true,
-    "sizing": true
+    "sizing": true,
+    "gate_cache": true
   },
   "sizing": {
     "lite_max_tasks": 3,
     "lite_max_files": 6,
     "lite_max_dod_rows": 6,
+    "split_max_dod_rows": 12,
+    "split_max_areas": 3,
+    "split_max_criteria": 8,
     "sensitive_globs": []
   },
   "compaction": {
     "archive_after": 5
   },
   "loop": {
-    "non_product_globs": []
+    "non_product_globs": [],
+    "record_commits": "per_round"
   },
   "orchestration": {
     "mode": "standard",
@@ -283,11 +291,14 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
 - `economy.incremental_verify` — multi-stack: carry a reviewer whose scope did not change since its last run (the DoD owner always runs).
 - `economy.wave_suite` — build + tests of the touched stacks after each non-final wave of `/jdi-do`, through the gates runner.
 - `economy.sizing` + `sizing.*` — a phase within every `lite_max_*` limit, on one stack and with no file in `sensitive_globs`, runs all its tasks in one doer spawn (`jdi-cli size`). `false` = always full.
+- `economy.gate_cache` — reuse a gate (or DoD row) that PASSED on exactly the same inputs instead of running it again; the report says `reused`. A FAIL is never reused; `gates run --fresh` / `/jdi-verify --full` run everything. Stack keys: `inputs` (narrow the product files a stack's gates depend on; default all of them) and `cache_key_cmd` (toolchain versions in the key). Gitignored files (`.env`, generated config) are not fingerprinted: when a gate depends on one, print it (or its hash) in `cache_key_cmd`.
+- `sizing.split_max_dod_rows` / `split_max_areas` / `split_max_criteria` — `jdi-cli size --intake` says `split` above any of them; `/jdi-discuss` offers the split, `/jdi-issue` splits.
+- `loop.record_commits` — `per_round` (default: `/jdi-verify` commits REVIEW.md each round) or `at_ship` (REVIEW.md, `reviews/round-N.md` and LOOP.md stay on disk and go into the ship commit; product commits stay atomic).
 - `loop.non_product_globs` — files that do not count as a product change for the ralph loop's convergence rule (`.jdi/**` never counts). E.g. `["docs/**", "*.md"]`.
 - `orchestration.max_resets_autonomous` — reset cap of the loop under `/jdi-issue` (no human at the gate); reaching it kills the loop.
 - `chars_per_token` — per language, used to estimate tokens. Measured: Claude tokenizes pt-BR JDI artifacts at 2.0-2.4 chars/token (the old "4 chars/token" undercounted twice).
 - `models.<role>` — `asker`, `planner`, `doer`, `reviewer`, `critic`: `inherit` (the session's model) or a model the user chose; the commands pass it as the Agent `model` parameter where the runtime supports it. Tokens do not change with the model; the price per token does.
-- `compaction.archive_after` — phases older than this delta from the current position move to `.jdi/archive/` (executed by `/jdi-ship`). `0` disables it.
+- `compaction.archive_after` — how many shipped phases `jdi-cli phases archive` keeps in `.jdi/phases/` (default for `--keep`); older shipped phases move to `.jdi/archive/`, except those still referenced outside their folder (`--rewrite-refs` updates the references instead). Never run by `/jdi-ship`. `0` disables it.
 - `coverage_min` — overridable per PROJECT.md. Reviewer uses it.
 - `orchestration.mode` — `standard` (default) or `enhanced`. Host-neutral flag: when `enhanced` AND the host can orchestrate sub-agents, commands MAY run optional multi-agent layers (advisory critics); otherwise they degrade to the standard path. Off-path is byte-identical. Capability boolean, NOT a token ledger.
 - `orchestration.next_execution` — `step` (default) or `loop`. With `loop`, `/jdi-next` routes the execute/verify states (`planned`, `executed`, `verified+BLOCKED`) to `/jdi-loop` instead of single `do`/`verify` steps. Per-project opt-in — ralph presumes a trustworthy test suite. Absent = `step`.
@@ -296,7 +307,7 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
 
 **Lifespan:** life of the project. Versioned in git.
 
-**Read by:** `/jdi-do`, `/jdi-plan`, `/jdi-verify`, `/jdi-ship` (for compaction). Specialists (doer/reviewer) read `coverage_min`. `orchestration.mode` is read by `/jdi-verify` (and future consumers) at the top-level turn; sub-agents only see it through this file, never through the host session.
+**Read by:** `/jdi-do`, `/jdi-plan`, `/jdi-verify`, `jdi-cli phases archive` (compaction). Specialists (doer/reviewer) read `coverage_min`. `orchestration.mode` is read by `/jdi-verify` (and future consumers) at the top-level turn; sub-agents only see it through this file, never through the host session.
 
 **Written by:** `/jdi-new` and `/jdi-adopt` (Step 4b — orchestration opt-in, default determined at the top-level turn where the host capability signal is visible).
 

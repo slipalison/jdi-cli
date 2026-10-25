@@ -23,7 +23,9 @@
 //
 // `plan` prints JSON {rows, brief, tokens} — or {rows: [], skip} when there is
 // nothing to examine (do not spawn). The jdi-dod-critic agent writes
-// .jdi/cache/critic/<slug>/findings.json: [{row, hollow, objective, evidence}].
+// .jdi/cache/critic/<slug>/findings.json: [{row, hollow, objective, evidence,
+// fix?, bait?}] — a hollow row comes with the Verify that would catch it and a
+// mutation that proves it, so one fix round closes it (#62).
 // `apply` validates it, merges the bait results, records the examined hashes
 // and (verify) appends ONE `## DoD Critic` segment to REVIEW.md that can only
 // tighten the verdict, or (preflight) writes the fix list for the asker.
@@ -127,12 +129,20 @@ function plan(phase, opts = {}, root = process.cwd()) {
   return { rows: sel.rows.map((r) => r.id), skipped: sel.skipped, brief: relPath(root, out), findings: relPath(root, path.join(d, 'findings.json')), tokens: b.tokens };
 }
 
+const oneLine = (v, max) => String(v || '').replaceAll(/\s+/g, ' ').trim().slice(0, max);
+
+// ` — fix: … · bait: …` when the critic proposed them.
+function remedy(f) {
+  const parts = [f.fix && `fix: ${f.fix}`, f.bait && `bait: \`${f.bait}\``].filter(Boolean);
+  return parts.length ? ` — ${parts.join(' · ')}` : '';
+}
+
 function readFindings(root, phase, planned) {
   const f = path.join(dir(root, phase), 'findings.json');
   const raw = core.readJson(f, null);
   if (!Array.isArray(raw)) return { findings: [], problem: fs.existsSync(f) ? 'findings.json is not a JSON array' : 'no findings.json (critic did not run or failed)' };
   const findings = raw
-    .map((x) => ({ row: Number(x?.row), hollow: x?.hollow === true, objective: x?.objective === true, evidence: String(x?.evidence || '').replaceAll(/\s+/g, ' ').slice(0, 400) }))
+    .map((x) => ({ row: Number(x?.row), hollow: x?.hollow === true, objective: x?.objective === true, evidence: oneLine(x?.evidence, 400), fix: oneLine(x?.fix, 300), bait: oneLine(x?.bait, 200) }))
     .filter((x) => planned.includes(x.row)); // never trust rows that were not asked
   return { findings, problem: null };
 }
@@ -168,8 +178,8 @@ function preflightResult(root, phase, objective, subjective, examined, problem) 
     '',
     'Rows whose Verify would pass without proving the criterion. Rewrite the Verify (or add a Bait) so it fails when the criterion is broken:',
     '',
-    ...objective.map((f) => `- DoD ${f.row} [objective]: ${f.evidence}`),
-    ...subjective.map((f) => `- DoD ${f.row} [suspicion]: ${f.evidence}`),
+    ...objective.map((f) => `- DoD ${f.row} [objective]: ${f.evidence}${remedy(f)}`),
+    ...subjective.map((f) => `- DoD ${f.row} [suspicion]: ${f.evidence}${remedy(f)}`),
   ];
   core.writeFileEnsured(fixFile, lines.join('\n') + '\n', root);
   return { status: objective.length ? 'fix' : 'warn', objective: objective.map((f) => f.row), subjective: subjective.map((f) => f.row), fixes: relPath(root, fixFile), problem };
@@ -185,11 +195,11 @@ function segmentLines(r) {
   const baitNote = r.baitHollow.length ? ' · bait survived: ' + r.baitHollow.map((b) => b.row).join(', ') : '';
   const problemNote = r.problem ? ' · critic: ' + r.problem : '';
   const lines = ['', '## DoD Critic', '', `Examined: ${examined}${baitNote}${problemNote}`, ''];
-  if (r.objective.length) lines.push('### Blockers', ...r.objective.map((f) => `- [hollow DoD ${f.row}] ${f.evidence}`), '');
+  if (r.objective.length) lines.push('### Blockers', ...r.objective.map((f) => `- [hollow DoD ${f.row}] ${f.evidence}${remedy(f)}`), '');
   if (r.subjective.length || r.carried.length) {
     lines.push(
       '### Warnings',
-      ...r.subjective.map((f) => `- [hollow DoD ${f.row}] (${f.spent ? 'block spent' : 'suspicion'}) ${f.evidence}`),
+      ...r.subjective.map((f) => `- [hollow DoD ${f.row}] (${f.spent ? 'block spent' : 'suspicion'}) ${f.evidence}${remedy(f)}`),
       ...r.carried.map((c) => `- [hollow DoD ${c.row}] (block spent, carried) ${c.evidence}`),
       '',
     );

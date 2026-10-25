@@ -48,8 +48,11 @@ it so the machine reads exactly what you mean:
 | `**Verify:** \`<command>\`` | One shell command in backticks, at most `budgets.verify_inline_chars` (300) characters. Its exit status is the result. |
 | `**Verify:** \`bash .jdi/phases/<slug>/verify/dod-N.sh\`` | Anything longer lives in a script (`jdi-cli dod extract <slug>` moves it there verbatim, no `set -e` added). Agents read the criterion, not the script; only the gates runner executes it. |
 | `**Verify (evidence):**` | External effect (E2E with a real login, deploy, paid API, rate-limited service): never executed by the runner — the reviewer judges the recorded evidence named in `Evidence:`. |
+| `**Inputs:** \`glob, glob\`` | Evidence rows, optional. What the recorded run depends on; default: every product file (outside `.jdi/` and `loop.non_product_globs`) plus the files the command names. A run recorded with `jdi-cli evidence record` stays valid while they do not change. |
+| `**Iteration:** \`<focused command>\`` | Evidence rows, optional. The run that is enough inside a loop round (e.g. only the `.feature` files the phase touched). The full `Verify (evidence):` run is required at ship; without `Iteration:` the full run serves both. |
 | `**Stack:** <reviewer>` | Optional. Routes the row to that reviewer's brief in a multi-stack project. |
 | `**Bait:** \`<mutation>\`` | Optional, recommended when the Verify is fast. A command that BREAKS the criterion (e.g. `sed -i 's/return total/return 0/' src/cart.rs`). `jdi-cli dod bait` runs it in a throwaway worktree at HEAD: the Verify must pass before and fail after. A Bait that survives is an objective hollow proof (BLOCKED once); a caught Bait replaces the critic's judgment for that row. Runs on the committed HEAD — uncommitted changes are not there. |
+| `jdi-cli evidence record <phase> --row N --scope iteration\|ship [--artifact f]` | Records a run of an evidence row (commit, input hash, when, artifact sha) in `{phase_dir}/evidence/`. `evidence status` says `fresh`, `stale (what changed)` or `missing` per scope. `ship` refuses a phase created with 0.19+ whose evidence rows lack a fresh `ship` record (`--allow-stale-evidence "<reason>"` is recorded in SHIPPED.md). |
 | `### Deferred to PR review` | Section for criteria no machine can prove in `/jdi-issue` (autonomous) — listed in the PR body, never silently waived. |
 
 Lint rules (ERROR stops `/jdi-discuss` until fixed; WARN is reported):
@@ -63,6 +66,9 @@ Lint rules (ERROR stops `/jdi-discuss` until fixed; WARN is reported):
 | DOD-L1 | ERROR | test runner with a name filter and no count check — exits 0 when zero tests match; require "N passed" with N >= 1 |
 | DOD-L2 | WARN | a positive grep over a directory/glob as the whole proof — passes if the text exists anywhere |
 | DOD-L3 | WARN | E2E / real login inside an automatic `Verify:` — mark it `Verify (evidence):` |
+| DOD-L4 | WARN | a grep for a Gherkin tag or keyword (`@smoke`, `Scenario:`) over a directory/glob — any scenario satisfies it; anchor the `.feature` file and the scenario, or run it |
+| DOD-L5 | WARN | the criterion names a document (`docs/api.md`) that the `Verify:` never reads |
+| DOD-L6 | WARN | `grep -A/-B/-C N` window — the matched line may belong to another block; anchor the block |
 
 Project-specific rules plug in through `.jdi/config.json` `dod.extra_lint`: a
 program and its arguments, run without a shell (no pipes or redirection) — an

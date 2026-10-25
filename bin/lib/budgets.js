@@ -21,7 +21,9 @@ const ARTIFACT_BUDGET = {
   'PLAN.md': 'plan_tokens',
   'SUMMARY.md': 'summary_tokens',
 };
-const KNOWN_FILES = new Set(['CONTEXT.md', 'PLAN.md', 'SUMMARY.md', 'REVIEW.md', 'SHIPPED.md', 'LOOP.md', 'HANDOFF.md']);
+const KNOWN_FILES = new Set(['CONTEXT.md', 'PLAN.md', 'SUMMARY.md', 'REVIEW.md', 'SHIPPED.md', 'LOOP.md', 'HANDOFF.md', 'SPLIT.md']);
+// JDI-written folders: verify scripts, evidence records, replaced reviews.
+const KNOWN_DIRS = new Set(['verify', 'evidence', 'reviews']);
 
 function semverGte(a, b) {
   const pa = String(a).split('.').map((x) => Number.parseInt(x, 10) || 0);
@@ -80,7 +82,7 @@ function checkExtraFiles(dir, extraKb, add, relBase = '') {
     const rel = relBase ? `${relBase}/${e.name}` : e.name;
     const p = path.join(dir, e.name);
     if (e.isDirectory()) {
-      if (rel !== 'verify') checkExtraFiles(p, extraKb, add, rel);
+      if (!KNOWN_DIRS.has(rel)) checkExtraFiles(p, extraKb, add, rel);
     } else if (!KNOWN_FILES.has(rel) && fs.statSync(p).size > extraKb * 1024) {
       add(rel, `${Math.round(fs.statSync(p).size / 1024)} KB fora dos artefatos conhecidos — saida de ferramenta vai para .jdi/cache/, nao para a fase`);
     }
@@ -116,4 +118,4 @@ function main(argv) {
   return r.findings.some((f) => f.level === 'ERROR') ? 1 : 0;
 }
 
-module.exports = { main, check, semverGte };
+module.exports = { main, check, semverGte, createdWith };

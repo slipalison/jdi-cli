@@ -72,6 +72,21 @@ Re-verify → stop and point to `/jdi-verify $PHASE_SLUG`. Ship anyway → set
 stale review: it re-verifies. (`.jdi/` and `loop.non_product_globs` do not
 count as code.)
 
+The evidence rows (`Verify (evidence):`) need a full run on the code being
+shipped — inside the loop a focused run was enough:
+
+```bash
+npx -y {{JDI_CLI}} evidence status "$PHASE_SLUG"; EVID_RC=$?   # 2 = a row without a fresh `ship` run (phases created with 0.19+)
+```
+
+`EVID_RC` = 2 → AskUserQuestion: "Run the full evidence now (recommended) /
+Ship anyway (the reason is recorded in SHIPPED.md)". Run → run each listed
+row's `Verify (evidence):` command once, then
+`npx -y {{JDI_CLI}} evidence record "$PHASE_SLUG" --row N --scope ship --artifact <report>`.
+Ship anyway → `ALLOW_STALE_EVIDENCE="<the user's reason>"`. Autonomous
+`/jdi-issue` runs it and never overrides. (Enforced by `jdi-cli ship` only on
+phases created with 0.19+; older phases ship as before.)
+
 (`jdi-cli ship` in Step 5 re-checks all of this and also refuses any DoD
 Checklist row still `MANUAL_REQUIRED`; `REJECTED` rows are audited waivers and
 do not block.)
@@ -108,20 +123,21 @@ pitfalls, waived criteria, systemic warnings) — to
 
 ```bash
 LEARN_ARG=""; [ -f ".jdi/cache/learnings-$PHASE_SLUG.md" ] && LEARN_ARG="--learnings-file .jdi/cache/learnings-$PHASE_SLUG.md"
-SHIP=$(npx -y {{JDI_CLI}} ship "$PHASE_SLUG" $LEARN_ARG ${ALLOW_STALE:+--allow-stale "$ALLOW_STALE"}) || { echo "Ship refused (reason above)."; exit 1; }
+SHIP=$(npx -y {{JDI_CLI}} ship "$PHASE_SLUG" $LEARN_ARG ${ALLOW_STALE:+--allow-stale "$ALLOW_STALE"} ${ALLOW_STALE_EVIDENCE:+--allow-stale-evidence "$ALLOW_STALE_EVIDENCE"}) || { echo "Ship refused (reason above)."; exit 1; }
 ```
 
 `SHIP` is JSON: writes `$PHASE_DIR/SHIPPED.md` (`shipped_at`, `verdict`, `by`,
-`## Learnings`), refreshes the advisory STATE.md for the next phase, and runs
-the archive compaction (`compaction.archive_after`, `0` = off; moved folders in
-`archived`). Phase completion is recorded IN THE PHASE FOLDER, never in
+`## Learnings`) and refreshes the advisory STATE.md for the next phase. It
+moves no other phase: archiving old phases is separate housekeeping
+(`npx -y {{JDI_CLI}} phases archive --dry-run`, then without `--dry-run`, in
+its own commit). Phase completion is recorded IN THE PHASE FOLDER, never in
 ROADMAP.md — parallel developers shipping different phases never conflict.
 
 ### Step 6: Final commit
 
 ```bash
-git add "$PHASE_DIR/SHIPPED.md" .jdi/known-errors/ 2>/dev/null
-git add -A .jdi/phases .jdi/archive 2>/dev/null || true   # archive moves (if any)
+git add "$PHASE_DIR"
+git add .jdi/known-errors/ 2>/dev/null || true            # entries written in Step 4
 git add .jdi/STATE.md 2>/dev/null || true                 # legacy projects that still track it
 git commit -m "feat($PHASE_SLUG): ship phase ($VERDICT)"
 ```
@@ -183,7 +199,7 @@ phase makes every later turn re-read it.
 
 <gates>
 - pre: REVIEW.md exists + verdict ∉ {BLOCKED, APPROVED_PENDING_MANUAL} + no DoD row still MANUAL_REQUIRED + SHIPPED.md absent
-- post: SHIPPED.md written + STATE.md updated + old phases archived (if applicable) + commit (+ optional tag) (+ PR when --pr and gh/remote/branch allow — best-effort, never blocks). ROADMAP.md untouched except legacy Status-line projects.
+- post: SHIPPED.md written + STATE.md updated + commit (+ optional tag) (+ PR when --pr and gh/remote/branch allow — best-effort, never blocks). ROADMAP.md untouched except legacy Status-line projects.
 </gates>
 
 <errors>

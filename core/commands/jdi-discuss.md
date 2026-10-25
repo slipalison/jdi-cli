@@ -164,6 +164,22 @@ here — verify re-examines the rows whose proof changed. Suspicions (status
 `warn`) are informative. The critic writes nothing but its findings file;
 a failed or silent critic changes nothing (fail-open).
 
+### Step 4.7: Is it one phase? (size at intake)
+
+```bash
+npx -y {{JDI_CLI}} size "$PHASE_SLUG" --intake > .jdi/cache/intake.txt   # "single — ..." or "split — reasons"
+```
+
+`split` (too many DoD rows, areas or criteria for one phase — each row is a
+proof that can cost a verify round, #72): interactive → AskUserQuestion
+"Split into smaller phases (recommended) / Keep one phase". Split (or
+`/jdi-issue`, which always splits) → spawn a FRESH asker with `phase_slug`,
+`phase_dir`, `mode=split`, `intake=.jdi/cache/intake.txt`; then register each
+extra part of `$PHASE_DIR/SPLIT.md` right after this phase, in order (layout
+v3: `npx -y {{JDI_CLI}} add-phase "<part name>" --goal "<goal>" --after <previous part slug> --reason "split of $PHASE_SLUG"`, plus `--unique` under `/jdi-issue`;
+legacy: `/jdi-add-phase`), and commit SPLIT.md with the trimmed CONTEXT.md
+in Step 5. Each part gets its own `/jdi-discuss`, plan and PR.
+
 ### Step 5: Render views + commit
 
 The asker has no shell: refresh the views here, then commit the SOURCE files.

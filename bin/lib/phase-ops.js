@@ -5,16 +5,26 @@
 //   jdi-cli add-phase "<name>" [--slug s] [--goal g] [--reason r]
 //                     [--before <slug> | --after <slug>] [--unique]   (layout v3)
 //   --unique: a taken slug gets -2, -3 … instead of exit 3 (unattended intake)
-//   jdi-cli ship <phase> [--learnings-file <f>] [--no-archive] [--allow-stale "<reason>"]
+//   jdi-cli ship <phase> [--learnings-file <f>] [--allow-stale "<reason>"]
+//                [--allow-stale-evidence "<reason>"]
+//   jdi-cli phases archive [--dry-run] [--keep N] [--rewrite-refs]
 //
 // add-phase stamps `created_with: <version>` in the roadmap entry — the budget
 // rules of 0.17+ apply only to phases created from then on.
 // ship refuses BLOCKED / pending-manual phases and a stale review (product
 // files changed after the verify commit; exit 4 — `--allow-stale` records the
-// reason in SHIPPED.md), writes SHIPPED.md (learnings:
-// at most 5 one-line bullets, from the file the command's model wrote), updates
-// the advisory STATE.md and runs the archive compaction (config
-// compaction.archive_after; 0 = off). It prints JSON with the paths to commit.
+// reason in SHIPPED.md), evidence rows without a fresh full run (phases
+// created with 0.19+; exit 5 — `--allow-stale-evidence`), writes SHIPPED.md (learnings:
+// at most 5 one-line bullets, from the file the command's model wrote) and
+// updates the advisory STATE.md. It prints JSON with the paths to commit.
+//
+// The archive compaction is its own command, never part of a ship (#73): it
+// used to move 20-30 folders inside the ship commit of an unrelated phase and
+// break every link to `.jdi/phases/<dir>/` in the project's docs. `phases
+// archive` keeps the last `--keep` shipped phases (default
+// compaction.archive_after), skips a phase that something outside it still
+// references (`git grep`) unless `--rewrite-refs` points those references to
+// `.jdi/archive/<dir>/`, and never commits.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -144,29 +154,88 @@ function shippableVerdict(phase, text) {
   return v.verdict;
 }
 
-// advisory STATE.md (untracked cache)
+// advisory STATE.md (untracked cache). `adopted: true` (written by
+// /jdi-adopt) survives the rewrite: bootstrap and the reviewer read it, and a
+// ship used to drop it, turning a brownfield project into a greenfield one.
 function writeState(root, phase, nextPhase) {
+  const file = path.join(root, core.JDI_DIR, 'STATE.md');
+  const before = core.readIf(file) || '';
+  const adopted = /^adopted:\s*true\b/m.test(before) ? 'adopted: true\n' : '';
   const state = nextPhase
     ? `current_phase: ${nextPhase.position}\ncurrent_phase_slug: ${nextPhase.slug}\nphase_status: ready\nnext_step: /jdi-discuss ${nextPhase.slug}\n`
     : `current_phase: ${phase.position}\ncurrent_phase_slug: ${phase.slug}\nphase_status: complete\nall_phases_complete: true\nnext_step: project delivered\n`;
-  fs.writeFileSync(path.join(root, core.JDI_DIR, 'STATE.md'), state);
+  fs.writeFileSync(file, state + adopted);
 }
 
-// archive compaction: shipped phases older than `archive_after` leave phases/
-function archiveOld(root, phase, list) {
-  const moved = [];
-  const archiveAfter = Number(core.loadConfig(root).compaction?.archive_after ?? 5);
-  if (archiveAfter <= 0) return moved;
-  const threshold = phase.position + 1 - archiveAfter;
-  for (const p of list.filter((x) => x.position <= threshold)) {
-    const r = core.resolvePhase(String(p.position), root);
-    const dest = path.join(root, core.JDI_DIR, 'archive', path.basename(r.absDir));
-    if (!r.exists || !fs.existsSync(path.join(r.absDir, 'SHIPPED.md')) || fs.existsSync(dest)) continue;
-    fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.renameSync(r.absDir, dest);
-    moved.push({ from: r.dir, to: path.relative(root, dest).split(path.sep).join('/') });
+const toPosix = (p) => p.split(path.sep).join('/');
+
+// `dir` as a whole path segment: `.jdi/phases/alpha` in `.../alpha/x.md`,
+// `(.jdi/phases/alpha)` or at the end — never `.jdi/phases/alpha-2`.
+const isSlugChar = (c) => (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c === '-';
+
+// Start offsets of `dir` as a whole segment in `text` (plain search).
+function refOffsets(text, dir) {
+  const out = [];
+  for (let i = text.indexOf(dir); i !== -1; i = text.indexOf(dir, i + dir.length)) {
+    const next = text[i + dir.length];
+    if (next === undefined || !isSlugChar(next)) out.push(i);
   }
-  return moved;
+  return out;
+}
+
+// Tracked files outside the phase folder (and the archive) that mention it.
+function referencesTo(root, dir) {
+  const r = core.git(['grep', '-l', '-F', '-e', dir, '--', '.', `:(exclude)${dir}`, ':(exclude).jdi/archive'], root);
+  if (r.code !== 0) return [];
+  return r.stdout.split('\n').filter((f) => f && refOffsets(core.readIf(path.join(root, f)) || '', dir).length > 0);
+}
+
+function rewriteRefs(root, files, from, to) {
+  for (const f of files) {
+    const abs = path.join(root, f);
+    const text = fs.readFileSync(abs, 'utf8');
+    let out = '';
+    let last = 0;
+    for (const i of refOffsets(text, from)) {
+      out += text.slice(last, i) + to;
+      last = i + from.length;
+    }
+    fs.writeFileSync(abs, out + text.slice(last));
+  }
+}
+
+// Shipped phases older than the last `keep` shipped ones leave phases/.
+function archive(root, { dryRun = false, keep, rewrite = false } = {}) {
+  const configured = core.loadConfig(root).compaction?.archive_after ?? 5;
+  if (keep === undefined && Number(configured) === 0) return { status: 'off', keep: 0, moved: [], skipped: [] };
+  const keepN = Number(keep ?? configured);
+  if (!Number.isInteger(keepN) || keepN < 1) throw new core.JdiError('--keep must be a positive integer (compaction.archive_after: 0 = never archive)', 1);
+  const shipped = core
+    .listPhases(root)
+    .map((p) => core.resolvePhase(String(p.position), root))
+    .filter((r) => r.exists && !r.archived && fs.existsSync(path.join(r.absDir, 'SHIPPED.md')));
+  const moved = [];
+  const skipped = [];
+  for (const r of shipped.slice(0, Math.max(0, shipped.length - keepN))) {
+    const from = toPosix(r.dir);
+    const to = `${core.JDI_DIR}/archive/${path.basename(r.absDir)}`;
+    if (fs.existsSync(path.join(root, to))) {
+      skipped.push({ phase: r.slug, reason: `${to} already exists` });
+      continue;
+    }
+    const refs = referencesTo(root, from);
+    if (refs.length && !rewrite) {
+      skipped.push({ phase: r.slug, reason: 'referenced outside the phase (rerun with --rewrite-refs, or keep it)', refs });
+      continue;
+    }
+    if (!dryRun) {
+      if (refs.length) rewriteRefs(root, refs, from, to);
+      fs.mkdirSync(path.dirname(path.join(root, to)), { recursive: true });
+      fs.renameSync(r.absDir, path.join(root, to));
+    }
+    moved.push({ phase: r.slug, from, to, rewritten: refs });
+  }
+  return { status: dryRun ? 'dry-run' : 'archived', keep: keepN, moved, skipped };
 }
 
 // The review must describe the code being shipped (see review.staleness).
@@ -180,24 +249,38 @@ function freshness(root, phase, allowStale) {
   return `stale_review: ${fresh.files.length} product file(s) changed after ${fresh.since.slice(0, 10)} — ${String(allowStale).replaceAll(/\s+/g, ' ')}`;
 }
 
-function ship(root, phase, { learningsFile, archive = true, allowStale = null } = {}) {
+// Evidence rows need a fresh ship-scope record (`jdi-cli evidence record`,
+// #70) — only on phases created with 0.19+, which were discussed knowing it.
+function evidenceGate(root, phase, allowStaleEvidence) {
+  const evidence = require('./evidence');
+  if (!evidence.enforced(root, phase)) return null;
+  const problems = evidence.shipProblems(root, phase);
+  if (!problems.length) return null;
+  if (!allowStaleEvidence) {
+    throw new core.JdiError(`${problems.length} evidence row(s) without a fresh full run: ${problems.join('; ')} — run the evidence and \`jdi-cli evidence record ${phase.slug} --row N --scope ship\`, or ship with --allow-stale-evidence "<reason>"`, 5);
+  }
+  return `stale_evidence: ${problems.join('; ')} — ${String(allowStaleEvidence).replaceAll(/\s+/g, ' ')}`;
+}
+
+function ship(root, phase, { learningsFile, allowStale = null, allowStaleEvidence = null } = {}) {
   const shipped = path.join(phase.absDir, 'SHIPPED.md');
   if (fs.existsSync(shipped)) return { status: 'already-shipped', phase: phase.slug };
   const reviewFile = path.join(phase.absDir, 'REVIEW.md');
   if (!fs.existsSync(reviewFile)) throw new core.JdiError(`REVIEW.md missing — /jdi-verify ${phase.slug}`, 1);
   const verdict = shippableVerdict(phase, fs.readFileSync(reviewFile, 'utf8'));
   const staleNote = freshness(root, phase, allowStale);
+  const evidenceNote = evidenceGate(root, phase, allowStaleEvidence);
   const learnings = readLearnings(learningsFile);
   const by = core.git(['config', 'user.name'], root).stdout || 'unknown';
   const body = [`shipped_at: ${new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')}`, `verdict: ${verdict}`, `by: ${by}`];
   if (staleNote) body.push(staleNote);
+  if (evidenceNote) body.push(evidenceNote);
   if (learnings.length) body.push('', '## Learnings', ...learnings);
   fs.writeFileSync(shipped, body.join('\n') + '\n');
   const list = core.listPhases(root);
   const nextPhase = list.find((p) => p.position === phase.position + 1);
   writeState(root, phase, nextPhase);
-  const moved = archive ? archiveOld(root, phase, list) : [];
-  return { status: 'shipped', phase: phase.slug, verdict, learnings: learnings.length, next: nextPhase ? nextPhase.slug : null, files: [path.relative(root, shipped).split(path.sep).join('/')], archived: moved };
+  return { status: 'shipped', phase: phase.slug, verdict, learnings: learnings.length, next: nextPhase ? nextPhase.slug : null, files: [toPosix(path.relative(root, shipped))] };
 }
 
 function main(cmd, argv) {
@@ -206,18 +289,22 @@ function main(cmd, argv) {
     const i = argv.indexOf(n);
     return i === -1 ? undefined : argv[i + 1];
   };
-  const valued = new Set(['--slug', '--goal', '--reason', '--before', '--after', '--learnings-file', '--allow-stale']);
+  const valued = new Set(['--slug', '--goal', '--reason', '--before', '--after', '--learnings-file', '--allow-stale', '--allow-stale-evidence', '--keep']);
   const first = argv.find((a, i) => !a.startsWith('--') && !valued.has(argv[i - 1]));
   let out;
   if (cmd === 'add-phase') {
     if (argv.some((a) => a === '--at' || a.startsWith('--at='))) throw new core.JdiError('--at <N> is not supported on layout v3 (positions are mutable across branches): use --before <slug> or --after <slug>', 1);
     out = addPhase(root, { name: first, slug: opt('--slug'), goal: opt('--goal'), reason: opt('--reason'), before: opt('--before'), after: opt('--after'), unique: argv.includes('--unique') });
   } else if (cmd === 'ship') {
-    if (!first) throw new core.JdiError('usage: jdi ship <phase> [--learnings-file f] [--no-archive]', 1);
-    out = ship(root, core.resolvePhase(first, root), { learningsFile: opt('--learnings-file'), archive: !argv.includes('--no-archive'), allowStale: opt('--allow-stale') || null });
+    // --no-archive is accepted and ignored: ship no longer archives (#73).
+    if (!first) throw new core.JdiError('usage: jdi ship <phase> [--learnings-file f] [--allow-stale "<reason>"]', 1);
+    out = ship(root, core.resolvePhase(first, root), { learningsFile: opt('--learnings-file'), allowStale: opt('--allow-stale') || null, allowStaleEvidence: opt('--allow-stale-evidence') || null });
+  } else if (cmd === 'phases') {
+    if (first !== 'archive') throw new core.JdiError('usage: jdi phases archive [--dry-run] [--keep N] [--rewrite-refs]', 1);
+    out = archive(root, { dryRun: argv.includes('--dry-run'), keep: opt('--keep'), rewrite: argv.includes('--rewrite-refs') });
   }
   process.stdout.write(JSON.stringify(out) + '\n');
   return 0;
 }
 
-module.exports = { main, addPhase, ship, validateSlug, slugify };
+module.exports = { main, addPhase, ship, archive, validateSlug, slugify };

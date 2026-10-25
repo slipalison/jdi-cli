@@ -3,10 +3,15 @@
 // `jdi-cli review verdict <phase> [--json]`   worst-case verdict across REVIEW.md
 //                                              segments (BLOCKED > PENDING_MANUAL >
 //                                              WITH_WARNINGS > APPROVED); exit 2 if none
-// `jdi-cli review blockers <phase> [--max-chars N]`
+// `jdi-cli review blockers <phase> [--max-chars N] [--stack <reviewer> [--dod-owner]]`
 //                                              the `## Blockers` and `## Warnings`
 //                                              items only — the doer's work list in fix
-//                                              mode, instead of the whole review
+//                                              mode, instead of the whole review.
+//                                              `--stack`: only that reviewer's segment
+//                                              (+ the DoD critic's and orchestrator's
+//                                              items with `--dod-owner`), so a
+//                                              multi-stack fix round sends each doer
+//                                              its whole batch at once (#71)
 //
 // `jdi-cli review plan <phase> --reviewers "<r1> <r2>" [--full]`
 //                                              incremental verify: which reviewers run,
@@ -112,6 +117,24 @@ function segments(text) {
   return out.map((x) => ({ name: x.name, text: x.lines.join('\n').trimEnd() }));
 }
 
+// The part of REVIEW.md that belongs to one stack's doer: its reviewer
+// segment, plus — for the DoD owner — everything outside reviewer segments
+// (the DoD Critic, a Loop override, a single-reviewer review).
+function scopedText(text, stack, dodOwner) {
+  if (!segments(text).length) return text;
+  const own = [];
+  const outside = [];
+  let inSeg = null;
+  for (const l of text.split('\n')) {
+    const m = /^## Reviewer:\s*(\S+)/.exec(l);
+    if (m) inSeg = m[1];
+    else if (ORCH_SEGMENTS.test(l)) inSeg = null;
+    if (inSeg === stack) own.push(l);
+    else if (inSeg === null) outside.push(l);
+  }
+  return [...own, ...(dodOwner ? ['', ...outside] : [])].join('\n');
+}
+
 function stateFile(root, phase) {
   return path.join(root, core.JDI_DIR, 'cache', 'review', `${phase.slug}.json`);
 }
@@ -164,6 +187,17 @@ function carriedSegment(text, head) {
   return text.replace(/^(## Reviewer:[^\n]*)\n/, (m, title) => `${title}\n<!-- jdi:carried from=${head.slice(0, 12)} -->\n`);
 }
 
+// `loop.record_commits: "at_ship"` (#71): the verify does not commit
+// REVIEW.md each round, so the review being replaced would exist nowhere —
+// keep it as `reviews/round-N.md` in the phase folder (committed at ship).
+function snapshotRound(root, phase, reviewFile) {
+  if (core.loadConfig(root).loop?.record_commits !== 'at_ship' || !fs.existsSync(reviewFile)) return;
+  const dir = path.join(phase.absDir, 'reviews');
+  fs.mkdirSync(dir, { recursive: true });
+  const n = fs.readdirSync(dir).filter((f) => /^round-\d+\.md$/.test(f)).length + 1;
+  fs.copyFileSync(reviewFile, path.join(dir, `round-${n}.md`));
+}
+
 // Decide which reviewers run. The first reviewer owns the DoD Checklist and
 // always runs; another one is CARRIED (its last segment kept, not re-spawned)
 // only when: incremental verify is on, its last run is recorded at a commit
@@ -190,6 +224,7 @@ function planReview(phase, reviewers, { full = false } = {}, root = process.cwd(
   const carriedText = out.carry.map((r) => carriedSegment(ctx.prevSegs.get(r).text, ctx.state.reviewers[r].head)).join('\n\n');
   if (carriedText) core.writeFileEnsured(carryFileOf(root, phase), carriedText + '\n', root);
   else fs.rmSync(carryFileOf(root, phase), { force: true });
+  snapshotRound(root, phase, reviewFile);
   fs.rmSync(reviewFile, { force: true });
   for (const r of out.run) ctx.state.reviewers[r] = { head };
   core.writeFileEnsured(stateFile(root, phase), JSON.stringify(ctx.state, null, 2) + '\n', root);
@@ -261,8 +296,9 @@ function verdictCmd(phase, json) {
 }
 
 // The fix round's work list: blockers then warnings, under a character cap.
-function blockersCmd(phase, json, maxChars) {
-  const f = findings(reviewText(phase));
+function blockersCmd(phase, json, maxChars, scope = {}) {
+  const text = reviewText(phase);
+  const f = findings(scope.stack ? scopedText(text, scope.stack, scope.dodOwner) : text);
   if (json) {
     process.stdout.write(JSON.stringify(f, null, 2) + '\n');
     return 0;
@@ -302,11 +338,13 @@ function main(argv) {
   const json = rest.includes('--json');
   const mi = rest.indexOf('--max-chars');
   const maxChars = mi === -1 ? 4000 : Number(rest[mi + 1]);
-  const id = rest.find((a, i) => !a.startsWith('--') && !['--max-chars', '--reviewers'].includes(rest[i - 1]));
+  const id = rest.find((a, i) => !a.startsWith('--') && !['--max-chars', '--reviewers', '--stack'].includes(rest[i - 1]));
+  const si = rest.indexOf('--stack');
+  const scope = { stack: si === -1 ? null : rest[si + 1], dodOwner: rest.includes('--dod-owner') };
   if (!id) throw new core.JdiError('usage: jdi review <verdict|blockers|plan|merge|fresh> <phase> [--json]', 1);
   const phase = core.resolvePhase(id);
   if (sub === 'verdict') return verdictCmd(phase, json);
-  if (sub === 'blockers') return blockersCmd(phase, json, maxChars);
+  if (sub === 'blockers') return blockersCmd(phase, json, maxChars, scope);
   if (sub === 'plan') return planCmd(phase, rest);
   if (sub === 'merge') return printJson(mergeReview(phase), 0);
   if (sub === 'fresh') {
@@ -316,4 +354,4 @@ function main(argv) {
   throw new core.JdiError('usage: jdi review <verdict|blockers|plan|merge|fresh> <phase>', 1);
 }
 
-module.exports = { main, verdictOf, manualPending, findings, classify, segments, planReview, mergeReview, staleness, RANK };
+module.exports = { main, verdictOf, manualPending, findings, classify, segments, scopedText, planReview, mergeReview, staleness, RANK };
