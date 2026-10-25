@@ -55,27 +55,23 @@ sync_specialists() {
   return 0
 }
 
-# Aplica a injecao a todo .md de 1o nivel num diretorio (agents/, commands/,
-# prompts/). Silencioso se o diretorio nao existir ou estiver vazio.
-inject_lang_directive_dir() {
-  local dir="$1"
-  [[ -d "$dir" ]] || return 0
-  local f
-  for f in "$dir"/*.md; do
-    [[ -e "$f" ]] || continue
-    inject_lang_directive_file "$f"
-  done
+# The files JDI ships for a runtime: copied by one Node helper (the same one
+# jdi-install.ps1 calls), which writes only those files, injects the pt-BR
+# directive only into them and keeps <dest>/.jdi-installed.json. A file the
+# project edited is kept (the new version goes to <file>.jdi-new; JDI_FORCE_FILES=1
+# replaces it). Third-party agents and skills next to them are never touched
+# (#78: `update` used to add the directive to every agent/skill in the dir).
+install_files() {
+  local rt="$1" dest="$2" dirs="$3"
+  "${JDI_NODE:-node}" "$ROOT/bin/lib/install-files.js" "$ROOT/runtimes/$rt" "$dest" \
+    --dirs "$dirs" --lang "$JDI_LANG" ${JDI_FORCE_FILES:+--force}
 }
 
-# Aplica a injecao a todo skills/<nome>/SKILL.md sob um diretorio.
-inject_lang_directive_skills() {
-  local skills_root="$1"
-  [[ -d "$skills_root" ]] || return 0
-  local f
-  for f in "$skills_root"/*/SKILL.md; do
-    [[ -e "$f" ]] || continue
-    inject_lang_directive_file "$f"
-  done
+# Project config files JDI offers once (settings/opencode examples): only on a
+# first install — never recreated by `update` (JDI_UPDATE=1), the project may
+# have removed or renamed them on purpose.
+first_install() {
+  [[ -z "${JDI_UPDATE:-}" ]]
 }
 
 # Instruction files (CLAUDE.md, AGENTS.md, copilot-instructions.md, agents.md)
@@ -94,25 +90,13 @@ install_claude() {
   else
     dest="$PWD/.claude"
   fi
-  mkdir -p "$dest/agents" "$dest/commands" "$dest/skills"
-
-  cp -R "$ROOT/runtimes/claude/agents/." "$dest/agents/"
-  cp -R "$ROOT/runtimes/claude/commands/." "$dest/commands/"
-  if [[ -d "$ROOT/runtimes/claude/skills" ]]; then
-    cp -R "$ROOT/runtimes/claude/skills/." "$dest/skills/"
-  fi
+  install_files claude "$dest" agents,commands,skills
 
   sync_specialists "claude"
 
-  if [[ "$JDI_LANG" == "$LANG_PT_BR" ]]; then
-    inject_lang_directive_dir "$dest/agents"
-    inject_lang_directive_dir "$dest/commands"
-    inject_lang_directive_skills "$dest/skills"
-  fi
-
   if [[ "$SCOPE" == "$SCOPE_PROJECT" ]]; then
     merge_instructions "$ROOT/runtimes/claude/CLAUDE.md" "$PWD/CLAUDE.md" claude
-    if [[ -f "$ROOT/runtimes/claude/settings.example.json" ]]; then
+    if first_install && [[ -f "$ROOT/runtimes/claude/settings.example.json" ]]; then
       mkdir -p "$dest"
       cp -n "$ROOT/runtimes/claude/settings.example.json" "$dest/settings.example.json"
       echo "  -> revise $dest/settings.example.json e renomeie para settings.json (ou .local.json)"
@@ -124,21 +108,12 @@ install_claude() {
 
 install_copilot() {
   local dest="$PWD/.github"
-  mkdir -p "$dest/agents" "$dest/prompts" "$dest/skills"
-  cp -R "$ROOT/runtimes/copilot/agents/." "$dest/agents/"
-  cp -R "$ROOT/runtimes/copilot/prompts/." "$dest/prompts/"
   # Skills servem as 3 superficies: Copilot CLI (que NAO le .github/prompts/),
   # VS Code agent mode e o coding agent do github.com
-  cp -R "$ROOT/runtimes/copilot/skills/." "$dest/skills/"
+  install_files copilot "$dest" agents,prompts,skills
   merge_instructions "$ROOT/runtimes/copilot/copilot-instructions.md" "$dest/copilot-instructions.md" copilot
 
   sync_specialists "copilot"
-
-  if [[ "$JDI_LANG" == "$LANG_PT_BR" ]]; then
-    inject_lang_directive_dir "$dest/agents"
-    inject_lang_directive_dir "$dest/prompts"
-    inject_lang_directive_skills "$dest/skills"
-  fi
 
   # Coding agent (issues delegadas): setup do ambiente + gate de artefatos.
   # Nunca sobrescreve workflows existentes do consumidor.
@@ -173,14 +148,9 @@ install_antigravity() {
   else
     dest="$PWD/.agents"
   fi
-  mkdir -p "$dest/skills"
-  cp -R "$ROOT/runtimes/antigravity/skills/." "$dest/skills/"
+  install_files antigravity "$dest" skills
 
   sync_specialists "antigravity"
-
-  if [[ "$JDI_LANG" == "$LANG_PT_BR" ]]; then
-    inject_lang_directive_skills "$dest/skills"
-  fi
 
   if [[ "$SCOPE" == "$SCOPE_PROJECT" ]]; then
     merge_instructions "$ROOT/runtimes/antigravity/agents.md" "$dest/agents.md" antigravity
@@ -205,27 +175,13 @@ install_opencode() {
   else
     dest="$PWD/.opencode"
   fi
-  mkdir -p "$dest/agents" "$dest/commands" "$dest/skills"
-
-  cp -R "$ROOT/runtimes/opencode/agents/." "$dest/agents/"
-  cp -R "$ROOT/runtimes/opencode/commands/." "$dest/commands/"
-
-  # Skills: OpenCode tambem le .claude/skills/. Se ja instalou Claude, reutiliza.
-  if [[ -d "$ROOT/runtimes/opencode/skills" ]]; then
-    cp -R "$ROOT/runtimes/opencode/skills/." "$dest/skills/" 2>/dev/null || true
-  fi
+  install_files opencode "$dest" agents,commands,skills
 
   sync_specialists "opencode"
 
-  if [[ "$JDI_LANG" == "$LANG_PT_BR" ]]; then
-    inject_lang_directive_dir "$dest/agents"
-    inject_lang_directive_dir "$dest/commands"
-    inject_lang_directive_skills "$dest/skills"
-  fi
-
   if [[ "$SCOPE" == "$SCOPE_PROJECT" ]]; then
     merge_instructions "$ROOT/runtimes/opencode/AGENTS.md" "$PWD/AGENTS.md" opencode
-    if [[ ! -f "$dest/opencode.jsonc" ]]; then
+    if first_install && [[ ! -f "$dest/opencode.jsonc" ]]; then
       cp "$ROOT/runtimes/opencode/opencode.example.jsonc" "$dest/opencode.jsonc"
       echo "  -> revise $dest/opencode.jsonc (gerado a partir do exemplo)"
     fi
@@ -262,16 +218,9 @@ install_junie() {
   else
     dest="$PWD/.junie"
   fi
-  mkdir -p "$dest/agents" "$dest/skills"
-  cp -R "$ROOT/runtimes/junie/agents/." "$dest/agents/"
-  cp -R "$ROOT/runtimes/junie/skills/." "$dest/skills/"
+  install_files junie "$dest" agents,skills
 
   sync_specialists "junie"
-
-  if [[ "$JDI_LANG" == "$LANG_PT_BR" ]]; then
-    inject_lang_directive_dir "$dest/agents"
-    inject_lang_directive_skills "$dest/skills"
-  fi
 
   if [[ "$SCOPE" == "$SCOPE_PROJECT" ]]; then
     merge_instructions "$ROOT/runtimes/junie/AGENTS.md" "$dest/AGENTS.md" junie

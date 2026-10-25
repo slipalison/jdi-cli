@@ -28,9 +28,15 @@ for arg in "$@"; do
     --force-specialists) FORCE_SPECIALISTS=1 ;;
     --skip-specialists)  SKIP_SPECIALISTS=1 ;;
     --dry-run)           DRY_RUN=1 ;;
+    # --force: replace JDI files the project edited (default: keep them, the
+    # new version goes to <file>.jdi-new)
+    --force)             export JDI_FORCE_FILES=1 ;;
     *) : ;;  # ignora flags desconhecidas
   esac
 done
+# The installer below runs as part of an update: it writes only JDI's own
+# files and never recreates the example config files (#78).
+export JDI_UPDATE=1
 
 # Le versao nova do package.json shipado
 NEW_VERSION=$(grep -oE '"version":[[:space:]]*"[^"]+"' "$ROOT/package.json" | head -1 | sed 's/.*"\([^"]*\)"/\1/')
@@ -88,8 +94,11 @@ if [[ "$OLD_VERSION" == "$NEW_VERSION" && $DRY_RUN -eq 0 ]]; then
   if [[ -n "$EXPLICIT_LANG" && "$EXPLICIT_LANG" != "$CURRENT_LANG" ]]; then
     echo "Mesma versao ($NEW_VERSION), mas --lang mudou ($CURRENT_LANG -> $EXPLICIT_LANG) — reaplicando runtime files."
     echo
+  elif [[ -n "${JDI_FORCE_FILES:-}" ]]; then
+    echo "Mesma versao ($NEW_VERSION), --force — reaplicando os arquivos do JDI (inclusive os editados no projeto)."
+    echo
   else
-    echo "Ja na versao mais recente ($NEW_VERSION)."
+    echo "Ja na versao mais recente ($NEW_VERSION). Use --force pra reinstalar mesmo assim."
     exit 0
   fi
 fi

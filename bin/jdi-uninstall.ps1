@@ -168,6 +168,7 @@ function Invoke-RuntimeUninstall {
     if (-not (Test-Path $t.Dir)) { continue }
     Write-Output ""
     Write-Output "$Label ($($t.Scope) scope) em: $($t.Dir)"
+    Remove-Item-Safe -Path (Join-Path $t.Dir '.jdi-installed.json') -Label '.jdi-installed.json'   # install manifest (0.20.1)
     & $Action $t
   }
 }

@@ -5,6 +5,29 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.1] - 2026-10-25
+
+### Fixed
+- **`update` touched files that are not JDI's** (#78). The installer copied
+  whole directories and then injected the pt-BR directive into EVERY agent and
+  skill it found — a third-party agent or skill in `.claude/agents/` or
+  `.claude/skills/` (another kit) changed on `jdi update`; a JDI file the
+  project had edited was overwritten without a word; and the update recreated
+  `.claude/settings.example.json` (and `.opencode/opencode.jsonc`) the project
+  had removed. Now one Node helper (`bin/lib/install-files.js`, called by
+  `jdi-install.sh` and `.ps1`) writes only the files JDI ships, injects the
+  directive only into them, and keeps `<runtime dir>/.jdi-installed.json`
+  (path → sha256 of what it wrote):
+  - a file that differs from what JDI wrote last time is KEPT, and the new
+    version goes next to it as `<file>.jdi-new` (`jdi update --force` replaces
+    it; `--force` also reapplies on the same version);
+  - a file JDI wrote and no longer ships is removed when unedited;
+  - installs up to 0.20.0 have no manifest: their JDI files are replaced as
+    before and adopted into it;
+  - the example config files are offered on a first install only;
+  - `uninstall` removes the manifest.
+  The injector is a port of the shell one, byte for byte (tested against it).
+
 ## [0.20.0] - 2026-10-25
 
 Time, not tokens. Measured on a real project (9 phases, 73 h of critical

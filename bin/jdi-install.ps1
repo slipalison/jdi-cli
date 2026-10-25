@@ -38,11 +38,30 @@ $Root = Split-Path -Parent $PSScriptRoot
 $ProjectDir = (Get-Location).Path
 $UserHome = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
 
-function Copy-Tree {
-  param([string]$From, [string]$To)
-  if (-not (Test-Path $From)) { return }
-  New-Item -ItemType Directory -Force -Path $To | Out-Null
-  Copy-Item -Path (Join-Path $From '*') -Destination $To -Recurse -Force
+# The files JDI ships for a runtime: copied by one Node helper (the same one
+# jdi-install.sh calls), which writes only those files, injects the pt-BR
+# directive only into them and keeps <dest>/.jdi-installed.json. A file the
+# project edited is kept (the new version goes to <file>.jdi-new; JDI_FORCE_FILES
+# replaces it). Third-party agents and skills next to them are never touched
+# (#78: update used to add the directive to every agent/skill in the dir).
+function Install-Files {
+  param([string]$Rt, [string]$Dest, [string]$Dirs)
+  $sep = [System.IO.Path]::DirectorySeparatorChar
+  $src = [System.IO.Path]::Combine($Root, 'runtimes', $Rt)
+  $Dest = $Dest -replace '[\\/]', $sep
+  $helper = [System.IO.Path]::Combine($Root, 'bin', 'lib', 'install-files.js')
+  $node = if ($env:JDI_NODE) { $env:JDI_NODE } else { 'node' }
+  $nodeArgs = @($helper, $src, $Dest, '--dirs', $Dirs, '--lang', $JdiLang)
+  if ($env:JDI_FORCE_FILES) { $nodeArgs += '--force' }
+  & $node @nodeArgs
+  if ($LASTEXITCODE -ne 0) { throw "install-files falhou para $Dest" }
+}
+
+# Project config files JDI offers once (settings/opencode examples): only on a
+# first install - never recreated by update (JDI_UPDATE), the project may have
+# removed or renamed them on purpose.
+function Test-FirstInstall {
+  return -not $env:JDI_UPDATE
 }
 
 # Idioma de instalacao - vem de bin/jdi.js via variavel de ambiente
@@ -68,26 +87,6 @@ function Sync-Specialists {
   Write-Output "  -> specialists de .jdi/agents/ sincronizados pro runtime $Rt (npx -y jdi-cli sync-specialists)"
 }
 
-# Aplica a injecao a todo .md de 1o nivel num diretorio (agents/, commands/,
-# prompts/). Silencioso se o diretorio nao existir ou estiver vazio.
-function Add-LangDirectiveToDir {
-  param([string]$Dir)
-  if (-not (Test-Path $Dir)) { return }
-  Get-ChildItem -Path $Dir -Filter '*.md' -File | ForEach-Object {
-    Add-LangDirectiveToFile -FilePath $_.FullName
-  }
-}
-
-# Aplica a injecao a todo skills/<nome>/SKILL.md sob um diretorio.
-function Add-LangDirectiveToSkills {
-  param([string]$SkillsRoot)
-  if (-not (Test-Path $SkillsRoot)) { return }
-  Get-ChildItem -Path $SkillsRoot -Directory | ForEach-Object {
-    $skillFile = Join-Path $_.FullName 'SKILL.md'
-    if (Test-Path $skillFile) { Add-LangDirectiveToFile -FilePath $skillFile }
-  }
-}
-
 # Instruction files carry the JDI part as a MANAGED BLOCK: only that block is
 # replaced, the project's own rules around it are preserved byte for byte
 # (<= 0.15.x copied the whole file over them). Same Node helper as install.sh.
@@ -105,27 +104,15 @@ function Merge-Instructions {
 
 function Install-Claude {
   $dest = if ($Scope -eq 'user') { Join-Path $UserHome '.claude' } else { Join-Path $ProjectDir '.claude' }
-  New-Item -ItemType Directory -Force -Path "$dest\agents" | Out-Null
-  New-Item -ItemType Directory -Force -Path "$dest\commands" | Out-Null
-  New-Item -ItemType Directory -Force -Path "$dest\skills" | Out-Null
-
-  Copy-Tree -From "$Root\runtimes\claude\agents" -To "$dest\agents"
-  Copy-Tree -From "$Root\runtimes\claude\commands" -To "$dest\commands"
-  Copy-Tree -From "$Root\runtimes\claude\skills" -To "$dest\skills"
+  Install-Files -Rt 'claude' -Dest $dest -Dirs 'agents,commands,skills'
 
   Sync-Specialists -Rt 'claude'
-
-  if ($JdiLang -eq $LangPtBr) {
-    Add-LangDirectiveToDir -Dir "$dest\agents"
-    Add-LangDirectiveToDir -Dir "$dest\commands"
-    Add-LangDirectiveToSkills -SkillsRoot "$dest\skills"
-  }
 
   if ($Scope -eq 'project') {
     if (Test-Path "$Root\runtimes\claude\CLAUDE.md") {
       Merge-Instructions -Src "$Root\runtimes\claude\CLAUDE.md" -Dest "$ProjectDir\CLAUDE.md" -Runtime claude
     }
-    if (Test-Path "$Root\runtimes\claude\settings.example.json") {
+    if ((Test-FirstInstall) -and (Test-Path "$Root\runtimes\claude\settings.example.json")) {
       $target = Join-Path $dest 'settings.example.json'
       if (-not (Test-Path $target)) {
         Copy-Item -Path "$Root\runtimes\claude\settings.example.json" -Destination $target
@@ -138,23 +125,11 @@ function Install-Claude {
 
 function Install-Copilot {
   $dest = Join-Path $ProjectDir '.github'
-  New-Item -ItemType Directory -Force -Path "$dest\agents" | Out-Null
-  New-Item -ItemType Directory -Force -Path "$dest\prompts" | Out-Null
-  New-Item -ItemType Directory -Force -Path "$dest\skills" | Out-Null
-
-  Copy-Tree -From "$Root\runtimes\copilot\agents" -To "$dest\agents"
-  Copy-Tree -From "$Root\runtimes\copilot\prompts" -To "$dest\prompts"
   # Skills servem as 3 superficies: Copilot CLI (que NAO le .github/prompts/),
   # VS Code agent mode e o coding agent do github.com
-  Copy-Tree -From "$Root\runtimes\copilot\skills" -To "$dest\skills"
+  Install-Files -Rt 'copilot' -Dest $dest -Dirs 'agents,prompts,skills'
 
   Sync-Specialists -Rt 'copilot'
-
-  if ($JdiLang -eq $LangPtBr) {
-    Add-LangDirectiveToDir -Dir "$dest\agents"
-    Add-LangDirectiveToDir -Dir "$dest\prompts"
-    Add-LangDirectiveToSkills -SkillsRoot "$dest\skills"
-  }
 
   if (Test-Path "$Root\runtimes\copilot\copilot-instructions.md") {
     Merge-Instructions -Src "$Root\runtimes\copilot\copilot-instructions.md" -Dest "$dest\copilot-instructions.md" -Runtime copilot
@@ -188,14 +163,9 @@ function Install-Antigravity {
   #   project scope -> <root>/.agents/skills/     (tool-agnostic workspace dir)
   # The 1.x path (~/.gemini/antigravity/) is no longer read by 2.0.
   $dest = if ($Scope -eq 'user') { Join-Path $UserHome '.gemini\config' } else { Join-Path $ProjectDir '.agents' }
-  New-Item -ItemType Directory -Force -Path "$dest\skills" | Out-Null
-  Copy-Tree -From "$Root\runtimes\antigravity\skills" -To "$dest\skills"
+  Install-Files -Rt 'antigravity' -Dest $dest -Dirs 'skills'
 
   Sync-Specialists -Rt 'antigravity'
-
-  if ($JdiLang -eq $LangPtBr) {
-    Add-LangDirectiveToSkills -SkillsRoot "$dest\skills"
-  }
 
   if ($Scope -eq 'project' -and (Test-Path "$Root\runtimes\antigravity\agents.md")) {
     Merge-Instructions -Src "$Root\runtimes\antigravity\agents.md" -Dest "$dest\agents.md" -Runtime antigravity
@@ -214,28 +184,16 @@ function Install-Antigravity {
 
 function Install-Opencode {
   $dest = if ($Scope -eq 'user') { Join-Path $UserHome '.config\opencode' } else { Join-Path $ProjectDir '.opencode' }
-  New-Item -ItemType Directory -Force -Path "$dest\agents" | Out-Null
-  New-Item -ItemType Directory -Force -Path "$dest\commands" | Out-Null
-  New-Item -ItemType Directory -Force -Path "$dest\skills" | Out-Null
-
-  Copy-Tree -From "$Root\runtimes\opencode\agents" -To "$dest\agents"
-  Copy-Tree -From "$Root\runtimes\opencode\commands" -To "$dest\commands"
-  Copy-Tree -From "$Root\runtimes\opencode\skills" -To "$dest\skills"
+  Install-Files -Rt 'opencode' -Dest $dest -Dirs 'agents,commands,skills'
 
   Sync-Specialists -Rt 'opencode'
-
-  if ($JdiLang -eq $LangPtBr) {
-    Add-LangDirectiveToDir -Dir "$dest\agents"
-    Add-LangDirectiveToDir -Dir "$dest\commands"
-    Add-LangDirectiveToSkills -SkillsRoot "$dest\skills"
-  }
 
   if ($Scope -eq 'project') {
     if (Test-Path "$Root\runtimes\opencode\AGENTS.md") {
       Merge-Instructions -Src "$Root\runtimes\opencode\AGENTS.md" -Dest "$ProjectDir\AGENTS.md" -Runtime opencode
     }
     $jsoncTarget = Join-Path $dest 'opencode.jsonc'
-    if (-not (Test-Path $jsoncTarget) -and (Test-Path "$Root\runtimes\opencode\opencode.example.jsonc")) {
+    if ((Test-FirstInstall) -and -not (Test-Path $jsoncTarget) -and (Test-Path "$Root\runtimes\opencode\opencode.example.jsonc")) {
       Copy-Item -Path "$Root\runtimes\opencode\opencode.example.jsonc" -Destination $jsoncTarget
       Write-Output "  -> revise $jsoncTarget (gerado a partir do exemplo)"
     }
@@ -268,17 +226,9 @@ function Install-Junie {
   # tools allowlist enforced). Custom commands do Junie exigem args nomeados
   # obrigatorios - incompativel com os corpos JDI; skills nao tem o problema.
   $dest = if ($Scope -eq 'user') { Join-Path $UserHome '.junie' } else { Join-Path $ProjectDir '.junie' }
-  New-Item -ItemType Directory -Force -Path "$dest\agents" | Out-Null
-  New-Item -ItemType Directory -Force -Path "$dest\skills" | Out-Null
-  Copy-Tree -From "$Root\runtimes\junie\agents" -To "$dest\agents"
-  Copy-Tree -From "$Root\runtimes\junie\skills" -To "$dest\skills"
+  Install-Files -Rt 'junie' -Dest $dest -Dirs 'agents,skills'
 
   Sync-Specialists -Rt 'junie'
-
-  if ($JdiLang -eq $LangPtBr) {
-    Add-LangDirectiveToDir -Dir "$dest\agents"
-    Add-LangDirectiveToSkills -SkillsRoot "$dest\skills"
-  }
 
   if ($Scope -eq 'project') {
     Merge-Instructions -Src "$Root\runtimes\junie\AGENTS.md" -Dest "$dest\AGENTS.md" -Runtime junie
