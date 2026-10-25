@@ -32,7 +32,7 @@ Finalizes phase after /jdi-verify approves. Writes phases/<slug>/SHIPPED.md (the
 
 ### Step 1: Validation
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.19.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.20.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 ```bash
 test -d .jdi/ || { echo "Not a JDI project."; exit 1; }
 
@@ -43,7 +43,7 @@ for a in "$@"; do [ "$a" = "--pr" ] && WITH_PR=true; done
 ### Step 2: Resolve phase and read the verdict (mechanically)
 
 ```bash
-RESOLVED="$(npx -y jdi-cli@0.19.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+RESOLVED="$(npx -y jdi-cli@0.20.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
 eval "$RESOLVED"
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
@@ -52,7 +52,7 @@ PHASE_DIR="$JDI_PHASE_DIR"
 [ -f "$PHASE_DIR/SHIPPED.md" ] && { echo "Phase $PHASE_SLUG already shipped."; exit 0; }
 
 # Worst case across all REVIEW.md segments; exit 2 = no verdict (never ship on silence)
-VERDICT=$(npx -y jdi-cli@0.19.0 review verdict "$PHASE_SLUG") || { echo "No verdict in $PHASE_DIR/REVIEW.md — re-run /jdi-verify $PHASE_SLUG."; exit 1; }
+VERDICT=$(npx -y jdi-cli@0.20.0 review verdict "$PHASE_SLUG") || { echo "No verdict in $PHASE_DIR/REVIEW.md — re-run /jdi-verify $PHASE_SLUG."; exit 1; }
 case "$VERDICT" in
   BLOCKED) echo "Phase $PHASE_SLUG BLOCKED. Fix before ship."; exit 1 ;;
   APPROVED_PENDING_MANUAL) echo "Manual DoD items pending. Next: /jdi-confirm-dod $PHASE_SLUG"; exit 1 ;;
@@ -62,7 +62,7 @@ esac
 The review must describe the code being shipped:
 
 ```bash
-npx -y jdi-cli@0.19.0 review fresh "$PHASE_SLUG" >/dev/null; FRESH_RC=$?   # 3 = product files changed after the verify commit
+npx -y jdi-cli@0.20.0 review fresh "$PHASE_SLUG" >/dev/null; FRESH_RC=$?   # 3 = product files changed after the verify commit
 ```
 
 `FRESH_RC` = 3 → AskUserQuestion: "Code changed after the verify. Re-verify
@@ -76,13 +76,13 @@ The evidence rows (`Verify (evidence):`) need a full run on the code being
 shipped — inside the loop a focused run was enough:
 
 ```bash
-npx -y jdi-cli@0.19.0 evidence status "$PHASE_SLUG"; EVID_RC=$?   # 2 = a row without a fresh `ship` run (phases created with 0.19+)
+npx -y jdi-cli@0.20.0 evidence status "$PHASE_SLUG"; EVID_RC=$?   # 2 = a row without a fresh `ship` run (phases created with 0.19+)
 ```
 
 `EVID_RC` = 2 → AskUserQuestion: "Run the full evidence now (recommended) /
 Ship anyway (the reason is recorded in SHIPPED.md)". Run → run each listed
 row's `Verify (evidence):` command once, then
-`npx -y jdi-cli@0.19.0 evidence record "$PHASE_SLUG" --row N --scope ship --artifact <report>`.
+`npx -y jdi-cli@0.20.0 evidence record "$PHASE_SLUG" --row N --scope ship --artifact <report>`.
 Ship anyway → `ALLOW_STALE_EVIDENCE="<the user's reason>"`. Autonomous
 `/jdi-issue` runs it and never overrides. (Enforced by `jdi-cli ship` only on
 phases created with 0.19+; older phases ship as before.)
@@ -106,7 +106,7 @@ warnings round.)
 ### Step 4: Distill learnings (the only step that needs judgment)
 
 Input: the work list, not the whole review —
-`npx -y jdi-cli@0.19.0 review blockers "$PHASE_SLUG"` (blockers + warnings) and
+`npx -y jdi-cli@0.20.0 review blockers "$PHASE_SLUG"` (blockers + warnings) and
 the `## Blocked tasks` of `$PHASE_DIR/SUMMARY.md`. Write at most **5
 one-line bullets** — only what could recur in FUTURE phases (recurring
 pitfalls, waived criteria, systemic warnings) — to
@@ -123,13 +123,13 @@ pitfalls, waived criteria, systemic warnings) — to
 
 ```bash
 LEARN_ARG=""; [ -f ".jdi/cache/learnings-$PHASE_SLUG.md" ] && LEARN_ARG="--learnings-file .jdi/cache/learnings-$PHASE_SLUG.md"
-SHIP=$(npx -y jdi-cli@0.19.0 ship "$PHASE_SLUG" $LEARN_ARG ${ALLOW_STALE:+--allow-stale "$ALLOW_STALE"} ${ALLOW_STALE_EVIDENCE:+--allow-stale-evidence "$ALLOW_STALE_EVIDENCE"}) || { echo "Ship refused (reason above)."; exit 1; }
+SHIP=$(npx -y jdi-cli@0.20.0 ship "$PHASE_SLUG" $LEARN_ARG ${ALLOW_STALE:+--allow-stale "$ALLOW_STALE"} ${ALLOW_STALE_EVIDENCE:+--allow-stale-evidence "$ALLOW_STALE_EVIDENCE"}) || { echo "Ship refused (reason above)."; exit 1; }
 ```
 
 `SHIP` is JSON: writes `$PHASE_DIR/SHIPPED.md` (`shipped_at`, `verdict`, `by`,
 `## Learnings`) and refreshes the advisory STATE.md for the next phase. It
 moves no other phase: archiving old phases is separate housekeeping
-(`npx -y jdi-cli@0.19.0 phases archive --dry-run`, then without `--dry-run`, in
+(`npx -y jdi-cli@0.20.0 phases archive --dry-run`, then without `--dry-run`, in
 its own commit). Phase completion is recorded IN THE PHASE FOLDER, never in
 ROADMAP.md — parallel developers shipping different phases never conflict.
 

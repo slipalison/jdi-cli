@@ -1,8 +1,8 @@
 'use strict';
 
-// `jdi-cli gates run <phase> [--stack <name>] [--only build,test,coverage,lint,dod]
+// `jdi-cli gates run <phase> [--stack <name>[,<name>...]] [--only build,test,coverage,lint,audit,dod]
 //                    [--changed-since <sha>] [--fresh] [--json]`
-// `jdi-cli gates show <phase> [--stack <name>] [--failures]`
+// `jdi-cli gates show <phase> [--stack <name>] [--failures] [--all]`
 //
 // Runs the deterministic quality gates (build, tests, coverage, lint) and the
 // automatic Definition of Done checks OUTSIDE any agent's context, and writes
@@ -29,16 +29,35 @@
 // row's own hash (criterion, Verify, Bait, script). A FAIL is never reused,
 // and `--fresh` runs everything (`/jdi-verify --full`). A loop round that only
 // touched docs/ or .jdi/ no longer rebuilds and retests the product.
+//
+// 0.20 (time, measured on a real project — heavy commands were 61% of a
+// phase's critical path, the model 22%):
+// - `audit` gate (dependency advisories: `cargo audit`, `npm audit`, ...):
+//   runs even when the build fails and is NEVER reused — the advisory
+//   database changes while the code does not. An advisory used to surface only
+//   in CI or in the final review, costing a round or a push.
+// - `requires` (stack): env vars, commands, free disk, a `check` command —
+//   verified before anything runs. A broken environment (disk full, missing
+//   credential, no docker) is reported as ENV (exit 5) in a second, instead of
+//   failing after 20-40 minutes of suite; the loop never counts it as a defect.
+// - `--stack a,b`: several stacks in one call — in parallel when
+//   `economy.parallel_gates` is true (off by default: it doubles CPU/RAM).
+// - `Verify (test):` DoD rows are proven by the stack's JUnit report
+//   (`test_report`) of the test/coverage gate at the same HEAD — no second run
+//   of the suite per row. Every matching testcase must pass; none = FAIL.
+// - `show --failures --all`: one work list from every report at HEAD.
 
 const fs = require('node:fs');
 const os = require('node:os');
 const crypto = require('node:crypto');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const core = require('./jdi-core');
 const dod = require('./dod');
 
-const ORDER = ['build', 'test', 'coverage', 'lint'];
+const ORDER = ['build', 'test', 'coverage', 'lint', 'audit'];
+// Gates whose PASS is never reused: their result depends on the outside world.
+const NEVER_REUSED = new Set(['audit']);
 
 function stacksDir(root) {
   return path.join(root, core.JDI_DIR, 'stacks');
@@ -69,7 +88,11 @@ function envFor(stacks) {
     Object.assign(env, s.env || {});
     for (const p of s.path_prepend || []) prepend.push(expandHome(p));
   }
-  if (prepend.length) env.PATH = [...new Set(prepend)].join(path.delimiter) + path.delimiter + (env.PATH || '');
+  if (prepend.length) {
+    // the existing key (`Path` on Windows): a second `PATH` key would hide it
+    const key = Object.keys(env).find((k) => k.toUpperCase() === 'PATH') || 'PATH';
+    env[key] = [...new Set(prepend)].join(path.delimiter) + path.delimiter + (env[key] || '');
+  }
   return env;
 }
 
@@ -255,16 +278,139 @@ function toolchainOf(ctx, stack) {
 }
 
 function execGate(ctx, name, cmd) {
-  const key = reuseKey(ctx, cmd, name);
+  const key = NEVER_REUSED.has(name) ? null : reuseKey(ctx, cmd, name);
   const hit = reused(ctx, key);
   if (hit) return hit;
   const log = path.join(ctx.gateDir, ctx.label, `${name}.log`);
+  const started = Date.now();
   const r = run(cmd, { root: ctx.root, env: ctx.env, shell: ctx.shell, timeoutMin: ctx.timeoutMin, log });
   const status = r.exit === 0 ? 'PASS' : 'FAIL';
   const res = { gate: name, status, exit: r.exit, duration_s: r.duration, log: path.relative(ctx.root, log).split(path.sep).join('/') };
   if (status === 'FAIL') res.excerpt = (r.error ? r.error + '\n' : '') + tail(r.out);
+  if (name === 'test' || name === 'coverage') {
+    const report = snapshotTestReport(ctx, started);
+    if (report) res.test_report = report;
+  }
   remember(ctx, key, res);
   return res;
+}
+
+// --------------------------------------------------------------------------
+// Test reports (JUnit) — the proof of `Verify (test):` DoD rows
+// --------------------------------------------------------------------------
+
+// The stack's JUnit files written by THIS run (mtime after it started),
+// copied under .jdi/cache/gates/_reports/ by content hash: a later partial run
+// (a doer's targeted test) cannot overwrite the proof, and a reused gate
+// result keeps pointing at the report of the run it reuses.
+function snapshotTestReport(ctx, startedMs) {
+  const globs = [ctx.stack?.test_report || []].flat();
+  if (!globs.length) return null;
+  const files = reportFiles(ctx.root, globs).filter((f) => fs.statSync(f).mtimeMs >= startedMs - 1000);
+  if (!files.length) return null;
+  const xml = files.map((f) => fs.readFileSync(f, 'utf8')).join('\n');
+  const rel = `${core.JDI_DIR}/cache/gates/_reports/${sha(xml).slice(0, 16)}.xml`;
+  core.writeFileEnsured(path.join(ctx.root, rel), xml, ctx.root);
+  return rel;
+}
+
+// Report files: plain paths, or globs over the files under their fixed prefix
+// (they are usually gitignored build output, so not in the git tree).
+function reportFiles(root, globs) {
+  const out = new Set();
+  for (const g of globs) {
+    if (!g.includes('*')) {
+      if (fs.existsSync(path.join(root, g))) out.add(path.join(root, g));
+      continue;
+    }
+    const base = g.slice(0, g.indexOf('*')).replace(/[^/]*$/, '');
+    for (const f of walk(path.join(root, base), 4)) {
+      const rel = path.relative(root, f).split(path.sep).join('/');
+      if (core.matchesAny(rel, [g])) out.add(f);
+    }
+  }
+  return [...out];
+}
+
+function walk(dir, depth) {
+  if (depth < 0) return [];
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries.flatMap((e) => (e.isDirectory() ? walk(path.join(dir, e.name), depth - 1) : [path.join(dir, e.name)]));
+}
+
+const XML_ENTITIES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'" };
+const unescapeXml = (v) => v.replaceAll(/&(?:amp|lt|gt|quot|apos);/g, (m) => XML_ENTITIES[m]);
+
+// name="..." / classname='...' of one tag (no regex over the whole file).
+function xmlAttr(tag, attr) {
+  for (const q of ['"', "'"]) {
+    const at = tag.indexOf(` ${attr}=${q}`);
+    if (at !== -1) {
+      const start = at + attr.length + 3;
+      return unescapeXml(tag.slice(start, tag.indexOf(q, start)));
+    }
+  }
+  return '';
+}
+
+// Every <testcase> of a JUnit document: { name, classname, status }.
+function parseJunit(xml) {
+  const cases = [];
+  for (let i = xml.indexOf('<testcase'); i !== -1; i = xml.indexOf('<testcase', i + 9)) {
+    const end = xml.indexOf('>', i);
+    if (end === -1) break;
+    const tag = xml.slice(i, end + 1);
+    let body = '';
+    if (!tag.endsWith('/>')) {
+      const close = xml.indexOf('</testcase>', end);
+      body = close === -1 ? '' : xml.slice(end + 1, close);
+    }
+    let status = 'passed';
+    if (body.includes('<failure') || body.includes('<error')) status = 'failed';
+    else if (body.includes('<skipped')) status = 'skipped';
+    cases.push({ name: xmlAttr(tag, 'name'), classname: xmlAttr(tag, 'classname'), status });
+  }
+  return cases;
+}
+
+// A test id matches a testcase by its name or by `classname<sep>name`.
+function matchesTest(c, id) {
+  if (c.name === id) return true;
+  return [c.classname + '::' + c.name, c.classname + '.' + c.name, c.classname + ' ' + c.name, c.classname + '/' + c.name].includes(id);
+}
+
+// The reports a `Verify (test):` row may be proven by: the stacks' gate
+// results AT HEAD (its `Stack:` only, when it names one).
+function headReports(ctx, it, stacks) {
+  const wanted = it.stack ? stacks.filter((s) => [s.id, s.name, s.agent].includes(it.stack)) : stacks;
+  const out = [];
+  for (const s of wanted.filter((x) => x.test_report)) {
+    const rep = core.readJson(path.join(ctx.gateDir, `${s.id}.json`), null);
+    const r = rep?.head === ctx.head ? (rep.results || []).find((x) => x.test_report) : null;
+    out.push({ stack: s.id, file: r ? path.join(ctx.root, r.test_report) : null });
+  }
+  return out;
+}
+
+function testRowResult(ctx, it, stacks, base) {
+  const id = it.verify.command.trim();
+  const reports = headReports(ctx, it, stacks);
+  if (!reports.length) return { ...base, status: 'FAIL', reason: 'Verify (test): no stack declares `test_report` (JUnit) — nothing can prove it' };
+  const missing = reports.filter((r) => !r.file || !fs.existsSync(r.file));
+  if (missing.length === reports.length) {
+    return { ...base, status: 'FAIL', reason: `Verify (test): no test report at HEAD — run \`gates run --stack ${missing.map((r) => r.stack).join(',')}\` first` };
+  }
+  const cases = reports.filter((r) => r.file && fs.existsSync(r.file)).flatMap((r) => parseJunit(fs.readFileSync(r.file, 'utf8')));
+  const hits = cases.filter((c) => matchesTest(c, id));
+  if (!hits.length) return { ...base, status: 'FAIL', reason: `Verify (test): no testcase named \`${id}\` in the report — the proof does not exist` };
+  const bad = hits.filter((c) => c.status !== 'passed');
+  if (bad.length) return { ...base, status: 'FAIL', reason: `Verify (test): \`${id}\` ${bad[0].status} (${bad.length}/${hits.length})` };
+  return { ...base, status: 'PASS', proof: `${hits.length} testcase(s) \`${id}\` passed in the test report at HEAD` };
 }
 
 // Tests run once: inside coverage when the stack says so (and only on a
@@ -282,9 +428,11 @@ function testAndCoverage(ctx, stack, want) {
 function stackResults(ctx, stack, only) {
   const g = stack.gates || {};
   const want = (k) => g[k] && (!only || only.has(k));
+  // the audit reads the lockfiles, not the build: it runs either way
+  const audit = want('audit') ? [execGate(ctx, 'audit', g.audit)] : [];
   const results = want('build') ? [execGate(ctx, 'build', g.build)] : [];
   if (results.some((x) => x.status === 'FAIL')) {
-    return [...results, ...['test', 'coverage', 'lint'].filter(want).map((k) => ({ gate: k, status: 'SKIPPED', reason: 'build failed (fail-fast)' }))];
+    return [...results, ...['test', 'coverage', 'lint'].filter(want).map((k) => ({ gate: k, status: 'SKIPPED', reason: 'build failed (fail-fast)' })), ...audit];
   }
   results.push(...testAndCoverage(ctx, stack, want));
   if (want('lint')) {
@@ -292,7 +440,53 @@ function stackResults(ctx, stack, only) {
     if (lint.status === 'FAIL' && !stack.lint_blocks) lint.status = 'WARN';
     results.push(lint);
   }
-  return results;
+  return [...results, ...audit];
+}
+
+// --------------------------------------------------------------------------
+// Preflight — the environment, before minutes of suite
+// --------------------------------------------------------------------------
+
+// PATH of an env object: on Windows the key is `Path`, and a copy of
+// process.env is no longer case-insensitive.
+function pathOf(env) {
+  const key = Object.keys(env).find((k) => k.toUpperCase() === 'PATH');
+  return key ? env[key] : '';
+}
+
+function onPath(name, envPath) {
+  const exts = process.platform === 'win32' ? ['', '.exe', '.cmd', '.bat'] : [''];
+  return String(envPath || '')
+    .split(path.delimiter)
+    .filter(Boolean)
+    .some((d) => exts.some((e) => fs.existsSync(path.join(d, name + e))));
+}
+
+function freeMb(root) {
+  if (typeof fs.statfsSync !== 'function') return null;
+  try {
+    const s = fs.statfsSync(root);
+    return Math.floor((Number(s.bavail) * Number(s.bsize)) / (1024 * 1024));
+  } catch {
+    return null;
+  }
+}
+
+// What `requires` declares and is missing: [] when the stack can run.
+function preflightProblems(ctx, stacks) {
+  const problems = [];
+  for (const s of stacks.filter((x) => x.requires)) {
+    const req = s.requires;
+    for (const v of req.env || []) if (!ctx.env[v]) problems.push(`${s.id}: env ${v} is not set`);
+    for (const c of req.commands || []) if (!onPath(c, pathOf(ctx.env))) problems.push(`${s.id}: command \`${c}\` not found`);
+    const free = req.disk_free_mb ? freeMb(ctx.root) : null;
+    if (free !== null && free < req.disk_free_mb) problems.push(`${s.id}: ${free} MB free on disk < ${req.disk_free_mb} MB`);
+    if (req.check) {
+      const r = run(req.check, { root: ctx.root, env: ctx.env, shell: shellFor(s), timeoutMin: 2, log: path.join(ctx.gateDir, s.id, 'preflight.log') });
+      if (r.exit !== 0) problems.push(`${s.id}: \`${req.check}\` exits ${r.exit}: ${tail(r.out, 3).replaceAll('\n', ' | ')}`);
+    }
+  }
+  return problems;
 }
 
 const DOD_STATIC = { manual: 'MANUAL_REQUIRED', deferred: 'DEFERRED' };
@@ -304,10 +498,11 @@ function verifyText(root, it) {
   return `${it.verify.command}\n${script}`;
 }
 
-function dodResult(ctx, it, evidence) {
+function dodResult(ctx, it, evidence, stacks) {
   const base = { id: it.id, source: it.source, type: it.type, criterion: it.criterion.slice(0, 160) };
   if (DOD_STATIC[it.type]) return { ...base, status: DOD_STATIC[it.type] };
   if (!it.verify) return { ...base, status: 'INCONCLUSIVE', reason: 'no Verify' };
+  if (it.testRef) return testRowResult(ctx, it, stacks, base);
   if (it.evidence || isEvidenceOnly(it.verify.command, evidence)) return { ...base, status: 'EVIDENCE', reason: 'not executed here (external effect) — judge by the recorded evidence' };
   const key = reuseKey(ctx, verifyText(ctx.root, it), 'dod', dod.rowHash(it, ctx.root));
   const hit = reused(ctx, key);
@@ -352,15 +547,27 @@ function runGates(phase, opts, root = process.cwd()) {
     ctx.toolchain = toolchainOf(ctx, stack);
   }
   const report = { phase: phase.slug, stack: label, head, started: new Date().toISOString(), base: opts.changedSince || null, results: [], dod: [] };
-  if (stack) report.results = skippedResults(root, stack, opts, only) || stackResults(ctx, stack, only);
+  const skipped = stack ? skippedResults(root, stack, opts, only) : null;
+  const problems = skipped ? [] : preflightProblems(ctx, stack ? [stack] : stacks);
+  if (problems.length) {
+    report.preflight = problems;
+    report.finished = new Date().toISOString();
+    report.status = 'ENV';
+    return writeReport(root, gateDir, label, report);
+  }
+  if (stack) report.results = skipped || stackResults(ctx, stack, only);
   if (wantDod) {
     const evidence = [...new Set(stacks.flatMap((s) => s.evidence_only || []))];
-    report.dod = dodItems(root, phase).map((it) => dodResult(ctx, it, evidence));
+    report.dod = dodItems(root, phase).map((it) => dodResult(ctx, it, evidence, stacks));
     attachEvidence(root, phase, report.dod);
   }
   const failed = report.results.some((x) => x.status === 'FAIL') || report.dod.some((x) => x.status === 'FAIL');
   report.finished = new Date().toISOString();
   report.status = failed ? 'FAIL' : 'PASS';
+  return writeReport(root, gateDir, label, report);
+}
+
+function writeReport(root, gateDir, label, report) {
   const out = path.join(gateDir, `${label}.json`);
   core.writeFileEnsured(out, JSON.stringify(report, null, 2) + '\n', root);
   report.file = path.relative(root, out).split(path.sep).join('/');
@@ -389,7 +596,8 @@ function dodLines(dodRows) {
 }
 
 function summary(report) {
-  return [`gates ${report.phase}/${report.stack}: ${report.status} — ${report.file}`, ...report.results.map(resultLine), ...dodLines(report.dod)].join('\n');
+  const env = (report.preflight || []).map((p) => `  ENV       ${p}`);
+  return [`gates ${report.phase}/${report.stack}: ${report.status} — ${report.file}`, ...env, ...report.results.map(resultLine), ...dodLines(report.dod)].join('\n');
 }
 
 function parseArgs(rest) {
@@ -403,13 +611,46 @@ function parseArgs(rest) {
     else if (a === '--json') opts.json = true;
     else if (a === '--fresh') opts.fresh = true;
     else if (a === '--failures') opts.failures = true;
+    else if (a === '--all') opts.all = true;
     else if (a.startsWith('--')) throw new core.JdiError(`unknown flag: ${a}`, 1);
     else id = a;
   }
   return { id, opts };
 }
 
+// Every report of the phase measured at HEAD (stacks and dod).
+function headReportsOf(root, phase) {
+  const d = path.join(root, core.JDI_DIR, 'cache', 'gates', phase.slug);
+  const head = core.git(['rev-parse', 'HEAD'], root).stdout;
+  let files = [];
+  try {
+    files = fs.readdirSync(d).filter((f) => f.endsWith('.json') && f !== 'bait.json');
+  } catch {
+    return [];
+  }
+  return files
+    .sort(core.compareStr)
+    .map((f) => ({ ...core.readJson(path.join(d, f), {}), file: path.relative(root, path.join(d, f)) }))
+    .filter((r) => r.head && r.head === head);
+}
+
+// One work list for a fix round from every report at HEAD (#1 of 0.20: the
+// gates go green before any reviewer is spawned).
+function allFailuresCmd(root, phase) {
+  const reports = headReportsOf(root, phase);
+  if (!reports.length) throw new core.JdiError(`no gate results at HEAD for ${phase.slug} — run \`gates run\` first`, 2);
+  let code = 0;
+  for (const r of reports) {
+    if (r.status === 'ENV') {
+      console.log(`- ENV ${r.stack}: ${(r.preflight || []).join('; ')}`);
+      code = Math.max(code, 5);
+    } else if (failuresCmd(r) !== 0) code = Math.max(code, 1);
+  }
+  return code;
+}
+
 function showCmd(root, phase, opts) {
+  if (opts.failures && opts.all) return allFailuresCmd(root, phase);
   const f = path.join(root, core.JDI_DIR, 'cache', 'gates', phase.slug, `${opts.stack || 'dod'}.json`);
   const report = core.readJson(f, null);
   if (!report) throw new core.JdiError(`no gate results at ${path.relative(root, f)}`, 2);
@@ -436,17 +677,52 @@ function failuresCmd(report) {
   return 1;
 }
 
+const exitOf = (report) => ({ PASS: 0, ENV: 5 })[report.status] ?? 1;
+
+// One child `gates run` per stack, all at once; resolves to their reports.
+function runChildren(phase, stackIds, rest) {
+  const cli = path.join(__dirname, '..', 'jdi.js');
+  const base = rest.filter((a, i) => a !== '--stack' && rest[i - 1] !== '--stack' && a !== '--json');
+  return Promise.all(
+    stackIds.map(
+      (s) =>
+        new Promise((resolve) => {
+          const child = spawn(process.execPath, [cli, 'gates', 'run', ...base, '--stack', s, '--json'], { cwd: process.cwd(), env: process.env });
+          let out = '';
+          let err = '';
+          child.stdout.on('data', (b) => (out += b));
+          child.stderr.on('data', (b) => (err += b));
+          child.on('close', (code) => {
+            try {
+              resolve(JSON.parse(out));
+            } catch {
+              resolve({ phase: phase.slug, stack: s, status: 'FAIL', results: [{ gate: 'run', status: 'FAIL', excerpt: tail(err || out) }], dod: [], file: '-', exit: code });
+            }
+          });
+        }),
+    ),
+  );
+}
+
+function printReports(reports, json) {
+  process.stdout.write((json ? JSON.stringify(reports.length === 1 ? reports[0] : reports, null, 2) : reports.map(summary).join('\n')) + '\n');
+  return Math.max(...reports.map(exitOf));
+}
+
 function main(argv) {
   const [sub, ...rest] = argv;
   const { id, opts } = parseArgs(rest);
-  if (!id) throw new core.JdiError('usage: jdi gates <run|show> <phase> [--stack <name>] [--only ...] [--changed-since <sha>]', 1);
+  if (!id) throw new core.JdiError('usage: jdi gates <run|show> <phase> [--stack <name>[,<name>]] [--only ...] [--changed-since <sha>]', 1);
   const root = process.cwd();
   const phase = core.resolvePhase(id, root);
   if (sub === 'show') return showCmd(root, phase, opts);
   if (sub !== 'run') throw new core.JdiError('usage: jdi gates <run|show> <phase> ...', 1);
-  const report = runGates(phase, opts, root);
-  process.stdout.write((opts.json ? JSON.stringify(report, null, 2) : summary(report)) + '\n');
-  return report.status === 'PASS' ? 0 : 1;
+  const stackIds = String(opts.stack || '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (stackIds.length <= 1) return printReports([runGates(phase, opts, root)], opts.json);
+  if (core.loadConfig(root).economy?.parallel_gates === true) {
+    return runChildren(phase, stackIds, rest).then((reports) => printReports(reports, opts.json));
+  }
+  return printReports(stackIds.map((s) => runGates(phase, { ...opts, stack: s }, root)), opts.json);
 }
 
-module.exports = { main, runGates, loadStacks, findStack, summary, run, envFor, shellFor, tail, dodItems, changedInScope, treeFingerprint, productHash, namedFiles, verifyText };
+module.exports = { main, runGates, loadStacks, findStack, summary, run, envFor, shellFor, tail, dodItems, changedInScope, treeFingerprint, productHash, namedFiles, verifyText, parseJunit, headReportsOf };

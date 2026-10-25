@@ -12,6 +12,12 @@ card to a pull request; `/jdi-status` shows where the project is.
   never `--no-verify`. Locked decisions (`.jdi/decisions/`) are not reopened.
 - One orchestration session per phase: after `/jdi-ship`, start a new session
   (`/clear`); the next one resumes from `.jdi/` alone.
+- Never wait in a loop: no `sleep`/`until`/`watch` polling and no `pgrep -f`
+  waits (they match their own command line and never end).
+<!-- jdi:only claude -->
+  A long command (suite, E2E, build) runs with `run_in_background`; act on its
+  completion notification.
+<!-- jdi:end -->
 <!-- jdi:only claude -->
 - Sub-agents already receive this file and the unscoped `.claude/rules/`; scoped
   rules load when a matching file is read. Never re-read them with Read or shell.

@@ -253,7 +253,9 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
     "incremental_verify": true,
     "wave_suite": true,
     "sizing": true,
-    "gate_cache": true
+    "gate_cache": true,
+    "parallel_review": true,
+    "parallel_gates": false
   },
   "sizing": {
     "lite_max_tasks": 3,
@@ -292,6 +294,9 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
 - `economy.wave_suite` — build + tests of the touched stacks after each non-final wave of `/jdi-do`, through the gates runner.
 - `economy.sizing` + `sizing.*` — a phase within every `lite_max_*` limit, on one stack and with no file in `sensitive_globs`, runs all its tasks in one doer spawn (`jdi-cli size`). `false` = always full.
 - `economy.gate_cache` — reuse a gate (or DoD row) that PASSED on exactly the same inputs instead of running it again; the report says `reused`. A FAIL is never reused; `gates run --fresh` / `/jdi-verify --full` run everything. Stack keys: `inputs` (narrow the product files a stack's gates depend on; default all of them) and `cache_key_cmd` (toolchain versions in the key). Gitignored files (`.env`, generated config) are not fingerprinted: when a gate depends on one, print it (or its hash) in `cache_key_cmd`.
+- `economy.parallel_review` — `/jdi-verify` spawns the reviewers (each writing its own segment file) and the DoD critic in one batch, instead of one after the other; only when every reviewer specialist knows `segment_file=` (0.20 managed block — `jdi update` delivers it). `false` = sequential.
+- `economy.parallel_gates` — `gates run --stack a,b` runs the stacks at the same time (off by default: it adds their CPU/RAM together; turn it on when the machine has room).
+- Stack keys (0.20): `gates.audit` (dependency advisories, never reused, runs even when the build fails), `requires` (`env`, `commands`, `disk_free_mb`, `check` — unmet = `ENV`, exit 5, nothing runs and the loop does not count a defect), `test_report` (JUnit path(s)/globs the test or coverage gate writes; proves the `Verify (test):` DoD rows without a second run).
 - `sizing.split_max_dod_rows` / `split_max_areas` / `split_max_criteria` — `jdi-cli size --intake` says `split` above any of them; `/jdi-discuss` offers the split, `/jdi-issue` splits.
 - `loop.record_commits` — `per_round` (default: `/jdi-verify` commits REVIEW.md each round) or `at_ship` (REVIEW.md, `reviews/round-N.md` and LOOP.md stay on disk and go into the ship commit; product commits stay atomic).
 - `loop.non_product_globs` — files that do not count as a product change for the ralph loop's convergence rule (`.jdi/**` never counts). E.g. `["docs/**", "*.md"]`.

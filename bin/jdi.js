@@ -379,6 +379,17 @@ function runNodeHelper(name, rawArgs) {
     code = Number.isInteger(err?.code) ? err.code : 1;
   }
   // exitCode, not exit(): exit() would cut a large stdout written to a pipe.
+  // A helper may answer with a promise (gates running stacks in parallel).
+  if (code && typeof code.then === 'function') {
+    code.then(
+      (c) => { process.exitCode = c ?? 0; },
+      (err) => {
+        console.error(`ERROR: ${err?.message || err}`);
+        process.exitCode = Number.isInteger(err?.code) ? err.code : 1;
+      },
+    );
+    return;
+  }
   process.exitCode = code ?? 0;
 }
 
@@ -685,8 +696,8 @@ async function cmdHelp() {
   console.log(`  ${c.cyan}phases archive${c.reset} ${c.gray}[--dry-run] [--keep N] [--rewrite-refs]${c.reset}  ${tr('help.helper.phases')}`);
   console.log(`  ${c.cyan}dod${c.reset} ${c.gray}<parse|lint|extract|bait> <phase>${c.reset}  ${tr('help.helper.dod')}`);
   console.log(`  ${c.cyan}brief${c.reset} ${c.gray}<phase> --role <r> [--task T-N] [--stack s]${c.reset}  ${tr('help.helper.brief')}`);
-  console.log(`  ${c.cyan}gates${c.reset} ${c.gray}<run|show> <phase> [--stack s] [--only dod]${c.reset}  ${tr('help.helper.gates')}`);
-  console.log(`  ${c.cyan}review${c.reset} ${c.gray}<verdict|blockers|plan|merge|fresh> <phase>${c.reset}  ${tr('help.helper.review')}`);
+  console.log(`  ${c.cyan}gates${c.reset} ${c.gray}<run|show> <phase> [--stack s[,s2]] [--only dod] [--failures --all]${c.reset}  ${tr('help.helper.gates')}`);
+  console.log(`  ${c.cyan}review${c.reset} ${c.gray}<verdict|blockers|plan|merge|fresh|from-gates> <phase>${c.reset}  ${tr('help.helper.review')}`);
   console.log(`  ${c.cyan}loop${c.reset} ${c.gray}<init|record|reset|status> <phase>${c.reset}  ${tr('help.helper.loop')}`);
   console.log(`  ${c.cyan}budgets${c.reset} ${c.gray}<phase>${c.reset}  ${tr('help.helper.budgets')}`);
   console.log(`  ${c.cyan}known-errors${c.reset} ${c.gray}<query|migrate|render|list>${c.reset}  ${tr('help.helper.known_errors')}`);

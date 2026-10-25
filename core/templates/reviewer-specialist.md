@@ -82,6 +82,7 @@ NOT your job:
 - Then the diff of your scope — `git diff --stat` first, then only the hunks you need — and the code the gates point at.
 - Decisions not quoted in the brief: `npx -y {{JDI_CLI}} decisions --ids <D-...>`.
 - No `brief=` in the prompt (older orchestrator): run `npx -y {{JDI_CLI}} brief {PHASE_SLUG} --role reviewer --stack <your agent name>` and read the path it prints.
+- `segment_file=<path>` in the prompt (reviewers running in parallel): write your whole segment — starting with `## Reviewer: <your agent name>` — to that file and do NOT touch REVIEW.md; `review merge` assembles REVIEW.md from the segments. Without it, write REVIEW.md as below.
 - Never read: other phases' artifacts, `.jdi/DECISIONS.md` in full, previous REVIEW copies, the whole known-errors catalog, and the project instruction files (CLAUDE.md, AGENTS.md, `.claude/rules/`, `.github/instructions/`) — the runtime already put the ones that apply in your context. Gate 5 runs each rule's enforcement greps; it does not need the rule file re-read.
 </inputs>
 <!-- jdi:/managed -->
@@ -90,6 +91,8 @@ NOT your job:
 <gates_source>
 - Gates 1-4 and the automatic DoD rows are measured by `jdi-cli gates run` before you are spawned: `.jdi/cache/gates/{PHASE_SLUG}/<stack>.json` and `.jdi/cache/gates/{PHASE_SLUG}/dod.json`. When their `head` equals `git rev-parse HEAD`, they ARE gates 1-4 and the automatic DoD results: copy status, numbers and log paths into REVIEW.md and do not run build, tests, coverage or lint yourself. Your work is judgment — gates 5, 6 and 7, the `EVIDENCE` rows, and whether a failure is a defect. Run a command only when its result is missing or stale (other `head`), or to look closer at one failure (its log first), and do it first, while your context is small.
 - `EVIDENCE` rows (external effect, e.g. real login): never execute them — judge them by the recorded evidence (CI run, local validation) and say which.
+- `Verify (test):` rows are proven by the stack's test report at HEAD (the named testcase exists and passed): judge whether that test really exercises the criterion, never re-run the suite for them. The `audit` gate (dependency advisories) is a blocker when it FAILs; a report with status `ENV` means the environment was not ready — say so, it is not a code defect.
+- Never wait in a loop (`sleep`/`until`/`watch`, `pgrep -f`); a long command runs in the background and you act on its completion notification.
 - A result marked `reused` passed on an earlier commit with exactly the same inputs: copy it as "reused (key, commit)" — never as measured now.
 - `dod.json` missing or stale: re-measure with `npx -y {{JDI_CLI}} gates run {PHASE_SLUG} --only dod` — it skips the `Verify (evidence):` rows and the stack's `evidence_only` commands. Never `eval` the `Verify:` lines by hand, and never pick them out of CONTEXT.md by position: a real-login row run by mistake can lock the test account (#62).
 - Multi-stack: only the reviewer with `dod_owner=true` writes the `## DoD Checklist` (from `dod.json`, one row per item); the others write `DoD: see the segment of <owner>`. The DoD runs once per verification.

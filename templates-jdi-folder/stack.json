@@ -12,7 +12,14 @@
     "build": "cargo build --manifest-path backend/Cargo.toml",
     "test": "cargo test --manifest-path backend/Cargo.toml",
     "coverage": "cargo llvm-cov --manifest-path backend/Cargo.toml --fail-under-lines 80",
-    "lint": "cargo clippy --manifest-path backend/Cargo.toml -- -D warnings"
+    "lint": "cargo clippy --manifest-path backend/Cargo.toml -- -D warnings",
+    "audit": "cargo audit --file backend/Cargo.lock"
+  },
+  "test_report": ["backend/target/nextest/ci/junit.xml"],
+  "requires": {
+    "env": [],
+    "commands": ["cargo"],
+    "disk_free_mb": 2048
   },
   "coverage_runs_tests": true,
   "lint_blocks": false,

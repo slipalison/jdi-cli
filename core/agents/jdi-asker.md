@@ -248,6 +248,12 @@ Path: `{phase_dir}/CONTEXT.md` (orchestrator pre-resolved — never hand-build `
 {extra context that helps planner, optional}
 ```
 
+A criterion about behaviour is proven by a test, not by a grep over the
+source: write `**Verify (test):** \`<test name>\`` — the test the plan will add
+(name it after the behaviour) — when the stack declares a `test_report`. It
+costs nothing at verify (read from the report of the test run) and a grep over
+code is the proof the critic keeps finding holes in.
+
 Every `Verify (evidence):` row gets an `**Iteration:**` (ask the user, or in
 auto mode derive it from the project's instructions: the slice of the suite
 that covers what this phase touches) and, when the run depends on less than

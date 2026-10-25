@@ -45,6 +45,8 @@ const CONFIG_DEFAULTS = {
     wave_suite: true,
     sizing: true,
     gate_cache: true,
+    parallel_review: true,
+    parallel_gates: false,
   },
   sizing: {
     lite_max_tasks: 3,

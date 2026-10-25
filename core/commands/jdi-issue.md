@@ -167,7 +167,7 @@ critic=on   (Step 4.6 preflight runs: hollow proofs are fixed before any code)
   FULL STOP — killed work is never shipped; autonomy ends where proof of
   quality ends. Never edit LOOP.md by hand.
 - **Critic on** (`critic=on`): when following `/jdi-verify` (inside the loop),
-  Step 4.5 runs whenever the runtime can spawn sub-agents — regardless of
+  the critic (Steps 4c-4d) runs whenever the runtime can spawn sub-agents — regardless of
   `orchestration.mode` and of the phase size. No human is watching; the critic
   is the skeptic in the room, and it can only tighten the verdict. Its lean
   cadence still applies: each round it examines only rows never examined,

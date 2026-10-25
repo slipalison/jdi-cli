@@ -36,7 +36,7 @@ function evidenceRows(root, phase) {
   const evidenceOnly = [...new Set(gates.loadStacks(root).flatMap((s) => s.evidence_only || []))];
   return gates
     .dodItems(root, phase)
-    .filter((it) => it.type === 'auto' && it.verify && (it.evidence || evidenceOnly.some((p) => it.verify.command.includes(p))));
+    .filter((it) => it.type === 'auto' && it.verify && !it.testRef && (it.evidence || evidenceOnly.some((p) => it.verify.command.includes(p))));
 }
 
 const rowKey = (it) => (it.source === 'PROJECT' ? `project-${it.id}` : String(it.id));

@@ -27,6 +27,10 @@
 //   DOD-L4 WARN  grep for a Gherkin tag/keyword over a directory/glob — any scenario satisfies it
 //   DOD-L5 WARN  the criterion names a document the `Verify:` never reads
 //   DOD-L6 WARN  `grep -A/-B/-C N` window — the match may be another block's line
+//   DOD-L7 WARN  positive grep over source code as the proof of behaviour —
+//                the text can be there while the behaviour is not (and every
+//                way to word it is a new hole for the critic); prove it with a
+//                test: `Verify (test):` (0.20)
 // (L4-L6 came from the rules a consumer project had to add by hand, #62.)
 
 const fs = require('node:fs');
@@ -34,7 +38,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const core = require('./jdi-core');
 
-const VERIFY_RE = /^(\s*)\*\*Verify( \(evidence\))?:\*\*\s?(.*)$/;
+const VERIFY_RE = /^(\s*)\*\*Verify(?: \((evidence|test)\))?:\*\*\s?(.*)$/;
 const ITEM_RE = /^(\s{0,3})- \[[ xX]\] (.*)$/;
 const SCRIPT_REF_RE = /(?:^|\s)(?:bash|sh)\s+(\S*\.jdi\/phases\/[^\s/]+\/verify\/[^\s`]+\.sh)/;
 
@@ -82,6 +86,7 @@ function newItem(body, lineNo, type, count) {
     stack: null,
     bait: null,
     hasEvidenceField: false,
+    testRef: false,
     inputs: null,
     iteration: null,
   };
@@ -91,7 +96,9 @@ function setVerify(cur, v, lineNo) {
   const raw = v[3] || '';
   const sv = splitVerify(raw);
   cur.verify = { raw, ...sv, indent: v[1] };
-  cur.evidence = Boolean(v[2]);
+  cur.evidence = v[2] === 'evidence';
+  // `Verify (test): <test id>` — proven by the stack's test report (0.20)
+  cur.testRef = v[2] === 'test';
   cur.verifyLine = lineNo;
   const ref = SCRIPT_REF_RE.exec(sv.command);
   cur.script = ref ? ref[1].replace(/^\.\//, '') : null;
@@ -167,7 +174,7 @@ function parse(text, file = '<CONTEXT.md>') {
 function rowHash(item, root = process.cwd()) {
   const crypto = require('node:crypto');
   const h = crypto.createHash('sha256');
-  h.update(`${item.criterion}\n${item.verify ? item.verify.raw : ''}\n${item.evidence ? 'evidence' : ''}\n${item.bait || ''}\n`);
+  h.update(`${item.criterion}\n${item.verify ? item.verify.raw : ''}\n${item.evidence ? 'evidence' : ''}${item.testRef ? 'test' : ''}\n${item.bait || ''}\n`);
   if (item.inputs || item.iteration) h.update(`${(item.inputs || []).join(',')}\n${item.iteration || ''}\n`);
   if (item.script) h.update(core.readIf(path.join(root, item.script)) || '');
   return h.digest('hex').slice(0, 16);
@@ -246,8 +253,24 @@ const GHERKIN_RE = /@[A-Za-z][\w-]*|\b(?:Feature|Scenario|Funcionalidade|Cen[aá
 const isWindowFlag = (t) => /^-[a-zA-Z]*[ABC]\d*$/.test(t) || /^--(?:after-|before-)?context\b/.test(t);
 const overDir = (p) => /\s-[a-zA-Z]*r/.test(p) || p.includes('*') || /\/\s/.test(p) || p.endsWith('/');
 
+// Source files by extension (not docs, data or config).
+const SOURCE_EXT = new Set(['rs', 'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'py', 'go', 'java', 'kt', 'kts', 'cs', 'rb', 'php', 'swift', 'scala', 'c', 'h', 'cc', 'cpp', 'hpp', 'm', 'ex', 'exs', 'dart', 'vue', 'svelte']);
+
+function grepsSource(p) {
+  return p
+    .split(/\s+/)
+    .map((t) => t.replaceAll(/^['"]|['"]$/g, ''))
+    .some((t) => {
+      const dot = t.lastIndexOf('.');
+      return dot > 0 && !t.startsWith('-') && SOURCE_EXT.has(t.slice(dot + 1).toLowerCase());
+    });
+}
+
 function lintGreps(parts, found) {
   const greps = parts.filter((p) => /^!?\s*grep\b/.test(p.trim()));
+  if (greps.some((p) => !p.trim().startsWith('!') && grepsSource(p))) {
+    found.push({ level: 'WARN', rule: 'DOD-L7', msg: 'prova por grep no codigo-fonte: o texto pode estar la sem o comportamento — prove com um teste (`Verify (test):` com o nome do teste)' });
+  }
   if (greps.some((p) => overDir(p) && GHERKIN_RE.test(p))) {
     found.push({ level: 'WARN', rule: 'DOD-L4', msg: 'grep de tag/palavra-chave de Gherkin sobre diretorio/glob: passa se ela existir em qualquer cenario — ancore no .feature e no cenario (ou rode o cenario)' });
   }
@@ -285,6 +308,10 @@ function lintItem(it, ctx, add) {
   if (it.type === 'auto' && !it.verify) add(it.line, 'ERROR', 'DOD-S1', `item ${it.id} sem \`Verify:\``);
   if (it.type === 'manual' && !it.hasEvidenceField) add(it.line, 'WARN', 'DOD-S1', `item manual ${it.id} sem \`Evidence:\``);
   if (!it.verify || it.type !== 'auto') return;
+  if (it.testRef) {
+    if (!it.verify.command.trim()) add(it.verifyLine, 'ERROR', 'DOD-S1', `item ${it.id}: \`Verify (test):\` sem o nome do teste`);
+    return; // a test name, not a command: nothing to run or lint
+  }
   const cmd = it.verify.command;
   if (!it.script && cmd.length > ctx.limit) {
     add(it.verifyLine, ctx.strict ? 'ERROR' : 'WARN', 'DOD-S2', `Verify do item ${it.id} tem ${cmd.length} caracteres na linha (limite ${ctx.limit}) — \`jdi-cli dod extract\` move para verify/dod-${it.id}.sh`);
@@ -401,7 +428,7 @@ function extract(phase, { root = process.cwd(), dryRun = false, all = false, for
   const limit = config.budgets?.verify_inline_chars ?? 300;
   const lines = text.split('\n');
   const report = [];
-  for (const it of doc.items.filter((x) => x.type === 'auto' && x.verify && !x.script && (all || x.verify.command.length > limit))) {
+  for (const it of doc.items.filter((x) => x.type === 'auto' && x.verify && !x.testRef && !x.script && (all || x.verify.command.length > limit))) {
     const r = extractItem(it, phase, root);
     if (r.newLine && dryRun) r.entry.action = 'would-extract';
     else if (r.newLine) {

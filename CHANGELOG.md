@@ -5,6 +5,68 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.0] - 2026-10-25
+
+Time, not tokens. Measured on a real project (9 phases, 73 h of critical
+path): the model was 22% of a phase; heavy commands were 61% — the suites,
+the E2E and the local CI, run one after the other — and agents spent 23 h
+blocked in polling loops. A phase needed a median of 2 verify rounds, each
+one rerunning everything and spawning the reviewers and the critic one at a
+time, even when the gates were already red.
+
+### Added
+- **Green gates before judgment.** `/jdi-do` runs the suite after EVERY wave,
+  the final one too. `/jdi-verify` measures the gates first and, when one is
+  red, gives the failures to ONE fix pass (a `fix_wave` doer per stack) before
+  any reviewer; still red → `review from-gates` writes a BLOCKED REVIEW.md
+  with one `[defect]` per failure and no reviewer is spawned. A failing test,
+  lint or coverage no longer costs reviewers, the critic and a loop round.
+- **Reviewers and the critic in one batch** (`economy.parallel_review`, on).
+  `review plan` answers `parallel: true` with one segment file per reviewer
+  when every reviewer specialist knows `segment_file=` (managed `inputs`
+  block — `jdi update` delivers it); `review merge` assembles REVIEW.md in
+  registry order. `dod bait` and `critic plan` run before the spawn, so the
+  critic goes in the same batch. A round costs the slowest agent, not the sum.
+- **`Verify (test): <test name>`** DoD rows, proven by the stack's JUnit report
+  (`test_report`) of the test/coverage gate at the same HEAD — the suite is not
+  run again per row. Every matching testcase must exist and pass; none = FAIL;
+  no report at HEAD = FAIL. The report is snapshotted per run, so a later
+  partial run cannot change the proof. The asker and the planner prefer it for
+  behaviour (the planner adds the named test to a task).
+- **`audit` gate** (dependency advisories: `cargo audit`, `npm audit`,
+  `pip-audit`...): runs even when the build fails and is never reused — the
+  advisory database changes while the code does not.
+- **`requires`** in a stack (`env`, `commands`, `disk_free_mb`, `check`):
+  checked before anything runs. Unmet = status `ENV`, exit 5 — reported in a
+  second instead of after a 20-40 minute suite, and never counted by the loop
+  as a code defect (`/jdi-do` and `/jdi-verify` stop and say so).
+- **`gates run --stack a,b`** — several stacks in one call; in parallel with
+  `economy.parallel_gates` (off by default: their CPU/RAM add up).
+  **`gates show --failures --all`** — one work list from every report at HEAD.
+- **DOD-L7** (WARN): a positive grep over source code as the proof of
+  behaviour — prove it with a test (`Verify (test):`). The proofs critics kept
+  finding holes in were these.
+- `config.json`: `economy.parallel_review`, `economy.parallel_gates`; stack
+  template: `gates.audit`, `test_report`, `requires`.
+
+### Changed
+- **Never wait in a loop.** The managed instruction block, the doer and the
+  reviewer templates and jdi-solo: no `sleep`/`until`/`watch` polling, no
+  `pgrep -f` waits (they match their own command line and never end); a long
+  command runs in the background and the agent acts on its completion
+  notification (Claude Code: `run_in_background`).
+- **`dod bait` uses one worktree per run**, reset between rows
+  (`reset --hard` + `clean`, ignored build output kept): a fresh worktree per
+  row started every row from a cold build.
+- **Waves run in parallel from 2 independent tasks** (was 3); the planner puts
+  tasks with no file in common in the same wave.
+- `/jdi-verify` runs the stack gates before the DoD gate (the DoD reads their
+  test reports).
+
+### Fixed
+- On Windows, `path_prepend` created a second `PATH` key next to `Path` and
+  dropped the system path from the gate commands.
+
 ## [0.19.0] - 2026-10-25
 
 Fewer, shorter verify rounds — from a real 6-hour phase (two cards, three

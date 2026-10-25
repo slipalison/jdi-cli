@@ -1,4 +1,4 @@
-<!-- JDI:BEGIN managed by jdi-cli 0.19.0 - edits inside this block are replaced on update; write project rules outside it -->
+<!-- JDI:BEGIN managed by jdi-cli 0.20.0 - edits inside this block are replaced on update; write project rules outside it -->
 # JDI
 
 This project uses JDI (Just Do It): phase work runs through the `/jdi-*` commands.
@@ -12,6 +12,8 @@ card to a pull request; `/jdi-status` shows where the project is.
   never `--no-verify`. Locked decisions (`.jdi/decisions/`) are not reopened.
 - One orchestration session per phase: after `/jdi-ship`, start a new session
   (`/clear`); the next one resumes from `.jdi/` alone.
+- Never wait in a loop: no `sleep`/`until`/`watch` polling and no `pgrep -f`
+  waits (they match their own command line and never end).
 
 Commands and agents are skills under `.agents/skills/` (discovered by trigger).
 <!-- JDI:END -->

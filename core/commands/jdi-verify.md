@@ -96,18 +96,25 @@ everyone. Single-stack: always one full run.
 **4a. Gates outside the agents' context** (when `.jdi/stacks/` exists —
 `jdi-cli template stack` shows the format; without it, reviewers run their
 own gates as before). Build, tests (once — inside coverage when the stack says
-so), coverage and lint per stack, and the automatic DoD rows ONCE for the whole
-phase. Long suites run here, in this shell, not inside a large reviewer context
-waiting on them:
+so), coverage, lint and the dependency audit per stack, then the automatic DoD
+rows ONCE for the whole phase. The stacks first: a `Verify (test):` row is
+proven by the test report they leave. Long suites run here, in this shell, not
+inside a large reviewer context waiting on them; with
+`economy.parallel_gates: true` the stacks run at the same time.
 
 ```bash
 if [ -d .jdi/stacks ]; then
+  STACKS=$(echo $RUN | tr ' ' ',')                             # carried reviewers: no gates
+  [ -n "$STACKS" ] && npx -y {{JDI_CLI}} gates run "$PHASE_SLUG" --stack "$STACKS" ${FULL:+--fresh}
   npx -y {{JDI_CLI}} gates run "$PHASE_SLUG" --only dod ${FULL:+--fresh}   # DoD once (E2E/real-login rows: EVIDENCE, never executed)
-  for REVIEWER in $RUN; do                                       # carried reviewers: no gates
-    npx -y {{JDI_CLI}} gates run "$PHASE_SLUG" --stack "$REVIEWER" ${FULL:+--fresh}
-  done
+  npx -y {{JDI_CLI}} gates show "$PHASE_SLUG" --failures --all > .jdi/cache/gate-failures.txt; GATES_RC=$?
 fi
 ```
+
+`GATES_RC` = 5 (status `ENV`: a stack's `requires` — env var, command, free
+disk, its `check` — is not met): STOP and show `.jdi/cache/gate-failures.txt`.
+The environment is not a code defect: no doer, no reviewer, no loop round
+until it is fixed.
 
 `EVIDENCE` rows are never run by the gates: the `dod` report carries the
 freshness of their recorded runs (`evidence: {iteration, ship}`,
@@ -121,8 +128,22 @@ loop: real logins lock accounts — then
 A gate that PASSed on exactly the same inputs (product files, the files a DoD
 row names, the command, the stack config) is not run again: its line says
 `reused <key>: passed on <commit> at <time>` (`economy.gate_cache`; a FAIL is
-never reused; `--full` runs everything). A failing gate does not stop the step: the results go into the JSON the
-reviewers read; the verdict comes from the reviewers.
+never reused, nor the `audit`; `--full` runs everything).
+
+**4a'. Green gates before judgment.** `GATES_RC` = 1 (a gate or an automatic
+DoD row failed): a failing test, lint or coverage needs no reviewer to say so —
+spawning reviewers and the critic now buys a BLOCKED verdict and a whole loop
+round. ONE fix pass first: a FRESH doer per stack with failures (the doer
+paired with that reviewer; DoD failures go to the first stack's doer), each with
+`mode=fix_wave failures=.jdi/cache/gate-failures.txt`, then 4a again (what
+passed is reused). Still red: no reviewer —
+
+```bash
+npx -y {{JDI_CLI}} review from-gates "$PHASE_SLUG"   # REVIEW.md BLOCKED, one [defect] per failure, stamped
+```
+
+— and go to Step 5 (the loop's next round fixes them; `/jdi-verify` alone
+reports BLOCKED).
 
 **4b. One brief per reviewer** (scope + changed files, gate results, tasks,
 DoD, decisions for Gate 6, known errors):
@@ -136,66 +157,21 @@ BRIEF_R=$(npx -y {{JDI_CLI}} brief "$PHASE_SLUG" --role reviewer --stack "$REVIE
 <!-- jdi:end -->
 ```
 
-**Single-stack:**
-```
-Agent(
-  subagent_type="${REVIEWERS}",
-  description="Verify phase $PHASE_SLUG",
-  prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, mode=verify, dod_owner=true, brief=$BRIEF_R"
-)
-```
+**4c. DoD proof checks — before the spawn.** Gate 8 maps `exit 0 → PASS` for
+automatic DoD rows. A command can exit 0 without proving its criterion (a grep
+on text that already exists, a test that asserts nothing). These checks can
+only make the verdict **stricter**.
 
-**Multi-stack:** spawn each reviewer of `$RUN` in sequence (NOT parallel — build/test commands may conflict on ports, locks, output dirs). The FIRST reviewer owns the DoD Checklist (`dod_owner=true`); the others reference it — the DoD is evaluated once, not once per reviewer:
-
-```
-for REVIEWER in $RUN:
-  Agent(
-    subagent_type="$REVIEWER",
-    description="Verify phase $PHASE_SLUG ($REVIEWER)",
-    prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, mode=verify, reviewer_segment=$REVIEWER, dod_owner=<true for the first>, brief=$BRIEF_R"
-  )
-  # Each reviewer appends to $PHASE_DIR/REVIEW.md under section
-  # "## Reviewer: $REVIEWER" with its own gate results and verdict
-```
-
-Then, always (single- and multi-stack): put the carried segments back (if any) and stamp the verified
-commit in REVIEW.md (`<!-- jdi:verified head=… -->` — `/jdi-ship` refuses a
-review older than the code):
-
-```bash
-npx -y {{JDI_CLI}} review merge "$PHASE_SLUG"
-```
-
-Each reviewer scopes its gates to its `file_glob` (from frontmatter `scope.file_glob`). Coverage threshold enforced only on files matching the glob.
-
-Reviewers are read-only (they write only their REVIEW.md segment). Wait for
-completion before next. Each returns a short verdict line (return contract):
-do not open REVIEW.md to repeat it — Step 5 reads the verdicts mechanically.
-The dispatch prompt is the line above, nothing more: no reading lists, no
-plan text.
-
-<!-- jdi:only claude -->
-If `.jdi/config.json` sets `models.reviewer` to anything other than `inherit`,
-pass it as the Agent `model` parameter. Never re-dispatch work to a reviewer
-that already returned (SendMessage): spawn a fresh one.
-<!-- jdi:end -->
-
-### Step 4.5: DoD proof checks — bait, then the critic (lean cadence)
-
-Gate 8 maps `exit 0 → PASS` for automatic DoD rows. A command can exit 0
-without proving its criterion (a grep on text that already exists, a test that
-asserts nothing). These checks can only make the verdict **stricter**.
-
-**Bait (mechanical, any runtime).** Rows that carry a `Bait:` (a mutation that
-breaks the criterion) are checked in a throwaway worktree at HEAD: the Verify
-must pass, then fail once the Bait is applied. A CAUGHT row is not re-run until
-its proof changes.
+*Bait (mechanical, any runtime).* Rows that carry a `Bait:` (a mutation that
+breaks the criterion) are checked in a throwaway worktree at HEAD (one per
+run, its build output kept between rows): the Verify must pass, then fail once
+the Bait is applied. A CAUGHT row is not re-run until its proof changes.
 
 ```bash
 npx -y {{JDI_CLI}} dod bait "$PHASE_SLUG"      # no-op when no row has a Bait
 ```
 
-**Critic (judgment).** Runs when this runtime can spawn sub-agents AND the
+*Critic (judgment).* Runs when this runtime can spawn sub-agents AND the
 critic is on: `orchestration.mode == "enhanced"`, or the invoking orchestrator
 passed `critic=on` (`/jdi-issue`). `economy.critic: "off"` turns it off; a
 LITE phase (`jdi-cli size`) skips it unless `critic=on`. Lean cadence: only
@@ -209,25 +185,53 @@ once more after the block — it may have been fixed — and can no longer block
 CRIT=$(npx -y {{JDI_CLI}} critic plan "$PHASE_SLUG" --runtime claude)   # JSON: rows, brief, skip
 ```
 
-`rows` non-empty → spawn ONE critic, sequential, never in the background:
+**4d. Spawn — the reviewers and the critic together.** The gates already ran
+(4a), so the agents only read and judge: nothing they do can collide. Spawn
+them in ONE message, all at once, and wait for every one:
+
+- each reviewer of `$RUN`: `prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, mode=verify, reviewer_segment=$REVIEWER, dod_owner=<true for the first>, brief=$BRIEF_R"`,
+  plus `segment_file=<RPLAN.segments[$REVIEWER]>` when `RPLAN.parallel` is true;
+- the critic, when `CRIT.rows` is non-empty: `subagent_type="jdi-dod-critic"`,
+  `prompt="phase_slug=$PHASE_SLUG, brief=<brief from CRIT>"`.
 
 ```
-Agent(
-  subagent_type="jdi-dod-critic",
-  description="DoD critic $PHASE_SLUG",
-  prompt="phase_slug=$PHASE_SLUG, brief=<brief from CRIT>"
-)
+Agent(subagent_type="$REVIEWER_1", description="Verify phase $PHASE_SLUG ($REVIEWER_1)", prompt="...")
+Agent(subagent_type="$REVIEWER_2", description="Verify phase $PHASE_SLUG ($REVIEWER_2)", prompt="...")   # multi-stack
+Agent(subagent_type="jdi-dod-critic", description="DoD critic $PHASE_SLUG", prompt="...")              # critic on
 ```
+
+The FIRST reviewer owns the DoD Checklist (`dod_owner=true`); the others
+reference it — the DoD is evaluated once, not once per reviewer. Several
+reviewers spawn together ONLY when `RPLAN.parallel` is true (every one writes
+its own segment file); otherwise the reviewers go one at a time, each one
+waiting for the previous (an older specialist appends to REVIEW.md itself) —
+the critic still goes with the first of them. A runtime that cannot spawn
+in parallel runs them in sequence; the order does not change the result.
 
 <!-- jdi:only claude -->
-If `.jdi/config.json` sets `models.critic` to anything other than `inherit`,
-pass it as the Agent `model` parameter.
+If `.jdi/config.json` sets `models.reviewer` / `models.critic` to anything
+other than `inherit`, pass it as the Agent `model` parameter. Never
+re-dispatch work to a reviewer that already returned (SendMessage): spawn a
+fresh one.
 <!-- jdi:end -->
 
-Then fold the results in — always, even when the critic did not run (a Bait
-that survived is an objective hollow proof):
+Each reviewer scopes its gates to its `file_glob` (from frontmatter
+`scope.file_glob`); coverage threshold enforced only on files matching the
+glob. Reviewers are read-only (they write only their segment). Each returns a
+short verdict line (return contract): do not open REVIEW.md to repeat it —
+Step 5 reads the verdicts mechanically. The dispatch prompt is the line above,
+nothing more: no reading lists, no plan text.
+
+### Step 4.5: Fold the results in
+
+Assemble REVIEW.md (segments in registry order, carried segments back) and
+stamp the verified commit (`<!-- jdi:verified head=… -->` — `/jdi-ship`
+refuses a review older than the code); then the critic's findings — always,
+even when the critic did not run (a Bait that survived is an objective hollow
+proof):
 
 ```bash
+npx -y {{JDI_CLI}} review merge "$PHASE_SLUG"
 npx -y {{JDI_CLI}} critic apply "$PHASE_SLUG"
 ```
 

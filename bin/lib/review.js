@@ -21,6 +21,16 @@
 //                                              commit (`<!-- jdi:verified head=… -->`)
 // `jdi-cli review fresh <phase>`               exit 3 when product files changed after
 //                                              the verify commit (ship refuses)
+// `jdi-cli review from-gates <phase>`          REVIEW.md BLOCKED from the gate failures
+//                                              at HEAD, with no reviewer spawned (0.20)
+//
+// Parallel review (0.20): when several reviewers run and every one of them
+// knows `segment_file=` (managed `inputs` block, delivered by `specialists
+// upgrade`), `review plan` answers `parallel: true` with one segment file per
+// reviewer; they are spawned at once and `review merge` writes REVIEW.md from
+// the segments, in registry order. The gates run before the reviewers since
+// 0.18, so nothing they run can collide. An older specialist would append to
+// REVIEW.md itself: then the plan stays sequential.
 //
 // The orchestrator reads verdicts and work lists through here instead of
 // opening REVIEW.md: in a long phase REVIEW.md grows to tens of KB and every
@@ -135,6 +145,16 @@ function scopedText(text, stack, dodOwner) {
   return [...own, ...(dodOwner ? ['', ...outside] : [])].join('\n');
 }
 
+function segDir(root, phase) {
+  return path.join(root, core.JDI_DIR, 'cache', 'review', phase.slug, 'segments');
+}
+
+// The specialist knows `segment_file=` (its managed inputs block is 0.20+).
+function writesSegments(root, name) {
+  const text = core.readIf(path.join(root, core.JDI_DIR, 'agents', `${name}.md`));
+  return Boolean(text?.includes('segment_file='));
+}
+
 function stateFile(root, phase) {
   return path.join(root, core.JDI_DIR, 'cache', 'review', `${phase.slug}.json`);
 }
@@ -226,9 +246,33 @@ function planReview(phase, reviewers, { full = false } = {}, root = process.cwd(
   else fs.rmSync(carryFileOf(root, phase), { force: true });
   snapshotRound(root, phase, reviewFile);
   fs.rmSync(reviewFile, { force: true });
+  fs.rmSync(segDir(root, phase), { recursive: true, force: true });
+  const parallelOn = core.loadConfig(root).economy?.parallel_review !== false;
+  out.parallel = parallelOn && out.run.length > 1 && out.run.every((r) => writesSegments(root, r));
+  if (out.parallel) {
+    fs.mkdirSync(segDir(root, phase), { recursive: true });
+    out.segments = Object.fromEntries(out.run.map((r) => [r, path.relative(root, path.join(segDir(root, phase), `${r}.md`)).split(path.sep).join('/')]));
+  }
   for (const r of out.run) ctx.state.reviewers[r] = { head };
+  ctx.state.order = reviewers;
   core.writeFileEnsured(stateFile(root, phase), JSON.stringify(ctx.state, null, 2) + '\n', root);
   return out;
+}
+
+// Segments written by parallel reviewers, in registry order.
+function collectSegments(root, phase, order) {
+  const d = segDir(root, phase);
+  let files = [];
+  try {
+    files = fs.readdirSync(d).filter((f) => f.endsWith('.md'));
+  } catch {
+    return [];
+  }
+  const rank = (f) => {
+    const i = (order || []).indexOf(f.slice(0, -3));
+    return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+  };
+  return files.sort((a, b) => rank(a) - rank(b) || core.compareStr(a, b)).map((f) => fs.readFileSync(path.join(d, f), 'utf8').trim());
 }
 
 const STAMP_RE = /^<!-- jdi:verified head=([\da-f]{7,40}) -->\n?/m;
@@ -246,6 +290,16 @@ function stamp(reviewFile, root) {
 function mergeReview(phase, root = process.cwd()) {
   const carryFile = carryFileOf(root, phase);
   const reviewFile = path.join(phase.absDir, 'REVIEW.md');
+  const order = (core.readJson(stateFile(root, phase), null) || {}).order;
+  const segs = collectSegments(root, phase, order);
+  if (segs.length) {
+    const base = core.readIf(reviewFile);
+    const present = new Set(segments(base || '').map((x) => x.name));
+    const fresh = segs.filter((t) => !segments(t).some((x) => present.has(x.name)));
+    const head = base === null ? `# Review (slug: ${phase.slug})\n\n` : base.trimEnd() + '\n\n';
+    fs.writeFileSync(reviewFile, head + fresh.join('\n\n') + '\n');
+    fs.rmSync(segDir(root, phase), { recursive: true, force: true });
+  }
   const text = core.readIf(reviewFile);
   if (text === null) throw new core.JdiError(`${phase.dir}/REVIEW.md not found — the reviewers did not write it`, 2);
   if (!fs.existsSync(carryFile)) return { carried: 0, verified: stamp(reviewFile, root) };
@@ -333,6 +387,24 @@ function planCmd(phase, rest) {
   return printJson(planReview(phase, reviewers, { full: rest.includes('--full') }), 0);
 }
 
+// Gates still red after the pre-review fix pass: the review is BLOCKED by
+// measurement — no reviewer is spawned to say what the reports already say.
+// Each failure is a `[defect]` blocker, so the loop routes it as one.
+function fromGates(phase, root = process.cwd()) {
+  const gates = require('./gates');
+  const reports = gates.headReportsOf(root, phase);
+  const blockers = [];
+  for (const r of reports) {
+    for (const x of (r.results || []).filter((y) => y.status === 'FAIL')) blockers.push(`- [defect] gate ${r.stack}/${x.gate} failed — log: ${x.log || '-'}`);
+    for (const x of (r.dod || []).filter((y) => y.status === 'FAIL')) blockers.push(`- [defect] DoD ${x.source} ${x.id} FAIL: ${x.criterion}${x.reason ? ' — ' + x.reason : ''}${x.log ? ' — log: ' + x.log : ''}`);
+  }
+  if (!blockers.length) throw new core.JdiError(`no failed gate at HEAD for ${phase.slug} — nothing to block on (spawn the reviewers)`, 2);
+  const reviewFile = path.join(phase.absDir, 'REVIEW.md');
+  const text = [`# Review (slug: ${phase.slug})`, '', '**Verdict:** BLOCKED', '', 'The gates are red at HEAD after the fix pass; no reviewer was spawned (judgment waits for green gates).', '', '### Blockers', ...blockers, ''].join('\n');
+  fs.writeFileSync(reviewFile, text);
+  return { verdict: 'BLOCKED', blockers: blockers.length, verified: stamp(reviewFile, root) };
+}
+
 function main(argv) {
   const [sub, ...rest] = argv;
   const json = rest.includes('--json');
@@ -341,17 +413,18 @@ function main(argv) {
   const id = rest.find((a, i) => !a.startsWith('--') && !['--max-chars', '--reviewers', '--stack'].includes(rest[i - 1]));
   const si = rest.indexOf('--stack');
   const scope = { stack: si === -1 ? null : rest[si + 1], dodOwner: rest.includes('--dod-owner') };
-  if (!id) throw new core.JdiError('usage: jdi review <verdict|blockers|plan|merge|fresh> <phase> [--json]', 1);
+  if (!id) throw new core.JdiError('usage: jdi review <verdict|blockers|plan|merge|fresh|from-gates> <phase> [--json]', 1);
   const phase = core.resolvePhase(id);
   if (sub === 'verdict') return verdictCmd(phase, json);
   if (sub === 'blockers') return blockersCmd(phase, json, maxChars, scope);
   if (sub === 'plan') return planCmd(phase, rest);
   if (sub === 'merge') return printJson(mergeReview(phase), 0);
+  if (sub === 'from-gates') return printJson(fromGates(phase), 0);
   if (sub === 'fresh') {
     const r = staleness(phase);
     return printJson(r, r.stale ? 3 : 0);
   }
-  throw new core.JdiError('usage: jdi review <verdict|blockers|plan|merge|fresh> <phase>', 1);
+  throw new core.JdiError('usage: jdi review <verdict|blockers|plan|merge|fresh|from-gates> <phase>', 1);
 }
 
-module.exports = { main, verdictOf, manualPending, findings, classify, segments, scopedText, planReview, mergeReview, staleness, RANK };
+module.exports = { main, verdictOf, manualPending, findings, classify, segments, scopedText, planReview, mergeReview, fromGates, staleness, RANK };

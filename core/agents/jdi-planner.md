@@ -232,7 +232,8 @@ PLAN.md ok. {M} tasks, {W} waves, {count} files. Next: /jdi-do {phase_slug}
 <rules>
 - Max 8 tasks per phase — split phase if exceeded
 - Every task has files_modified + acceptance + test
-- Waves respect deps + disjoint files_modified
+- Waves respect deps + disjoint files_modified; two tasks with no file in common go in the SAME wave (they run in parallel)
+- Every DoD row `Verify (test): <name>` is a test some task creates with exactly that name (put it in that task's `Test:`): the verify proves the row from the test report, and a missing test is a FAIL
 - Do not plan without CONTEXT.md
 - PLAN.md within `budgets.plan_tokens` of `.jdi/config.json` (default 12000 tokens) — long verification scripts belong in the DoD `Verify:` scripts, never pasted into tasks
 - Language: code/paths in English, description in English
