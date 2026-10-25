@@ -115,6 +115,19 @@ function decide(current, recorded, next, { force, legacy }) {
   return 'keep';
 }
 
+// Shipped before, not anymore: remove what is still JDI's own bytes.
+function removeDropped(dest, prev, files, dirs, report) {
+  for (const [rel, recorded] of Object.entries(prev?.files || {})) {
+    if (rel in files || !dirs.some((d) => rel.startsWith(`${d}/`))) continue;
+    const current = readIf(path.join(dest, rel));
+    if (current === null) continue;
+    if (sha(current) === recorded) {
+      fs.rmSync(path.join(dest, rel));
+      report.removed.push(rel);
+    } else report.kept_removed.push(rel);
+  }
+}
+
 function install(src, dest, { dirs, lang = 'en', force = false, version = '' }) {
   const directive = lang === 'pt-BR' ? fs.readFileSync(DIRECTIVE_FILE, 'utf8') : '';
   const prev = readManifest(dest);
@@ -140,16 +153,7 @@ function install(src, dest, { dirs, lang = 'en', force = false, version = '' }) 
     fs.rmSync(`${target}.jdi-new`, { force: true });
     files[rel] = sha(next);
   }
-  // shipped before, not anymore: remove what is still JDI's own bytes
-  for (const [rel, recorded] of Object.entries(prev?.files || {})) {
-    if (rel in files || !dirs.some((d) => rel.startsWith(`${d}/`))) continue;
-    const current = readIf(path.join(dest, rel));
-    if (current === null) continue;
-    if (sha(current) === recorded) {
-      fs.rmSync(path.join(dest, rel));
-      report.removed.push(rel);
-    } else report.kept_removed.push(rel);
-  }
+  removeDropped(dest, prev, files, dirs, report);
   fs.mkdirSync(dest, { recursive: true });
   fs.writeFileSync(path.join(dest, MANIFEST), JSON.stringify({ jdi: version, files }, null, 2) + '\n');
   return report;

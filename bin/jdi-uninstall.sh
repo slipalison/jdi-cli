@@ -16,6 +16,8 @@ PROJECT_DIR="$(pwd)"
 JDI_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 USER_HOME="${HOME:-${USERPROFILE:-}}"
 readonly SCOPE_PROJECT="project"
+# install manifest written by bin/lib/install-files.js (0.20.1)
+readonly MANIFEST_FILE=".jdi-installed.json"
 
 # Skills universais shipped pelo JDI (runtimes/<rt>/skills/). Mantenha em sync com o ship.
 UNIVERSAL_SKILLS=(
@@ -111,7 +113,7 @@ uninstall_claude() {
 
     echo
     echo "Claude ($sc scope) em: $dir"
-    remove_safe "$dir/.jdi-installed.json" ".jdi-installed.json"   # install manifest (0.20.1)
+    remove_safe "$dir/$MANIFEST_FILE" "$MANIFEST_FILE"
 
     if [[ -d "$dir/agents" ]]; then
       for f in "$dir/agents"/jdi-*.md; do
@@ -149,7 +151,7 @@ uninstall_copilot() {
 
   echo
   echo "Copilot (project scope) em: $dest"
-  remove_safe "$dest/.jdi-installed.json" ".jdi-installed.json"   # install manifest (0.20.1)
+  remove_safe "$dest/$MANIFEST_FILE" "$MANIFEST_FILE"
 
   if [[ -d "$dest/agents" ]]; then
     for f in "$dest/agents"/jdi-*.agent.md; do
@@ -190,7 +192,7 @@ uninstall_antigravity() {
 
     echo
     echo "Antigravity ($sc scope) em: $dir"
-    remove_safe "$dir/.jdi-installed.json" ".jdi-installed.json"   # install manifest (0.20.1)
+    remove_safe "$dir/$MANIFEST_FILE" "$MANIFEST_FILE"
 
     # jdi-* skills (cada uma eh dir)
     for sd in "$dir/skills"/jdi-*; do
@@ -224,7 +226,7 @@ uninstall_opencode() {
 
     echo
     echo "OpenCode ($sc scope) em: $dir"
-    remove_safe "$dir/.jdi-installed.json" ".jdi-installed.json"   # install manifest (0.20.1)
+    remove_safe "$dir/$MANIFEST_FILE" "$MANIFEST_FILE"
 
     if [[ -d "$dir/agents" ]]; then
       for f in "$dir/agents"/jdi-*.md; do
@@ -284,7 +286,7 @@ uninstall_junie() {
 
     echo
     echo "Junie ($sc scope) em: $dir"
-    remove_safe "$dir/.jdi-installed.json" ".jdi-installed.json"   # install manifest (0.20.1)
+    remove_safe "$dir/$MANIFEST_FILE" "$MANIFEST_FILE"
 
     if [[ -d "$dir/agents" ]]; then
       for f in "$dir/agents"/jdi-*.md; do
