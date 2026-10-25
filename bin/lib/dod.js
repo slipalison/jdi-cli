@@ -315,6 +315,15 @@ function lintTestRef(it, add) {
   return undefined;
 }
 
+// The text the Verify runs: the inline command, or the script it calls
+// (null when that script is missing — DOD-S3).
+function verifyBody(it, ctx, add) {
+  if (!it.script) return it.verify.command;
+  const text = core.readIf(path.join(ctx.root, it.script));
+  if (text === null) add(it.verifyLine, 'ERROR', 'DOD-S3', `Verify do item ${it.id} chama ${it.script}, que nao existe`);
+  return text;
+}
+
 function lintItem(it, ctx, add) {
   if (it.type === 'auto' && !it.verify) add(it.line, 'ERROR', 'DOD-S1', `item ${it.id} sem \`Verify:\``);
   if (it.type === 'manual' && !it.hasEvidenceField) add(it.line, 'WARN', 'DOD-S1', `item manual ${it.id} sem \`Evidence:\``);
@@ -324,16 +333,8 @@ function lintItem(it, ctx, add) {
   if (!it.script && cmd.length > ctx.limit) {
     add(it.verifyLine, ctx.strict ? 'ERROR' : 'WARN', 'DOD-S2', `Verify do item ${it.id} tem ${cmd.length} caracteres na linha (limite ${ctx.limit}) — \`jdi-cli dod extract\` move para verify/dod-${it.id}.sh`);
   }
-  let body = cmd;
-  if (it.script) {
-    const sp = path.join(ctx.root, it.script);
-    if (!fs.existsSync(sp)) {
-      add(it.verifyLine, 'ERROR', 'DOD-S3', `Verify do item ${it.id} chama ${it.script}, que nao existe`);
-      return;
-    }
-    body = fs.readFileSync(sp, 'utf8');
-  }
-  if (it.evidence) return;
+  const body = verifyBody(it, ctx, add);
+  if (body === null || it.evidence) return;
   for (const f of lintCommand(body)) add(it.verifyLine, f.level, f.rule, `item ${it.id}: ${f.msg}`);
   for (const doc of unreadDocs(it.criterion, body)) {
     add(it.verifyLine, 'WARN', 'DOD-L5', `item ${it.id}: o criterio cita ${doc}, que o Verify nao le — a prova passa sem olhar o documento`);
