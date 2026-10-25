@@ -305,19 +305,21 @@ function lintCommand(cmd) {
   return found;
 }
 
+function lintTestRef(it, add) {
+  const id = it.verify.command.trim();
+  if (!id) return add(it.verifyLine, 'ERROR', 'DOD-S1', `item ${it.id}: \`Verify (test):\` sem o nome do teste`);
+  // a bare name matches ANY test with that name (another module's test_create)
+  if (!['::', '.', '/', ' '].some((sep) => id.includes(sep))) {
+    add(it.verifyLine, 'WARN', 'DOD-S4', `item ${it.id}: \`${id}\` sem classe/modulo casa qualquer teste com esse nome — qualifique (\`modulo::${id}\`)`);
+  }
+  return undefined;
+}
+
 function lintItem(it, ctx, add) {
   if (it.type === 'auto' && !it.verify) add(it.line, 'ERROR', 'DOD-S1', `item ${it.id} sem \`Verify:\``);
   if (it.type === 'manual' && !it.hasEvidenceField) add(it.line, 'WARN', 'DOD-S1', `item manual ${it.id} sem \`Evidence:\``);
   if (!it.verify || it.type !== 'auto') return;
-  if (it.testRef) {
-    const id = it.verify.command.trim();
-    if (!id) add(it.verifyLine, 'ERROR', 'DOD-S1', `item ${it.id}: \`Verify (test):\` sem o nome do teste`);
-    // a bare name matches ANY test with that name (another module's test_create)
-    else if (!['::', '.', '/', ' '].some((sep) => id.includes(sep))) {
-      add(it.verifyLine, 'WARN', 'DOD-S4', `item ${it.id}: \`${id}\` sem classe/modulo casa qualquer teste com esse nome — qualifique (\`modulo::${id}\`)`);
-    }
-    return; // a test name, not a command: nothing to run or lint
-  }
+  if (it.testRef) return lintTestRef(it, add); // a test name, not a command
   const cmd = it.verify.command;
   if (!it.script && cmd.length > ctx.limit) {
     add(it.verifyLine, ctx.strict ? 'ERROR' : 'WARN', 'DOD-S2', `Verify do item ${it.id} tem ${cmd.length} caracteres na linha (limite ${ctx.limit}) — \`jdi-cli dod extract\` move para verify/dod-${it.id}.sh`);
