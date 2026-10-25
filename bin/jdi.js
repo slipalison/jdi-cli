@@ -57,8 +57,8 @@ const GLOBAL_FLAGS = { noColor: 'bool', lang: 'value', help: 'bool', version: 'b
 // back to `all` (#35). The plumbing helpers are not listed: they get the raw
 // argv and parse it themselves.
 const COMMAND_FLAGS = {
-  install: { scope: 'value', runtime: 'value', githooks: 'bool' },
-  update: { 'force-specialists': 'bool', 'skip-specialists': 'bool', 'dry-run': 'bool', yes: 'bool' },
+  install: { scope: 'value', runtime: 'value', githooks: 'bool', force: 'bool' },
+  update: { 'force-specialists': 'bool', 'skip-specialists': 'bool', 'dry-run': 'bool', yes: 'bool', force: 'bool' },
   uninstall: { runtime: 'value', scope: 'value', purge: 'bool', yes: 'bool', 'dry-run': 'bool' },
   build: {},
   'install-playwright': { 'skip-browser': 'bool', 'skip-mcp': 'bool', runtime: 'value', 'antigravity-scope': 'value' },
@@ -469,6 +469,8 @@ async function cmdInstall(parsed) {
     ? ['-Runtime', runtime, '-Scope', scope]
     : [runtime, '--scope', scope];
   if (flags.githooks) args.push(isWindows ? '-Githooks' : '--githooks');
+  // replace JDI files the project edited (default: kept, new version beside)
+  if (flags.force) process.env.JDI_FORCE_FILES = '1';
 
   const { code } = runShellScript('jdi-install', args);
 
@@ -538,6 +540,7 @@ async function cmdUpdate({ flags }) {
     { key: 'force-specialists', win: '-ForceSpecialists', nix: '--force-specialists' },
     { key: 'skip-specialists', win: '-SkipSpecialists', nix: '--skip-specialists' },
     { key: 'dry-run', win: '-DryRun', nix: '--dry-run' },
+    { key: 'force', win: '-Force', nix: '--force' },
   ]);
 
   const { code } = runShellScript('jdi-update', args);
@@ -726,6 +729,7 @@ async function cmdHelp() {
   console.log(`  ${c.cyan}--purge${c.reset}                ${tr('help.opt.purge')}`);
   console.log(`  ${c.cyan}--yes${c.reset}                  ${tr('help.opt.yes')}`);
   console.log(`  ${c.cyan}--force-specialists${c.reset}    ${tr('help.opt.force_specialists')}`);
+  console.log(`  ${c.cyan}--force${c.reset}                ${tr('help.opt.force_files')}`);
   console.log(`  ${c.cyan}--skip-specialists${c.reset}     ${tr('help.opt.skip_specialists')}`);
   console.log(`  ${c.cyan}--no-color${c.reset}             ${tr('help.opt.no_color')}`);
   console.log(`  ${c.cyan}-h, --help${c.reset}             ${tr('help.opt.help')}`);

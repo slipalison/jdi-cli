@@ -744,6 +744,9 @@ npx jdi-cli@latest install-caveman --repo https://github.com/forked/caveman.git 
 | `--dry-run` | flag | false | Show what would change without applying |
 | `--force-specialists` | flag | false | Regenerate specialists without asking (assumes Yes) |
 | `--skip-specialists` | flag | false | Leave specialists alone even if template changed |
+| `--force` | flag | false | Replace JDI files the project edited (default: kept; the new version goes to `<file>.jdi-new`). Also reapplies on the same version |
+
+Install and update write only the files JDI ships, listed with their hashes in `<runtime dir>/.jdi-installed.json` (e.g. `.claude/.jdi-installed.json`): third-party agents and skills next to them are never touched (the pt-BR directive goes only into JDI's files), a JDI file the project edited is kept, and a file JDI no longer ships is removed when unedited. Example config files (`.claude/settings.example.json`, `.opencode/opencode.jsonc`) are offered on a first install only — `update` never recreates them.
 
 Update does NOT refresh Playwright dep, MCP configs, or Caveman plugin. Re-run their respective subcommands to refresh.
 

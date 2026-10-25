@@ -727,6 +727,9 @@ npx jdi-cli@latest install-caveman --repo https://github.com/forked/caveman.git 
 | `--dry-run` | flag | false | Mostra o que mudaria sem aplicar |
 | `--force-specialists` | flag | false | Regenera os especialistas sem perguntar (assume Sim) |
 | `--skip-specialists` | flag | false | Deixa os especialistas intactos mesmo se o template mudou |
+| `--force` | flag | false | Substitui arquivos do JDI que o projeto editou (padrão: mantidos; a versão nova vai para `<arquivo>.jdi-new`). Também reaplica na mesma versão |
+
+Install e update escrevem só os arquivos que o JDI distribui, listados com seus hashes em `<pasta do runtime>/.jdi-installed.json` (ex.: `.claude/.jdi-installed.json`): agents e skills de terceiros ao lado nunca são tocados (a diretiva pt-BR vai só nos arquivos do JDI), um arquivo do JDI editado no projeto é mantido, e um arquivo que o JDI deixou de distribuir é removido se não foi editado. Os arquivos de exemplo (`.claude/settings.example.json`, `.opencode/opencode.jsonc`) só aparecem numa instalação nova — o `update` nunca os recria.
 
 O update NÃO atualiza a dependência do Playwright, as configs de MCP nem o plugin Caveman. Rode os subcomandos respectivos para atualizá-los.
 

@@ -19,6 +19,10 @@
 .PARAMETER DryRun
   Mostra o que seria atualizado, sem aplicar mudanca.
 
+.PARAMETER Force
+  Substitui arquivos do JDI que o projeto editou (sem -Force: ficam, e a
+  versao nova vai para <arquivo>.jdi-new).
+
 .EXAMPLE
   .\bin\jdi-update.ps1
   .\bin\jdi-update.ps1 -DryRun
@@ -28,10 +32,16 @@
 param(
   [switch]$ForceSpecialists,
   [switch]$SkipSpecialists,
-  [switch]$DryRun
+  [switch]$DryRun,
+  [switch]$Force
 )
 
 $ErrorActionPreference = 'Stop'
+# The installer below runs as part of an update: it writes only JDI's own
+# files and never recreates the example config files (#78). -Force replaces
+# JDI files the project edited (default: kept, new version in <file>.jdi-new).
+$env:JDI_UPDATE = '1'
+if ($Force) { $env:JDI_FORCE_FILES = '1' }
 # The install child runs on THIS host: a hard-coded `pwsh` aborts the update on
 # a Windows with only PowerShell 5.1, which bin/jdi.js falls back to (#42).
 $PsHost = (Get-Process -Id $PID).Path
@@ -95,6 +105,9 @@ if ($OldVersion -eq $NewVersion -and -not $DryRun) {
   # re-copiar os runtime files pra injetar/remover a diretiva.
   if ($ExplicitLang -and ($ExplicitLang -ne $CurrentLang)) {
     Write-Output "Mesma versao ($NewVersion), mas -Lang mudou ($CurrentLang -> $ExplicitLang) - reaplicando runtime files."
+    Write-Output ""
+  } elseif ($Force) {
+    Write-Output "Mesma versao ($NewVersion), -Force - reaplicando os arquivos do JDI (inclusive os editados no projeto)."
     Write-Output ""
   } else {
     Write-Output "Ja na versao mais recente ($NewVersion). Use --force pra reinstalar mesmo assim."

@@ -111,6 +111,7 @@ uninstall_claude() {
 
     echo
     echo "Claude ($sc scope) em: $dir"
+    remove_safe "$dir/.jdi-installed.json" ".jdi-installed.json"   # install manifest (0.20.1)
 
     if [[ -d "$dir/agents" ]]; then
       for f in "$dir/agents"/jdi-*.md; do
@@ -148,6 +149,7 @@ uninstall_copilot() {
 
   echo
   echo "Copilot (project scope) em: $dest"
+  remove_safe "$dest/.jdi-installed.json" ".jdi-installed.json"   # install manifest (0.20.1)
 
   if [[ -d "$dest/agents" ]]; then
     for f in "$dest/agents"/jdi-*.agent.md; do
@@ -188,6 +190,7 @@ uninstall_antigravity() {
 
     echo
     echo "Antigravity ($sc scope) em: $dir"
+    remove_safe "$dir/.jdi-installed.json" ".jdi-installed.json"   # install manifest (0.20.1)
 
     # jdi-* skills (cada uma eh dir)
     for sd in "$dir/skills"/jdi-*; do
@@ -221,6 +224,7 @@ uninstall_opencode() {
 
     echo
     echo "OpenCode ($sc scope) em: $dir"
+    remove_safe "$dir/.jdi-installed.json" ".jdi-installed.json"   # install manifest (0.20.1)
 
     if [[ -d "$dir/agents" ]]; then
       for f in "$dir/agents"/jdi-*.md; do
@@ -280,6 +284,7 @@ uninstall_junie() {
 
     echo
     echo "Junie ($sc scope) em: $dir"
+    remove_safe "$dir/.jdi-installed.json" ".jdi-installed.json"   # install manifest (0.20.1)
 
     if [[ -d "$dir/agents" ]]; then
       for f in "$dir/agents"/jdi-*.md; do
