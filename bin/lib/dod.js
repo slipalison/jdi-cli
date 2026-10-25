@@ -305,12 +305,19 @@ function lintItem(it, ctx, add) {
   }
 }
 
+// `docs/api.md.` / `README.md:` -> without the trailing `.`/`:` (no regex)
+function trimPunct(t) {
+  let end = t.length;
+  while (end > 0 && (t[end - 1] === '.' || t[end - 1] === ':')) end--;
+  return t.slice(0, end);
+}
+
 // Documents (`*.md`, `*.adoc`, `*.rst`) the criterion names and the Verify
 // body never mentions, by path or by file name.
 function unreadDocs(criterion, body) {
   const docs = criterion
     .split(/[\s`'"()[\],;]+/)
-    .map((t) => t.replace(/[.:]+$/, ''))
+    .map(trimPunct)
     .filter((t) => /\.(?:md|adoc|rst)$/i.test(t));
   return [...new Set(docs)].filter((d) => !body.includes(d) && !body.includes(path.posix.basename(d)));
 }

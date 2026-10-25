@@ -29,7 +29,7 @@ const core = require('./jdi-core');
 const dod = require('./dod');
 const gates = require('./gates');
 
-const SCOPES = ['iteration', 'ship'];
+const SCOPES = new Set(['iteration', 'ship']);
 
 // The evidence rows of the phase (CONTEXT) and of the project (PROJECT).
 function evidenceRows(root, phase) {
@@ -54,7 +54,7 @@ function findRow(root, phase, row) {
 }
 
 function record(root, phase, { row, scope, artifact = null, note = null }) {
-  if (!SCOPES.includes(scope)) throw new core.JdiError('--scope must be iteration or ship', 1);
+  if (!SCOPES.has(scope)) throw new core.JdiError('--scope must be iteration or ship', 1);
   const it = findRow(root, phase, row);
   let artifactSha = null;
   if (artifact) {
@@ -90,7 +90,9 @@ function scopeStatus(root, phase, it, scope, now) {
   if (rec.input_hash === now.inputHash) return { status: 'fresh', at: rec.at, head: rec.head };
   const diff = rec.head ? core.git(['diff', '--name-only', rec.head], root) : { code: 1 };
   const changed = diff.code === 0 ? diff.stdout.split('\n').filter(Boolean).filter((f) => !f.startsWith('.jdi/')) : [];
-  return { status: 'stale', reason: changed.length ? `changed: ${changed.slice(0, 5).join(', ')}${changed.length > 5 ? ', ...' : ''}` : 'inputs changed', at: rec.at };
+  if (!changed.length) return { status: 'stale', reason: 'inputs changed', at: rec.at };
+  const more = changed.length > 5 ? ', ...' : '';
+  return { status: 'stale', reason: `changed: ${changed.slice(0, 5).join(', ')}${more}`, at: rec.at };
 }
 
 function status(root, phase) {
@@ -114,7 +116,7 @@ function enforced(root, phase) {
 function shipProblems(root, phase) {
   return status(root, phase)
     .filter((r) => r.ship.status !== 'fresh')
-    .map((r) => `DoD ${r.row}: ship evidence ${r.ship.status}${r.ship.reason ? ` (${r.ship.reason})` : ''}`);
+    .map((r) => `DoD ${r.row}: ship evidence ${r.ship.status}` + (r.ship.reason ? ' (' + r.ship.reason + ')' : ''));
 }
 
 function lines(rows) {

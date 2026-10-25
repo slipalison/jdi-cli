@@ -42,6 +42,13 @@ function loopFile(phase) {
   return path.join(phase.absDir, 'LOOP.md');
 }
 
+// `hash=…, commit=…, ts=…, product=…, defects=N, hollow=N, dod=…` (the later
+// keys are absent on lines written by older versions).
+function historyFields(rest) {
+  const kv = Object.fromEntries(rest.split(', ').map((p) => [p.slice(0, p.indexOf('=')), p.slice(p.indexOf('=') + 1)]));
+  return { hash: kv.hash, commit: kv.commit, product: kv.product, defects: kv.defects === undefined ? null : Number(kv.defects), dod: kv.dod || null };
+}
+
 function readLoop(phase) {
   const f = loopFile(phase);
   if (!fs.existsSync(f)) return null;
@@ -50,8 +57,8 @@ function readLoop(phase) {
   const y = core.parseYaml(fm);
   const history = [];
   for (const l of body.split('\n')) {
-    const m = /^- iter (\d+): (\w+), hash=([a-f0-9]+)(?:, commit=(\w+))?(?:, ts=(\S+?))?(?:, product=(\w+))?(?:, defects=(\d+))?(?:, hollow=(\d+))?(?:, dod=([a-f0-9]+))?(?:, precheck)?\s*$/.exec(l);
-    if (m) history.push({ iter: Number(m[1]), verdict: m[2], hash: m[3], commit: m[4], product: m[6], defects: m[7] === undefined ? null : Number(m[7]), dod: m[9] || null });
+    const m = /^- iter (\d+): (\w+), (hash=.*)$/.exec(l.trimEnd());
+    if (m) history.push({ iter: Number(m[1]), verdict: m[2], ...historyFields(m[3]) });
     else if (/^--- (AUTO-)?RESET|^--- RESUMED/.test(l)) history.push({ marker: l });
   }
   const list = (v) => (Array.isArray(v) ? v.map(Number).filter((n) => !Number.isNaN(n)) : []);
@@ -215,7 +222,7 @@ function precheck(phase, { root = process.cwd(), autonomous = false } = {}) {
   const config = core.loadConfig(root);
   const st = readLoop(phase);
   const last = st ? [...st.history].reverse().find((h) => !h.marker) : null;
-  if (!st || st.status !== 'running' || !last?.dod || last.defects === null || !st.lastVerifiedCommit) return { status: 'verify', reason: 'no previous verify to compare with' };
+  if (st?.status !== 'running' || !last?.dod || last.defects === null || !st.lastVerifiedCommit) return { status: 'verify', reason: 'no previous verify to compare with' };
   if (!fs.existsSync(path.join(phase.absDir, 'REVIEW.md'))) return { status: 'verify', reason: 'no REVIEW.md' };
   if (productChanged(root, st.lastVerifiedCommit, config.loop?.non_product_globs)) return { status: 'verify', reason: `product changed since ${st.lastVerifiedCommit}` };
   if (dodHash(root, phase) !== last.dod) return { status: 'verify', reason: 'a DoD row changed since the last verify' };

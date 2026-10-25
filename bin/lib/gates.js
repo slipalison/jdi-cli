@@ -171,13 +171,21 @@ function treeFingerprint(root) {
   return files;
 }
 
+// `./a/b/` -> `a/b` (no regex: plain loops cannot backtrack)
+function trimSlashes(t) {
+  const s = t.startsWith('./') ? t.slice(2) : t;
+  let end = s.length;
+  while (end > 0 && s[end - 1] === '/') end--;
+  return s.slice(0, end);
+}
+
 // Files a command names: an exact path, a directory (everything under it) or
 // a glob. A DoD row that greps docs/api.md must see docs/api.md change, even
 // though docs/ is outside the product.
 function namedFiles(tree, cmd) {
   const tokens = cmd
     .split(/[\s'"`|;&()<>=]+/)
-    .map((t) => t.replaceAll('\\', '/').replace(/^\.\//, '').replace(/\/+$/, ''))
+    .map((t) => trimSlashes(t.replaceAll('\\', '/')))
     .filter((t) => t.length > 1);
   const out = new Set();
   for (const t of tokens) {
@@ -376,7 +384,7 @@ function dodLines(dodRows) {
   return [
     `  dod       PASS ${c('PASS')} (reused ${dodRows.filter((d) => d.reused).length}) · FAIL ${c('FAIL')} · EVIDENCE ${c('EVIDENCE')} · MANUAL ${c('MANUAL_REQUIRED')} · INCONCLUSIVE ${c('INCONCLUSIVE')}`,
     ...dodRows.filter((x) => x.status === 'FAIL').map((d) => `    FAIL ${d.source} ${d.id}: ${d.log}`),
-    ...dodRows.filter((x) => x.evidence).map((d) => `    EVIDENCE ${d.source} ${d.id}: iteration ${d.evidence.iteration} · ship ${d.evidence.ship}${d.evidence.reason ? ` (${d.evidence.reason})` : ''}`),
+    ...dodRows.filter((x) => x.evidence).map((d) => `    EVIDENCE ${d.source} ${d.id}: iteration ${d.evidence.iteration} · ship ${d.evidence.ship}` + (d.evidence.reason ? ' (' + d.evidence.reason + ')' : '')),
   ];
 }
 

@@ -171,7 +171,10 @@ const toPosix = (p) => p.split(path.sep).join('/');
 
 // `dir` as a whole path segment: `.jdi/phases/alpha` in `.../alpha/x.md`,
 // `(.jdi/phases/alpha)` or at the end — never `.jdi/phases/alpha-2`.
-const refRe = (dir) => new RegExp(`${dir.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)}(?![a-z0-9-])`, 'g');
+function refRe(dir) {
+  const escaped = dir.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+  return new RegExp(escaped + '(?![a-z0-9-])', 'g');
+}
 
 // Tracked files outside the phase folder (and the archive) that mention it.
 function referencesTo(root, dir) {
