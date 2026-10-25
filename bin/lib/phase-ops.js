@@ -159,7 +159,7 @@ function shippableVerdict(phase, text) {
 // ship used to drop it, turning a brownfield project into a greenfield one.
 function writeState(root, phase, nextPhase) {
   const file = path.join(root, core.JDI_DIR, 'STATE.md');
-  const before = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+  const before = core.readIf(file) || '';
   const adopted = /^adopted:\s*true\b/m.test(before) ? 'adopted: true\n' : '';
   const state = nextPhase
     ? `current_phase: ${nextPhase.position}\ncurrent_phase_slug: ${nextPhase.slug}\nphase_status: ready\nnext_step: /jdi-discuss ${nextPhase.slug}\n`
@@ -171,22 +171,36 @@ const toPosix = (p) => p.split(path.sep).join('/');
 
 // `dir` as a whole path segment: `.jdi/phases/alpha` in `.../alpha/x.md`,
 // `(.jdi/phases/alpha)` or at the end — never `.jdi/phases/alpha-2`.
-function refRe(dir) {
-  const escaped = dir.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
-  return new RegExp(escaped + '(?![a-z0-9-])', 'g');
+const isSlugChar = (c) => (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c === '-';
+
+// Start offsets of `dir` as a whole segment in `text` (plain search).
+function refOffsets(text, dir) {
+  const out = [];
+  for (let i = text.indexOf(dir); i !== -1; i = text.indexOf(dir, i + dir.length)) {
+    const next = text[i + dir.length];
+    if (next === undefined || !isSlugChar(next)) out.push(i);
+  }
+  return out;
 }
 
 // Tracked files outside the phase folder (and the archive) that mention it.
 function referencesTo(root, dir) {
   const r = core.git(['grep', '-l', '-F', '-e', dir, '--', '.', `:(exclude)${dir}`, ':(exclude).jdi/archive'], root);
   if (r.code !== 0) return [];
-  return r.stdout.split('\n').filter((f) => f && refRe(dir).test(fs.readFileSync(path.join(root, f), 'utf8')));
+  return r.stdout.split('\n').filter((f) => f && refOffsets(core.readIf(path.join(root, f)) || '', dir).length > 0);
 }
 
 function rewriteRefs(root, files, from, to) {
   for (const f of files) {
     const abs = path.join(root, f);
-    fs.writeFileSync(abs, fs.readFileSync(abs, 'utf8').replace(refRe(from), to));
+    const text = fs.readFileSync(abs, 'utf8');
+    let out = '';
+    let last = 0;
+    for (const i of refOffsets(text, from)) {
+      out += text.slice(last, i) + to;
+      last = i + from.length;
+    }
+    fs.writeFileSync(abs, out + text.slice(last));
   }
 }
 

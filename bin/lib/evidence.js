@@ -58,9 +58,13 @@ function record(root, phase, { row, scope, artifact = null, note = null }) {
   const it = findRow(root, phase, row);
   let artifactSha = null;
   if (artifact) {
-    const abs = path.resolve(root, artifact);
-    if (!fs.existsSync(abs)) throw new core.JdiError(`artifact not found: ${artifact}`, 1);
-    artifactSha = crypto.createHash('sha256').update(fs.readFileSync(abs)).digest('hex').slice(0, 16);
+    let bytes;
+    try {
+      bytes = fs.readFileSync(path.resolve(root, artifact));
+    } catch {
+      throw new core.JdiError(`artifact not found: ${artifact}`, 1);
+    }
+    artifactSha = crypto.createHash('sha256').update(bytes).digest('hex').slice(0, 16);
   }
   const rec = {
     row: rowKey(it),
