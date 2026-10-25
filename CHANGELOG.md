@@ -5,7 +5,7 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.19.0] - 2026-10-25
 
 Fewer, shorter verify rounds — from a real 6-hour phase (two cards, three
 verify rounds of ~1 h each, the 20-minute E2E run five times, 27 of 50
@@ -55,6 +55,12 @@ Fixes from the review batch filed against 0.15.0 (#35-#61), checked again on
   `loop.record_commits`; stack keys `inputs`, `cache_key_cmd`.
 
 ### Changed
+- **Releases on merge** (`npm-publish.yml`): a push to main whose
+  package.json version has no tag yet publishes it to npm, then creates the
+  tag and the GitHub Release (notes = the version's CHANGELOG section) in the
+  same run. Up to 0.18.x the tag was pushed by hand and the Release made with
+  `gh release create` — forgotten from 0.18.0 on, so the Releases panel
+  stayed at v0.15.0. Pushing a tag and the manual run still work.
 - **`ship` archives nothing** (#73): it used to move old phases inside the
   ship commit of the current one and break every link to them.
   `--no-archive` is accepted and ignored. STATE.md keeps `adopted: true`

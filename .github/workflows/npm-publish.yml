@@ -1,14 +1,24 @@
 name: Publish to npm
 
-# Dispara quando voce empurra uma tag no formato v*.*.* (ex: v1.6.0).
-# Fluxo recomendado:
-#   1. Bump em package.json
-#   2. Commit + push main
-#   3. git tag -a v1.6.0 -m "..." && git push origin v1.6.0
-#   4. Action publica automatico
+# Releases on merge. Every push to main runs `decidir`: when the version in
+# package.json has no tag yet (a release PR bumped it), `publicar` publishes
+# it to npm, then creates the tag vX.Y.Z on that commit and the GitHub Release
+# with the version's CHANGELOG section as notes. A merge that does not bump
+# the version publishes nothing.
+#
+# Flow: PR "chore(release): X.Y.Z" (package.json + lock, CHANGELOG `## [X.Y.Z]`,
+# runtimes rebuilt) -> merge -> this workflow. Up to 0.18.x a tag had to be
+# pushed by hand and the GitHub Release made with `gh release create`; it was
+# forgotten from 0.18.0 on (tags without Releases, the panel stuck at v0.15.0).
+#
+# Still accepted: pushing a tag v*.*.* (publishes that tag) and a manual run
+# with an existing tag (Actions tab > Run workflow). A tag pushed by this
+# workflow with GITHUB_TOKEN does not start another run (GitHub rule), so a
+# version is never published twice.
 
 on:
   push:
+    branches: [main]
     tags:
       - "v*.*.*"
   # Permite trigger manual no UI tambem (Actions tab > Run workflow)
@@ -21,44 +31,102 @@ on:
 
 permissions:
   contents: read
-  # Necessario pra `npm publish --provenance` (OIDC com sigstore)
-  id-token: write
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
 
 jobs:
-  publish:
-    name: Build + publish
+  decidir:
+    name: Decide the release
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-
+    timeout-minutes: 5
+    outputs:
+      release: ${{ steps.decide.outputs.release }}
+      tag: ${{ steps.decide.outputs.tag }}
+      version: ${{ steps.decide.outputs.version }}
+      ref: ${{ steps.decide.outputs.ref }}
     steps:
-      - name: Resolve tag (aceita "1.6.0" ou "v1.6.0")
-        id: resolve
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Decide
+        id: decide
         shell: bash
         # By env, never interpolated into the script: the dispatch input is
         # typed by whoever runs the workflow, and `${{ }}` inside `run:` is
         # pasted into the bash text before bash reads it.
         env:
+          EVENT: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
           RAW_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          RAW="$RAW_TAG"
-          # Normaliza: garante prefixo v
-          if [[ "$RAW" != v* ]]; then
-            RAW="v${RAW}"
+          if [ "$EVENT" = "push" ] && [ "$REF_TYPE" = "branch" ]; then
+            V=$(node -p "require('./package.json').version")
+            TAG="v$V"
+            if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+              echo "release=false" >> "$GITHUB_OUTPUT"
+              echo "$TAG already exists: this merge does not bump the version — nothing to publish."
+              exit 0
+            fi
+            if ! grep -q "^## \[$V\]" CHANGELOG.md; then
+              echo "::error::package.json is at $V (no tag yet) but CHANGELOG.md has no '## [$V]' section — the release notes come from it."
+              exit 1
+            fi
+            REF="$SHA"
+          else
+            # Normaliza: garante prefixo v
+            TAG="$RAW_TAG"
+            if [[ "$TAG" != v* ]]; then TAG="v${TAG}"; fi
+            V="${TAG#v}"
+            REF="$TAG"
           fi
-          echo "tag=${RAW}" >> "$GITHUB_OUTPUT"
-          echo "version=${RAW#v}" >> "$GITHUB_OUTPUT"
-          echo "Tag normalizada: ${RAW} (versao: ${RAW#v})"
+          {
+            echo "release=true"
+            echo "tag=$TAG"
+            echo "version=$V"
+            echo "ref=$REF"
+          } >> "$GITHUB_OUTPUT"
+          echo "Release $TAG from $REF"
+
+  publish:
+    name: Build + publish
+    needs: decidir
+    if: needs.decidir.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # tag + GitHub Release
+      contents: write
+      # Necessario pra `npm publish --provenance` (OIDC com sigstore)
+      id-token: write
+
+    steps:
+      - name: Resolve tag
+        id: resolve
+        shell: bash
+        env:
+          TAG: ${{ needs.decidir.outputs.tag }}
+          VERSION: ${{ needs.decidir.outputs.version }}
+        run: |
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Tag normalizada com prefixo v
-          ref: ${{ steps.resolve.outputs.tag }}
+          ref: ${{ needs.decidir.outputs.ref }}
+          persist-credentials: false
 
       - name: Setup Node 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
+          # no automatic cache in a job that publishes (cache poisoning)
+          package-manager-cache: false
           # npm staged publishing (GA May 2026) needs Node >= 22.14 and npm >= 11.15;
           # trusted publishing (OIDC) needs npm >= 11.5.1. Node 22 bundles npm 10.x,
           # so the next step upgrades the CLI.
@@ -174,6 +242,13 @@ jobs:
             echo "mode=direct" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          # An earlier run published it and failed before the tag/Release:
+          # finish the job instead of failing on every later merge.
+          if echo "$OUT" | grep -qiE "EPUBLISHCONFLICT|cannot publish over"; then
+            echo "::notice::$(node -p "require('./package.json').version") is already on npm — only the tag and the Release are missing."
+            echo "mode=exists" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if ! echo "$OUT" | grep -q "E_STAGE_REQUIRED"; then
             exit "$RC"
           fi
@@ -195,6 +270,37 @@ jobs:
             echo "- npmjs.com → package **jdi-cli** → **Staged Packages** → Approve, or"
             echo '- `npm stage list jdi-cli` then `npm stage approve <stage-id> --otp <code>`'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Tag + GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+          VERSION: ${{ steps.resolve.outputs.version }}
+          SHA: ${{ needs.decidir.outputs.ref }}
+          MODE: ${{ steps.publish.outputs.mode }}
+        run: |
+          set -euo pipefail
+          # Notes: the version's CHANGELOG section, without its heading.
+          awk -v v="$VERSION" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if [ "$MODE" = "staged" ]; then
+            printf '\n> npm: staged — live once a maintainer approves it with 2FA.\n' >> "$RUNNER_TEMP/notes.md"
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists."
+            exit 0
+          fi
+          # Merge path: the tag does not exist yet — --target creates it on
+          # the published commit. Tag path: it exists and is used as is.
+          if git ls-remote --exit-code --tags "https://github.com/${GITHUB_REPOSITORY}.git" "refs/tags/$TAG" >/dev/null; then
+            gh release create "$TAG" --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
+          else
+            gh release create "$TAG" --target "$SHA" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
+          fi
 
       - name: Summary
         if: success()
