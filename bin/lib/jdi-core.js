@@ -55,9 +55,37 @@ const CONFIG_DEFAULTS = {
     split_max_dod_rows: 12,
     split_max_areas: 3,
     split_max_criteria: 8,
+    direct_max_dod_rows: 3,
+    direct_max_criteria: 3,
     sensitive_globs: [],
   },
   compaction: { archive_after: 5 },
+  // 0.21 — `jdi-cli route`. Off for projects made before it (models.<role>
+  // as before); the template that /jdi-new writes turns it on. The rest is
+  // here so that `{"routing": {"mode": "on"}}` alone is a working setup.
+  routing: {
+    mode: 'off',
+    profile: 'base',
+    tiers: {
+      cheap: { model: 'haiku', effort: 'low' },
+      standard: { model: 'sonnet', effort: 'medium' },
+      strong: { model: 'opus', effort: 'high' },
+    },
+    profiles: {
+      base: {},
+      economy: { tiers: { standard: { model: 'sonnet', effort: 'low' }, strong: { model: 'sonnet', effort: 'high' } } },
+      quality: { tiers: { cheap: { model: 'sonnet', effort: 'low' }, standard: { model: 'opus', effort: 'medium' } } },
+    },
+    rules: [
+      { role: 'doer', if: ['sensitive'], tier: 'strong' },
+      { role: 'doer', if: ['deep'], tier: 'strong' },
+      { role: 'doer', if: ['light'], tier: 'cheap' },
+      { role: 'reviewer', if: ['sensitive'], tier: 'strong' },
+      { role: 'planner', tier: 'strong' },
+    ],
+    floors: { reviewer: 'standard', critic: 'standard' },
+    escalate: true,
+  },
   loop: { non_product_globs: [], record_commits: 'per_round' },
 };
 

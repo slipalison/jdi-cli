@@ -111,6 +111,12 @@ Agent(
 )
 ```
 
+<!-- jdi:only claude -->
+Route it as a fix (a review measured the failure):
+`npx -y {{JDI_CLI}} route "$PHASE_SLUG" --role doer --attempt 2 --json` —
+under `/jdi-loop`, `--attempt` is the loop's iteration instead.
+<!-- jdi:end -->
+
 If no pending tasks and no BLOCKED review → "phase already executed", exit 0.
 
 **Size (lite or full):**
@@ -200,8 +206,23 @@ know that is not in the plan goes into PLAN.md under `## Orchestrator notes`
 (the brief carries that section).
 
 <!-- jdi:only claude -->
-If `.jdi/config.json` sets `models.doer` to anything other than `inherit`,
-pass it as the Agent `model` parameter.
+Model and effort per spawn come from `routing` in `.jdi/config.json` — a
+rule, not a judgment of the moment:
+
+```bash
+npx -y {{JDI_CLI}} route "$PHASE_SLUG" --role doer --task T-{X} --json   # {model, effort, tier, why}
+```
+
+Pass `model` and `effort` as the Agent `model` and `effort` parameters (a
+`null` one is left out: the session's own applies). The rules read the task's
+`Weight:` and `Kind:` and whether it touches `sizing.sensitive_globs` — a
+light task goes to a cheap model, a sensitive or deep one to the strong one.
+A lite phase (one doer, every task) routes without `--task`: its heaviest
+task decides. A fix dispatch after a MEASURED failure — a red wave suite,
+a BLOCKED review, a doer that returned `STATUS: BLOCKED` — adds `--attempt N`
+(2 for the first fix, then 3): one tier up per attempt. Never escalate on a
+doer's own opinion, only on a check that failed. With `routing.mode` off
+(projects created before 0.21) the route is `models.doer` and no effort.
 
 Never send new work to a doer that already returned (SendMessage): spawn a
 fresh one. A resumed agent drags its whole context along, and after more than
@@ -216,6 +237,25 @@ Wait for all to return before next wave.
 The doer reads its brief, and opens an artifact only for what the brief points to.
 
 ### Step 7: After each wave
+
+Each doer's return starts with a `STATUS:` line. Act on it — never send the
+same prompt to the same route again:
+
+- `DONE` — go on.
+- `DONE_WITH_CONCERNS` — go on; the concern line goes into SUMMARY.md, where
+  the reviewer reads it.
+- `NEEDS_CONTEXT` — the brief lacked something (a decision, a file outside
+  `files_modified`, a fact about the environment). Add it to PLAN.md
+  `## Orchestrator notes` — ask the user when it is a decision — and spawn a
+  fresh doer for that task, same route. Without the missing piece, a second
+  doer fails the same way.
+- `BLOCKED` — the doer's own attempts failed (measured). Spawn ONE fresh doer
+  for the task with `--attempt 2` when that raises the tier (`route` says
+  so in `why`); already at the top tier, or blocked again → the task stays
+  `blocked` (rules below).
+
+No `STATUS:` line (a specialist from before 0.21 — `jdi-cli specialists
+upgrade` brings the new return contract): count as below.
 
 Count the task statuses mechanically — do not re-read PLAN.md or SUMMARY.md
 (the doers' return lines already say what happened):
@@ -246,11 +286,11 @@ resolved, a crash), and an empty failures list is not a pass.
 
 (A stack with nothing changed in its scope is SKIPPED; with
 `economy.parallel_gates` the stacks run at the same time.) `WAVE_RC` = 5: the
-environment is not ready (a stack's `requires`) — STOP and show the file, no
-doer can fix it. `WAVE_RC` = 1 → ONE fresh doer with
-`mode=fix_wave failures=.jdi/cache/wave-failures.txt`, then the suite once
-more. Still failing → a NON-FINAL wave STOPS before the next wave (phase
-`partial`, skip to Step 9); after the FINAL wave the phase goes on to
+environment is not ready (a stack's `requires`, a command not found, a full
+disk) — STOP and show the file, no doer can fix it. `WAVE_RC` = 1 → ONE fresh doer with
+`mode=fix_wave failures=.jdi/cache/wave-failures.txt` (routed with
+`--attempt 2`), then the suite once more. Still failing → a NON-FINAL wave
+STOPS before the next wave (phase `partial`, skip to Step 9); after the FINAL wave the phase goes on to
 `/jdi-verify`, whose own fix pass (Step 4a') tries once more before any
 reviewer.
 

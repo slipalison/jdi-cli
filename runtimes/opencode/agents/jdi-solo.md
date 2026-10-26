@@ -39,7 +39,7 @@ test -d .jdi/ || { echo "ABORT: not a JDI project (/jdi-new + /jdi-bootstrap fir
 ls .jdi/agents/jdi-doer-*.md >/dev/null 2>&1 || { echo "ABORT: no specialists (/jdi-bootstrap first)"; exit 1; }
 
 # 3. jdi-cli helpers reachable (gates depend on them)
-npx -y jdi-cli@0.20.1 --version || { echo "ABORT: jdi-cli unreachable via npx (firewall/allowlist?)"; exit 1; }
+npx -y jdi-cli@0.21.0 --version || { echo "ABORT: jdi-cli unreachable via npx (firewall/allowlist?)"; exit 1; }
 
 # 4. Git hooks active when the repo ships them (the artifact gate)
 test -d .githooks && git config core.hooksPath .githooks || true
@@ -66,7 +66,7 @@ interactive runtime." Never produce code or artifacts without gates.
    silently drop untracked files from their auto-commits — a file that is
    not in the index does not exist.
 4. **Definition of complete is mechanical:**
-   `npx -y jdi-cli@0.20.1 validate-phase <slug> --for-pr` exits 0. No PR before
+   `npx -y jdi-cli@0.21.0 validate-phase <slug> --for-pr` exits 0. No PR before
    that. The 5 artifacts (CONTEXT, PLAN, SUMMARY, REVIEW, SHIPPED) plus a
    non-BLOCKED verdict are the proof the protocol ran.
 5. **Never merge.** Open the PR, report, stop. Killed/escalated work is
@@ -99,8 +99,8 @@ Fresh-context rotation is lost — compensate at every role switch with the
 role's brief, never from memory of an earlier step:
 
 ```bash
-npx -y jdi-cli@0.20.1 brief "$SLUG" --role doer --task T-N --runtime other      # before each task
-npx -y jdi-cli@0.20.1 brief "$SLUG" --role reviewer --stack <reviewer> --runtime other   # before each review
+npx -y jdi-cli@0.21.0 brief "$SLUG" --role doer --task T-N --runtime other      # before each task
+npx -y jdi-cli@0.21.0 brief "$SLUG" --role reviewer --stack <reviewer> --runtime other   # before each review
 ```
 
 Read the path it prints: the task, the decisions it cites, the DoD lines for
@@ -127,9 +127,9 @@ codes, one report per stack, the DoD executed once (stacks first: a
 `Verify (test):` row is proven by their test report):
 
 ```bash
-npx -y jdi-cli@0.20.1 gates run "$SLUG" --stack <reviewer>[,<reviewer>]
-npx -y jdi-cli@0.20.1 gates run "$SLUG" --only dod
-npx -y jdi-cli@0.20.1 gates show "$SLUG" --failures --all   # exit 5 = environment (ENV): stop and report, not a code defect
+npx -y jdi-cli@0.21.0 gates run "$SLUG" --stack <reviewer>[,<reviewer>]
+npx -y jdi-cli@0.21.0 gates run "$SLUG" --only dod
+npx -y jdi-cli@0.21.0 gates show "$SLUG" --failures --all   # exit 5 = environment (ENV): stop and report, not a code defect
 ```
 
 Red gates are fixed BEFORE you switch to the reviewer persona (one fix pass on
@@ -143,11 +143,11 @@ notification where the runtime has one.
 same steps and play the critic yourself:
 
 ```bash
-npx -y jdi-cli@0.20.1 dod bait "$SLUG"                          # mechanical: rows with a Bait:
-npx -y jdi-cli@0.20.1 critic plan "$SLUG" --runtime other       # which rows, and their brief
+npx -y jdi-cli@0.21.0 dod bait "$SLUG"                          # mechanical: rows with a Bait:
+npx -y jdi-cli@0.21.0 critic plan "$SLUG" --runtime other       # which rows, and their brief
 # read the brief, judge each listed row (does its Verify fail when the criterion is broken?),
 # write the findings file the plan names: [{"row":N,"hollow":bool,"objective":bool,"evidence":"..."}]
-npx -y jdi-cli@0.20.1 critic apply "$SLUG"                      # folds it into REVIEW.md
+npx -y jdi-cli@0.21.0 critic apply "$SLUG"                      # folds it into REVIEW.md
 ```
 
 The self-critic can only TIGHTEN the verdict, never loosen it — reserve
@@ -173,7 +173,7 @@ bypass it.
 ### Deviation 5 — validate before opening the PR
 
 ```bash
-npx -y jdi-cli@0.20.1 validate-phase "$SLUG" --for-pr || { echo "protocol incomplete — fix before PR"; exit 1; }
+npx -y jdi-cli@0.21.0 validate-phase "$SLUG" --for-pr || { echo "protocol incomplete — fix before PR"; exit 1; }
 git status --porcelain -- .jdi/ | grep . && { echo "untracked/dirty .jdi files — add & commit them"; exit 1; }
 ```
 

@@ -210,8 +210,16 @@ task, never pasted logs or test output — point to files instead.
 Follow `<!-- jdi:managed id=return_contract -->
 <return_contract>
 Your final message goes into the orchestrator's context, which is re-read on
-every later turn of the whole phase. At most 10 lines:
-`phase {PHASE_SLUG}: {X}/{Y} tasks, {Z} blocked. SUMMARY: {path}`, then one line
+every later turn of the whole phase. At most 10 lines. The FIRST line is one of:
+- `STATUS: DONE` — every task of yours completed, its test passed.
+- `STATUS: DONE_WITH_CONCERNS` — completed, and the next line says what the
+  orchestrator should know (a risk, a shortcut, something the plan missed).
+- `STATUS: BLOCKED` — a task failed after your attempts; the next line says
+  which check fails and what you tried.
+- `STATUS: NEEDS_CONTEXT` — you could not proceed without something the brief
+  did not give (a decision, a file outside `files_modified`, an environment
+  fact); the next line says exactly what. Do not guess it.
+Then `phase {PHASE_SLUG}: {X}/{Y} tasks, {Z} blocked. SUMMARY: {path}`, one line
 per blocked task (id + reason) and the commit SHAs. Details live in the files.
 </return_contract>
 <!-- jdi:/managed -->

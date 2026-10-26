@@ -211,9 +211,25 @@ function onToolResults(st, o, content) {
   for (const x of content) {
     if (x?.type !== 'tool_result') continue;
     const tu = st.agent.toolUses.get(x.tool_use_id);
-    if (tu) tu.size = resultSize(x.content);
+    if (tu) {
+      tu.size = resultSize(x.content);
+      tu.endTs = o.timestamp; // `cost --timeline`: how long the tool held the agent
+    }
     if (o.toolUseResult?.agentId) st.agent.spawned.push({ agentId: o.toolUseResult.agentId, toolUseId: x.tool_use_id });
   }
+}
+
+// A user turn with text: a person, or a background task's end delivered as
+// a user turn (no human in it).
+function onUserText(st, o, t) {
+  if (t.trimStart().startsWith('<task-notification>')) {
+    st.pending.bgDone = true;
+    if (o.timestamp) st.agent.notifications.push(o.timestamp);
+    return;
+  }
+  if (st.agent.kind === 'subagent') st.agent.resumes++;
+  st.pending.userText = true;
+  if (o.timestamp) st.agent.prompts.push(o.timestamp);
 }
 
 function onUser(st, o) {
@@ -222,10 +238,7 @@ function onUser(st, o) {
   if (o.isMeta) return;
   const t = textOf(c);
   if (st.agent.prompt === null && st.agent.kind === 'subagent') st.agent.prompt = t;
-  else if (t && !t.startsWith('<local-command') && !t.startsWith('<command-name>')) {
-    if (st.agent.kind === 'subagent') st.agent.resumes++;
-    st.pending.userText = true;
-  }
+  else if (t && !t.startsWith('<local-command') && !t.startsWith('<command-name>')) onUserText(st, o, t);
 }
 
 function toolKind(name, input) {
@@ -247,7 +260,7 @@ function onAssistant(st, o) {
   const callIndex = agent.callIndexById.has(id) ? agent.callIndexById.get(id) : agent.calls.length - 1;
   for (const c of m.content || []) {
     if (c?.type !== 'tool_use') continue;
-    const tu = { name: c.name, input: c.input || {}, size: 0, callIndex };
+    const tu = { name: c.name, input: c.input || {}, size: 0, callIndex, startTs: o.timestamp, endTs: null };
     agent.toolUses.set(c.id, tu);
     st.pending.tool = toolKind(c.name, tu.input);
   }
@@ -267,6 +280,8 @@ function parseAgent(records, kind) {
     toolUses: new Map(),
     callIndexById: new Map(),
     spawned: [],
+    prompts: [], // timestamps of real user prompts (human turns)
+    notifications: [], // timestamps of background-task notifications
     firstTs: null,
     lastTs: null,
   };
@@ -382,12 +397,16 @@ function loadMainAgents(dir, seenUuid) {
   return out;
 }
 
-function loadSubagents(dir) {
+// A long-lived session can carry copies of earlier sessions' subagent
+// transcripts (same agent id): each agent counts once.
+function loadSubagents(dir, seenAgent = new Set()) {
   const out = [];
   for (const sess of fs.readdirSync(dir)) {
     const sub = path.join(dir, sess, 'subagents');
     if (!fs.existsSync(sub)) continue;
     for (const f of fs.readdirSync(sub).filter((x) => x.endsWith('.jsonl'))) {
+      if (seenAgent.has(f)) continue;
+      seenAgent.add(f);
       const meta = core.readJson(path.join(sub, f.replace(/\.jsonl$/, '.meta.json')), {}) || {};
       const a = parseAgent(readJsonl(path.join(sub, f)), 'subagent');
       a.id = f.replace(/^agent-|\.jsonl$/g, '');
@@ -431,19 +450,23 @@ function finishAgent(a, { inRange, typeByAgentId, allSlugs, slugs }) {
   a.misses = cacheMisses(a);
 }
 
-function analyze({ projectDir, claudeProjects, since, until, siblings = true }) {
+// Every agent of the project's transcripts, parsed and attributed (role,
+// phase), with at least one model call in the range.
+function loadAgents({ projectDir, claudeProjects, since, until, siblings = true }) {
   const dirs = sessionDirs(claudeProjects, projectDir, siblings);
   const slugs = core.knownSlugs(projectDir);
   const inRange = (ts) => (!since || !ts || ts >= since) && (!until || !ts || ts <= until);
   const seenUuid = new Set();
-  const agents = dirs.flatMap((dir) => [...loadMainAgents(dir, seenUuid), ...loadSubagents(dir)]);
+  const seenAgent = new Set();
+  const agents = dirs.flatMap((dir) => [...loadMainAgents(dir, seenUuid), ...loadSubagents(dir, seenAgent)]);
   const ctx = { inRange, typeByAgentId: spawnTypes(agents), allSlugs: [...new Set([...slugs, ...slugsFromPrompts(agents)])], slugs };
   for (const a of agents) finishAgent(a, ctx);
-  return summarize(
-    agents.filter((a) => a.calls.length > 0),
-    dirs,
-    projectDir,
-  );
+  return { dirs, agents: agents.filter((a) => a.calls.length > 0), inRange };
+}
+
+function analyze(opts) {
+  const { dirs, agents } = loadAgents(opts);
+  return summarize(agents, dirs, opts.projectDir);
 }
 
 // Relative paths, or absolute paths inside the project or one of its sibling
@@ -726,6 +749,7 @@ function parseArgs(argv) {
     const v = () => argv[++i];
     if (a === '--json') o.json = true;
     else if (a === '--targets') o.targets = true;
+    else if (a === '--timeline') o.timeline = true;
     else if (a === '--no-worktrees') o.siblings = false;
     else if (a === '--project') o.project = v();
     else if (a === '--claude-dir') o.claudeDir = v();
@@ -737,10 +761,21 @@ function parseArgs(argv) {
   return o;
 }
 
+// `--timeline`: where the clock went instead of where the tokens went.
+function timelineCmd(o, projectDir, claudeProjects) {
+  const tl = require('./timeline');
+  const { dirs, agents, inRange } = loadAgents({ projectDir, claudeProjects, since: o.since, until: o.until, siblings: o.siblings });
+  const report = tl.timeline(agents, isGateCommand, (ts) => !ts || inRange(ts));
+  if (o.json) process.stdout.write(JSON.stringify({ dirs, ...report }, null, 2) + '\n');
+  else process.stdout.write((dirs.length ? tl.render(report) : `no transcripts under ${claudeProjects} for ${projectDir}`) + '\n');
+  return 0;
+}
+
 function main(argv) {
   const o = parseArgs(argv);
   const claudeProjects = o.claudeDir || path.join(os.homedir(), '.claude', 'projects');
   const projectDir = path.resolve(o.project);
+  if (o.timeline) return timelineCmd(o, projectDir, claudeProjects);
   const rep = analyze({ projectDir, claudeProjects, since: o.since, until: o.until, siblings: o.siblings });
   const cfg = core.loadConfig(projectDir);
   const targets = o.targets ? evaluateTargets(rep, cfg.economy?.targets) : null;
@@ -754,4 +789,4 @@ function main(argv) {
   return 0;
 }
 
-module.exports = { analyze, evaluateTargets, render, main, encodeProjectPath, instructionKey, roleOf, weighted, usageOf, shellPaths, artifactRefs, DEFAULT_TARGETS };
+module.exports = { analyze, loadAgents, isGateCommand, evaluateTargets, render, main, encodeProjectPath, instructionKey, roleOf, weighted, usageOf, shellPaths, artifactRefs, DEFAULT_TARGETS };

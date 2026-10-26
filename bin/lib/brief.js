@@ -107,6 +107,9 @@ function parseTasks(planText) {
       files,
       specialist: bareName(field(/\*\*Specialist:\*\*\s*([^\s·]+)/)),
       status: field(/\*\*Status:\*\*\s*([^\s·]+)/),
+      // 0.21: what the work is and how heavy — `jdi-cli route` picks the model
+      kind: field(/\*\*Kind:\*\*\s*([a-z-]+)/),
+      weight: field(/\*\*Weight:\*\*\s*(light|standard|deep)\b/),
     };
   });
 }

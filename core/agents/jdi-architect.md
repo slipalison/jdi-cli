@@ -311,15 +311,24 @@ These routes will be navigated by gate 7 in mobile (375x667) and desktop (1280x7
 
 ### S3.5: Model per role (asked once, stored in `.jdi/config.json`)
 
-AskUserQuestion: "Which model should each JDI role use?"
-- `Inherit the session model (default)` → leave `models` as `inherit`.
-- `Cheaper doer` → `models.doer: "sonnet"`, everything else `inherit`.
-- `Custom` → ask per role (`asker`, `planner`, `doer`, `reviewer`, `critic`).
+Since 0.21 the model AND the reasoning effort of each spawn come from
+`.jdi/config.json` `routing` (`jdi-cli route`): a light task gets a cheap
+model, a deep or sensitive one the strong model, a fix after a failed check
+goes one tier up, and reviewers never go below `standard`. AskUserQuestion:
+"How should JDI pick the model of each agent?"
+- `Routing, base profile (default)` → `routing.mode: "on"`, `profile: "base"`
+  (cheap = haiku/low, standard = sonnet/medium, strong = opus/high).
+- `Routing, economy` → `profile: "economy"` (never the most expensive model).
+- `Routing, quality` → `profile: "quality"` (standard work on the strong model).
+- `Fixed model per role` → `routing.mode: "off"` and ask per role (`asker`,
+  `planner`, `doer`, `reviewer`, `critic`) into `models` (`inherit` = the
+  session's model) — the behavior before 0.21.
 
-Write the answer into `.jdi/config.json` `models` (create the key if absent).
-The commands pass it as the Agent `model` parameter at dispatch on runtimes
-that support it; nothing is pinned in the agent files. Tokens do not change
-with the model — the price per token does, and so can quality: say so.
+Write the answer into `.jdi/config.json` (create the key if absent). The
+commands pass `model` and `effort` as Agent parameters at dispatch on
+runtimes that support them; nothing is pinned in the agent files. Tokens do
+not change with the model — the price per token does, and so can quality:
+say so.
 
 ### S4: Show preview of what will be generated
 
@@ -415,9 +424,10 @@ Read `.jdi/cache/reviewer-specialist.md` (written in S1). Replace placeholders:
 - If present: replace in frontmatter `runtime_overrides.opencode.model:` of doer and reviewer
 - If absent: DELETE that `opencode` `model:` line — the specialists inherit the
   runtime's configured default (never pin a model the user did not choose).
-- Claude Code: the specialists carry no `model:` line. The model per role is a
-  project choice in `.jdi/config.json` `models` (`inherit` by default), applied
-  by the commands at dispatch time — ask in S3.5.
+- Claude Code: the specialists carry no `model:` line. The model (and effort)
+  of each spawn is a project choice in `.jdi/config.json` — `routing`
+  (`jdi-cli route`) or, with routing off, `models` per role — applied by the
+  commands at dispatch time; ask in S3.5.
 
 For each `{X_COMMAND}` (build/test/coverage/lint), also generate `{X_COMMAND_PS}` — PowerShell equivalent. Common mapping:
 
@@ -457,6 +467,7 @@ long suite. Format: `npx -y {{JDI_CLI}} template stack`. Write
   "coverage_runs_tests": <true when the coverage command runs the whole suite>,
   "lint_blocks": <true when SQ6 / the conventions make lint failures blocking>,
   "timeout_min": 30,
+  "idle_timeout_s": 900,
   "evidence_only": [<E2E / real-login commands, e.g. "npm run e2e" — never executed by the runner>]
 }
 ```

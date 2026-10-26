@@ -109,7 +109,7 @@ function findings(text) {
 // `review merge` after them.
 // --------------------------------------------------------------------------
 
-const ORCH_SEGMENTS = /^## (DoD Critic|Loop override)\b/;
+const ORCH_SEGMENTS = /^## (DoD Critic|Loop override|Read-only check)\b/;
 
 // Split REVIEW.md into `## Reviewer: <name>` segments (each runs until the
 // next reviewer segment or an orchestrator segment).
@@ -311,15 +311,80 @@ function mergeReview(phase, root = process.cwd()) {
     fs.writeFileSync(reviewFile, head + fresh.join('\n\n') + '\n');
     fs.rmSync(segDir(root, phase), { recursive: true, force: true });
   }
+  if (!fs.existsSync(reviewFile)) throw new core.JdiError(`${phase.dir}/REVIEW.md not found — the reviewers did not write it`, 2);
+  const readOnly = readOnlyCheck(root, phase, reviewFile, st);
   const text = core.readIf(reviewFile);
-  if (text === null) throw new core.JdiError(`${phase.dir}/REVIEW.md not found — the reviewers did not write it`, 2);
-  if (!fs.existsSync(carryFile)) return { carried: 0, verified: stamp(reviewFile, root) };
+  if (!fs.existsSync(carryFile)) return { carried: 0, readOnly, verified: stamp(reviewFile, root) };
   const carried = segments(fs.readFileSync(carryFile, 'utf8'));
   const present = new Set(segments(text).map((x) => x.name));
   const add = carried.filter((x) => !present.has(x.name));
   fs.writeFileSync(reviewFile, text.replace(STAMP_RE, '').trimEnd() + '\n\n' + add.map((x) => x.text).join('\n\n') + '\n');
   fs.rmSync(carryFile, { force: true });
-  return { carried: add.length, reviewers: carried.map((x) => x.name), verified: stamp(reviewFile, root) };
+  return { carried: add.length, reviewers: carried.map((x) => x.name), readOnly, verified: stamp(reviewFile, root) };
+}
+
+// --------------------------------------------------------------------------
+// Read-only check (0.21): reviewers and the critic only read. `review
+// baseline`, right before they are spawned, records HEAD and the working tree
+// outside .jdi/; `review merge` compares. A commit during the review blocks
+// (unreviewed code entered the branch); changed files are a warning (a
+// reviewer may have edited code — with reviewers in parallel, silently).
+// --------------------------------------------------------------------------
+
+// Every file that differs from HEAD (staged, unstaged, untracked) outside
+// .jdi/, with the hash of its content ('-' = deleted).
+function treeSnapshot(root) {
+  const tracked = core.git(['-c', 'core.quotePath=false', 'diff', '--name-only', 'HEAD'], root);
+  const untracked = core.git(['-c', 'core.quotePath=false', 'ls-files', '--others', '--exclude-standard'], root);
+  if (tracked.code !== 0 || untracked.code !== 0) return null;
+  const crypto = require('node:crypto');
+  const out = {};
+  for (const file of `${tracked.stdout}\n${untracked.stdout}`.split('\n').filter(Boolean)) {
+    if (file.startsWith(`${core.JDI_DIR}/`)) continue;
+    const bytes = core.readIf(path.join(root, file));
+    out[file] = bytes === null ? '-' : crypto.createHash('sha256').update(bytes).digest('hex');
+  }
+  return out;
+}
+
+function baseline(phase, root = process.cwd()) {
+  const st = core.readJson(stateFile(root, phase), null) || { reviewers: {} };
+  st.readonly = { head: core.git(['rev-parse', 'HEAD'], root).stdout, tree: treeSnapshot(root), at: new Date().toISOString() };
+  core.writeFileEnsured(stateFile(root, phase), JSON.stringify(st, null, 2) + '\n', root);
+  return { baseline: st.readonly.head, dirty: Object.keys(st.readonly.tree || {}).length };
+}
+
+// Product files committed between the baseline and HEAD (.jdi/ does not
+// count: a harness may checkpoint the review artifacts as they are written).
+function committedSince(root, base) {
+  const r = core.git(['-c', 'core.quotePath=false', 'diff', '--name-only', `${base}..HEAD`], root);
+  if (r.code !== 0) return ['(history rewritten since the baseline)'];
+  return r.stdout.split('\n').filter((f) => f && !f.startsWith(`${core.JDI_DIR}/`));
+}
+
+function readOnlyCheck(root, phase, reviewFile, st) {
+  const b = st.readonly;
+  if (!b?.head || !b.tree) return null; // no baseline: an older orchestrator
+  // one baseline, one check: a later merge needs a fresh `review baseline`
+  st.readonly = null;
+  core.writeFileEnsured(stateFile(root, phase), JSON.stringify(st, null, 2) + '\n', root);
+  const head = core.git(['rev-parse', 'HEAD'], root).stdout;
+  const committed = head === b.head ? [] : committedSince(root, b.head);
+  const now = treeSnapshot(root) || {};
+  const changed = [...new Set([...Object.keys(now), ...Object.keys(b.tree)])].filter((f) => now[f] !== b.tree[f]).sort(core.compareStr);
+  if (committed.length) return flagReadOnly(reviewFile, ['**Verdict:** BLOCKED', '', '### Blockers', `- [defect] a commit entered the branch during the review (${b.head.slice(0, 10)} -> ${head.slice(0, 10)}: ${listOf(committed)}): a read-only role committed — review or revert it, then verify again`], { headChanged: true, changed: committed });
+  // no product file committed: HEAD has the same product files as the
+  // baseline, so the two snapshots compare as they are
+  if (!changed.length) return { clean: true };
+  return flagReadOnly(reviewFile, ['**Verdict:** APPROVED_WITH_WARNINGS', '', '### Warnings', `- files changed while the reviewers ran (they only read — check who wrote them): ${listOf(changed)}`], { headChanged: false, changed });
+}
+
+const listOf = (files) => files.slice(0, 10).join(', ') + (files.length > 10 ? ', ...' : '');
+
+function flagReadOnly(reviewFile, body, result) {
+  const lines = ['', '## Read-only check', '', ...body];
+  fs.writeFileSync(reviewFile, (core.readIf(reviewFile) || '').replace(STAMP_RE, '').trimEnd() + '\n' + lines.join('\n') + '\n');
+  return { clean: false, ...result };
 }
 
 // The commit the review describes: the stamp written by `review merge`;
@@ -435,18 +500,19 @@ function main(argv) {
   const id = rest.find((a, i) => !a.startsWith('--') && !['--max-chars', '--reviewers', '--stack'].includes(rest[i - 1]));
   const si = rest.indexOf('--stack');
   const scope = { stack: si === -1 ? null : rest[si + 1], dodOwner: rest.includes('--dod-owner') };
-  if (!id) throw new core.JdiError('usage: jdi review <verdict|blockers|plan|merge|fresh|from-gates> <phase> [--json]', 1);
+  if (!id) throw new core.JdiError('usage: jdi review <verdict|blockers|plan|merge|fresh|from-gates|baseline> <phase> [--json]', 1);
   const phase = core.resolvePhase(id);
   if (sub === 'verdict') return verdictCmd(phase, json);
   if (sub === 'blockers') return blockersCmd(phase, json, maxChars, scope);
   if (sub === 'plan') return planCmd(phase, rest);
   if (sub === 'merge') return printJson(mergeReview(phase), 0);
   if (sub === 'from-gates') return printJson(fromGates(phase), 0);
+  if (sub === 'baseline') return printJson(baseline(phase), 0);
   if (sub === 'fresh') {
     const r = staleness(phase);
     return printJson(r, r.stale ? 3 : 0);
   }
-  throw new core.JdiError('usage: jdi review <verdict|blockers|plan|merge|fresh|from-gates> <phase>', 1);
+  throw new core.JdiError('usage: jdi review <verdict|blockers|plan|merge|fresh|from-gates|baseline> <phase>', 1);
 }
 
-module.exports = { main, verdictOf, manualPending, findings, classify, segments, scopedText, planReview, mergeReview, fromGates, staleness, RANK };
+module.exports = { main, verdictOf, manualPending, findings, classify, segments, scopedText, planReview, mergeReview, fromGates, baseline, staleness, RANK };

@@ -37,7 +37,7 @@ Priority order: most advanced artifact wins. `ROADMAP.md` carries no status line
 ```
 .jdi/
 +-- PROJECT.md           vision + stack + code-design LOCKED. Immutable after /jdi-new. TRACKED
-+-- config.json          token budgets, models per role, thresholds. Editable. TRACKED
++-- config.json          token budgets, model+effort routing, thresholds. Editable. TRACKED
 +-- stacks/              gate commands per reviewer, run by `jdi-cli gates run` (0.17+)   TRACKED
 |   +-- {slug}.json
 +-- known-errors/        one known error per file: stage, globs, mechanized_by (0.17+)  TRACKED
@@ -264,7 +264,28 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
     "split_max_dod_rows": 12,
     "split_max_areas": 3,
     "split_max_criteria": 8,
+    "direct_max_dod_rows": 3,
+    "direct_max_criteria": 3,
     "sensitive_globs": []
+  },
+  "routing": {
+    "mode": "on",
+    "profile": "base",
+    "tiers": {
+      "cheap": { "model": "haiku", "effort": "low" },
+      "standard": { "model": "sonnet", "effort": "medium" },
+      "strong": { "model": "opus", "effort": "high" }
+    },
+    "profiles": { "base": {}, "economy": { "tiers": { "...": "..." } }, "quality": { "tiers": { "...": "..." } } },
+    "rules": [
+      { "role": "doer", "if": ["sensitive"], "tier": "strong" },
+      { "role": "doer", "if": ["deep"], "tier": "strong" },
+      { "role": "doer", "if": ["light"], "tier": "cheap" },
+      { "role": "reviewer", "if": ["sensitive"], "tier": "strong" },
+      { "role": "planner", "tier": "strong" }
+    ],
+    "floors": { "reviewer": "standard", "critic": "standard" },
+    "escalate": true
   },
   "compaction": {
     "archive_after": 5
@@ -298,11 +319,14 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
 - `economy.parallel_gates` — `gates run --stack a,b` runs the stacks at the same time (off by default: it adds their CPU/RAM together; turn it on when the machine has room).
 - Stack keys (0.20): `gates.audit` (dependency advisories, never reused, runs even when the build fails), `requires` (`env`, `commands`, `disk_free_mb`, `check` — unmet = `ENV`, exit 5, nothing runs and the loop does not count a defect), `test_report` (JUnit path(s)/globs the test or coverage gate writes; proves the `Verify (test):` DoD rows without a second run).
 - `sizing.split_max_dod_rows` / `split_max_areas` / `split_max_criteria` — `jdi-cli size --intake` says `split` above any of them; `/jdi-discuss` offers the split, `/jdi-issue` splits.
+- `sizing.direct_max_dod_rows` / `direct_max_criteria` (0.21) — `jdi-cli size --direct` says `direct` when CONTEXT.md is within both, has no evidence row, names one area and no sensitive path: `/jdi-issue` writes a one-task PLAN.md itself instead of spawning the planner. Every gate runs as usual.
+- Stack keys (0.21): `idle_timeout_s` (absent or `0` = off; the template writes 900) — a gate command with no output for that long is stalled: the watchdog kills its whole process tree and the gate FAILs with that reason first in its excerpt. `timeout_min` now kills the whole tree too, and what the shell leaves running when it exits is ended. `ENV` (not a code failure) comes from `requires`, a command not found (exit 127) or a full disk in the output.
+- `routing` (0.21) — model AND reasoning effort of each spawn, by rule (`jdi-cli route <phase> --role <r> [--task T-N] [--attempt N]`). `tiers` maps cheap / standard / strong to `{model, effort}`; `profile` picks an override set from `profiles` (`economy`: never the most expensive model; `quality`: standard work on the strong model). `rules`, first match wins: `{role, if: [conditions], tier}` — conditions of a task are its `Weight:` (`light`, `standard`, `deep`), `kind:<Kind:>` and `sensitive` (a file in `sizing.sensitive_globs`); `not <c>` negates; without `--task` the phase's heaviest task counts. `floors`: the lowest tier per role (reviewers and the critic never go cheap — cheap models miss real defects). `escalate`: attempt N (a fix after a measured failure: a red gate, a BLOCKED review, a doer that returned `STATUS: BLOCKED`) goes N-1 tiers up, to strong at most — never on an agent's own claim. `mode: "off"` (the default for projects created before 0.21) keeps `models.<role>`.
 - `loop.record_commits` — `per_round` (default: `/jdi-verify` commits REVIEW.md each round) or `at_ship` (REVIEW.md, `reviews/round-N.md` and LOOP.md stay on disk and go into the ship commit; product commits stay atomic).
 - `loop.non_product_globs` — files that do not count as a product change for the ralph loop's convergence rule (`.jdi/**` never counts). E.g. `["docs/**", "*.md"]`.
 - `orchestration.max_resets_autonomous` — reset cap of the loop under `/jdi-issue` (no human at the gate); reaching it kills the loop.
 - `chars_per_token` — per language, used to estimate tokens. Measured: Claude tokenizes pt-BR JDI artifacts at 2.0-2.4 chars/token (the old "4 chars/token" undercounted twice).
-- `models.<role>` — `asker`, `planner`, `doer`, `reviewer`, `critic`: `inherit` (the session's model) or a model the user chose; the commands pass it as the Agent `model` parameter where the runtime supports it. Tokens do not change with the model; the price per token does.
+- `models.<role>` — `asker`, `planner`, `doer`, `reviewer`, `critic`: `inherit` (the session's model) or a model the user chose; used when `routing.mode` is off (`jdi-cli route` returns it, with no effort). The commands pass it as the Agent `model` parameter where the runtime supports it. Tokens do not change with the model; the price per token does.
 - `compaction.archive_after` — how many shipped phases `jdi-cli phases archive` keeps in `.jdi/phases/` (default for `--keep`); older shipped phases move to `.jdi/archive/`, except those still referenced outside their folder (`--rewrite-refs` updates the references instead). Never run by `/jdi-ship`. `0` disables it.
 - `coverage_min` — overridable per PROJECT.md. Reviewer uses it.
 - `orchestration.mode` — `standard` (default) or `enhanced`. Host-neutral flag: when `enhanced` AND the host can orchestrate sub-agents, commands MAY run optional multi-agent layers (advisory critics); otherwise they degrade to the standard path. Off-path is byte-identical. Capability boolean, NOT a token ledger.
@@ -312,7 +336,7 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
 
 **Lifespan:** life of the project. Versioned in git.
 
-**Read by:** `/jdi-do`, `/jdi-plan`, `/jdi-verify`, `jdi-cli phases archive` (compaction). Specialists (doer/reviewer) read `coverage_min`. `orchestration.mode` is read by `/jdi-verify` (and future consumers) at the top-level turn; sub-agents only see it through this file, never through the host session.
+**Read by:** `/jdi-do`, `/jdi-plan`, `/jdi-verify`, `jdi-cli phases archive` (compaction), `jdi-cli route` (`routing`, `models`, `sizing.sensitive_globs`). Specialists (doer/reviewer) read `coverage_min`. `orchestration.mode` is read by `/jdi-verify` (and future consumers) at the top-level turn; sub-agents only see it through this file, never through the host session.
 
 **Written by:** `/jdi-new` and `/jdi-adopt` (Step 4b — orchestration opt-in, default determined at the top-level turn where the host capability signal is visible).
 
