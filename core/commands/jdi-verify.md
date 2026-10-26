@@ -115,8 +115,9 @@ fi
 `GRUN_RC` other than 0, 1 or 5 (no stack could be resolved, a crash): STOP —
 the gates did not run, and an empty failures list is not a pass.
 `GATES_RC` = 5 (status `ENV`: a stack's `requires` — env var, command, free
-disk, its `check` — is not met, or a `Verify (test):` row has no report to
-read): STOP and show `.jdi/cache/gate-failures.txt`. The environment is not a
+disk, its `check` — is not met, a `Verify (test):` row has no report to
+read, or a command failed for the machine, not the code: the command was not
+found, or the disk was full): STOP and show `.jdi/cache/gate-failures.txt`. The environment is not a
 code defect: no doer, no reviewer, no loop round until it is fixed (under
 `/jdi-loop`: the loop pauses, nothing is recorded).
 
@@ -129,6 +130,23 @@ loop: real logins lock accounts — then
 `npx -y {{JDI_CLI}} evidence record "$PHASE_SLUG" --row N --scope iteration --artifact <report>`.
 `fresh` = the last run still holds; do not run it again.
 
+Every gate command runs under a watchdog: on its `timeout_min`, or after the
+stack's `idle_timeout_s` with no output (when set), the WHOLE process tree is
+killed — no test runner left holding a lock after the gate "ended" — and the
+gate FAILs with that reason first in its excerpt (a deadlock is a defect a
+doer can look at).
+
+<!-- jdi:only copilot,opencode,antigravity,junie -->
+A runtime whose shell call is cut at a fixed limit (a suite longer than it):
+add `--detach` to each `gates run` above — it returns at once with
+`gates job <id> started` — and right after it
+`npx -y {{JDI_CLI}} gates wait "$PHASE_SLUG" --job <id>` (add `--timeout <s>`
+below your runtime's shell limit; default ~9 min). `wait` returns the run's
+own exit code (`GRUN_RC`), or 75 while it is still running: call it again.
+Wait for the stacks run BEFORE starting the DoD run (it reads their test
+reports). Never a `sleep` loop.
+<!-- jdi:end -->
+
 A gate that PASSed on exactly the same inputs (product files, the files a DoD
 row names, the command, the stack config) is not run again: its line says
 `reused <key>: passed on <commit> at <time>` (`economy.gate_cache`; a FAIL is
@@ -140,7 +158,8 @@ spawning reviewers and the critic now buys a BLOCKED verdict and a whole loop
 round. ONE fix pass first: a FRESH doer per stack with failures (the doer
 paired with that reviewer), each with its own list —
 `npx -y {{JDI_CLI}} gates show "$PHASE_SLUG" --failures --stack <stack> > .jdi/cache/gate-failures-<stack>.txt`
-and `mode=fix_wave failures=.jdi/cache/gate-failures-<stack>.txt`; the DoD
+and `mode=fix_wave failures=.jdi/cache/gate-failures-<stack>.txt` (routed
+with `route ... --role doer --attempt 2`: a measured failure); the DoD
 failures (`gates show "$PHASE_SLUG" --failures`, the `dod` report) go to the
 first stack's doer. A fix that committed changes what `review plan` decided
 (a carried reviewer's scope may now have changed): run Step 4 again from
@@ -194,8 +213,14 @@ CRIT=$(npx -y {{JDI_CLI}} critic plan "$PHASE_SLUG" --runtime claude)   # JSON: 
 ```
 
 **4d. Spawn — the reviewers and the critic together.** The gates already ran
-(4a), so the agents only read and judge: nothing they do can collide. Spawn
-them in ONE message, all at once, and wait for every one:
+(4a), so the agents only read and judge: nothing they do can collide. Right
+before the spawn, record what the tree looks like:
+
+```bash
+npx -y {{JDI_CLI}} review baseline "$PHASE_SLUG"   # HEAD + the hash of every changed file
+```
+
+Then spawn them in ONE message, all at once, and wait for every one:
 
 - each reviewer of `$RUN`: `prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, mode=verify, reviewer_segment=$REVIEWER, dod_owner=<true for the first>, brief=$BRIEF_R"`,
   plus `segment_file=<RPLAN.segments[$REVIEWER]>` when `RPLAN.parallel` is true;
@@ -217,10 +242,12 @@ the critic still goes with the first of them. A runtime that cannot spawn
 in parallel runs them in sequence; the order does not change the result.
 
 <!-- jdi:only claude -->
-If `.jdi/config.json` sets `models.reviewer` / `models.critic` to anything
-other than `inherit`, pass it as the Agent `model` parameter. Never
-re-dispatch work to a reviewer that already returned (SendMessage): spawn a
-fresh one.
+Model and effort: `npx -y {{JDI_CLI}} route "$PHASE_SLUG" --role reviewer --json`
+(and `--role critic` for the critic) → its `model` and `effort` as the Agent
+parameters (a `null` one left out). Reviewers and the critic never go below
+their `floors` tier (cheap models miss real defects); the reviewers of a
+phase that touches `sizing.sensitive_globs` get the strong one. Never re-dispatch work to a
+reviewer that already returned (SendMessage): spawn a fresh one.
 <!-- jdi:end -->
 
 Each reviewer scopes its gates to its `file_glob` (from frontmatter
@@ -242,6 +269,11 @@ proof):
 npx -y {{JDI_CLI}} review merge "$PHASE_SLUG"
 npx -y {{JDI_CLI}} critic apply "$PHASE_SLUG"
 ```
+
+`merge` also checks that the reviewers stayed read-only (against the
+`review baseline` of 4d): a commit of product files made during the review
+(`.jdi/` does not count) → a `## Read-only check` segment, BLOCKED
+`[defect]`; files changed but not committed → a warning naming them. Agents that judge must not edit what they judge.
 
 `apply` is the only writer of the `## DoD Critic` segment of REVIEW.md: objective
 hollow proofs → `[hollow DoD N]` blockers and a BLOCKED line; suspicions and

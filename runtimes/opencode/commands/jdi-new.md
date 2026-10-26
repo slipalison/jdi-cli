@@ -99,13 +99,15 @@ canonical source shipped in the package (`templates-jdi-folder/config.json`,
 #57), and record the JDI version this project runs:
 
 ```bash
-[ -f .jdi/config.json ] || npx -y jdi-cli@0.20.1 template config --out .jdi/config.json
-printf '%s' '0.20.1' > .jdi/VERSION
+[ -f .jdi/config.json ] || npx -y jdi-cli@0.21.0 template config --out .jdi/config.json
+printf '%s' '0.21.0' > .jdi/VERSION
 ```
 
 The default covers: token budgets per artifact (`budgets`, measured in tokens
 with `chars_per_token` per language),
-model per role (`models`, `inherit` = the session's model), compaction and
+model and effort per agent (`routing`: a rule picks cheap / standard /
+strong by task weight, kind and sensitive files — `jdi-cli route`; with
+`routing.mode: "off"`, `models` per role as before), compaction and
 coverage. Edit by hand afterwards when needed.
 
 #### Step 4b: Enhanced orchestration opt-in (host-neutral capability flag)

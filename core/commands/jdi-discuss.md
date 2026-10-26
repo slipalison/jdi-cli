@@ -97,8 +97,15 @@ Invoke `jdi-asker` with:
   `<card_mode>`
 
 <!-- jdi:only claude -->
-If `.jdi/config.json` sets `models.asker` to anything other than `inherit`,
-pass it as the Agent `model` parameter.
+Model and effort come from `routing` in `.jdi/config.json` — a rule, not a
+judgment of the moment:
+
+```bash
+npx -y {{JDI_CLI}} route "$PHASE_SLUG" --role asker --json   # {model, effort, tier, why}
+```
+
+Pass `model` and `effort` as the Agent `model` and `effort` parameters (a
+`null` one is left out: the session's own applies).
 <!-- jdi:end -->
 
 Agent runs its own process. Returns when CONTEXT.md is written to `$PHASE_DIR/CONTEXT.md`.
@@ -149,8 +156,8 @@ Agent(
 ```
 
 <!-- jdi:only claude -->
-If `.jdi/config.json` sets `models.critic` to anything other than `inherit`,
-pass it as the Agent `model` parameter.
+Model and effort: `npx -y {{JDI_CLI}} route "$PHASE_SLUG" --role critic --json`
+→ its `model` and `effort` as the Agent parameters (a `null` one left out).
 <!-- jdi:end -->
 
 ```bash

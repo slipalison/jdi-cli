@@ -98,6 +98,15 @@ Every task MUST have:
 - dependencies (IDs of other tasks within this phase)
 - test requirement (which test covers it)
 - **specialist** (auto-assigned via file glob match — see Step 2.5)
+- **weight** — `light` (mechanical: a rename, a config value, wiring that
+  follows an existing pattern, one small file), `standard` (the default), or
+  `deep` (a new algorithm, concurrency, a migration, a design the code does
+  not have yet, many interacting files). `jdi-cli route` gives a light task a
+  cheap model and a deep one the strong model: judge the work, not its size
+  in lines. When unsure, `standard`.
+- **kind** — one word for what the work is: `feature`, `fix`, `refactor`,
+  `test`, `docs`, `config`, `migration` (a project's `routing.rules` may
+  match on it).
 
 Legacy `T-{N}.{M}` form (phase-prefixed) is still accepted when reading existing v1 plans, but new plans MUST use the unprefixed form. This makes task IDs invariant under phase reordering.
 
@@ -160,6 +169,8 @@ Path: `{phase_dir}/PLAN.md` (orchestrator pre-resolved)
 
 #### T-{N}.1: {short objective}
 - **Specialist:** jdi-doer-{slug}    <!-- auto-assigned via file glob, Step 2.5 -->
+- **Kind:** {feature|fix|refactor|test|docs|config|migration}
+- **Weight:** {light|standard|deep}
 - **Files modified:** `{path1}`, `{path2}`
 - **Acceptance:**
   - {criterion 1}
@@ -169,6 +180,8 @@ Path: `{phase_dir}/PLAN.md` (orchestrator pre-resolved)
 - **Status:** pending
 
 #### T-{N}.2: {short objective}
+- **Kind:** {kind}
+- **Weight:** {weight}
 - **Files modified:** `{path3}`
 - **Acceptance:** {criterion}
 - **Dependencies:** none
@@ -178,6 +191,8 @@ Path: `{phase_dir}/PLAN.md` (orchestrator pre-resolved)
 ### Wave 2
 
 #### T-{N}.3: {short objective}
+- **Kind:** {kind}
+- **Weight:** {weight}
 - **Files modified:** `{path4}`
 - **Acceptance:** {criteria}
 - **Dependencies:** T-{N}.1, T-{N}.2
@@ -204,6 +219,7 @@ Path: `{phase_dir}/PLAN.md` (orchestrator pre-resolved)
 Run checklist:
 - [ ] Does every task have explicit files_modified?
 - [ ] Does every task have measurable acceptance criteria?
+- [ ] Does every task have a `Weight:` (light only for mechanical work) and a `Kind:`?
 - [ ] Total tasks <= 8?
 - [ ] Wave grouping respects deps?
 - [ ] files_modified of tasks in same wave don't overlap?

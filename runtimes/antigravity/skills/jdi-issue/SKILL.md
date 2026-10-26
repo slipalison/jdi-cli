@@ -67,7 +67,7 @@ rules keep both small without skipping any gate:
 
 ### Step 1: Validation
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.20.1 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.21.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new (or /jdi-adopt) + /jdi-bootstrap first."; exit 1; }
@@ -114,9 +114,9 @@ Layout v3 (`.jdi/roadmap/` exists) — one call; `--unique` turns a taken slug
 into `-2`, `-3`… instead of stopping (no human to pick another):
 
 ```bash
-OUT=$(npx -y jdi-cli@0.20.1 add-phase "$TITLE" --goal "<goal>" --reason "<source url/id>" --unique) || exit $?
+OUT=$(npx -y jdi-cli@0.21.0 add-phase "$TITLE" --goal "<goal>" --reason "<source url/id>" --unique) || exit $?
 SLUG=$(printf '%s' "$OUT" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).slug))")
-npx -y jdi-cli@0.20.1 render
+npx -y jdi-cli@0.21.0 render
 git add .jdi/roadmap/ .jdi/decisions/
 git commit -m "chore(jdi): add phase $SLUG"
 ```
@@ -153,12 +153,33 @@ critic=on   (Step 4.6 preflight runs: hollow proofs are fixed before any code)
 
 ### Step 5: Plan + loop (autonomous variant, fuses intact)
 
+**Direct path — a narrow card skips the planner spawn:**
+
+```bash
+npx -y jdi-cli@0.21.0 size "$SLUG" --direct --json   # {path: "direct"|"planned", reasons}
+```
+
+`direct` (at most 3 automatic DoD rows and 3 acceptance criteria, no
+evidence row, one area, no sensitive path — `sizing.direct_max_*`): YOU write
+`$PHASE_DIR/PLAN.md` with ONE task, in the planner's format (the planner
+agent's Step 4 template): a `#### T-1: <objective>` heading, then
+`**Specialist:**` (the doer whose glob matches), `**Kind:**`, `**Weight:**`,
+`**Files modified:**` (find them with `grep -n` — a short look, not a
+survey), `**Acceptance:**` (the DoD rows), `**Dependencies:** none`,
+`**Test:**`, `**Status:** pending` — `validate-phase` checks these fields. Then run `/jdi-plan` Step 5 (`validate-dod`, commit
+as `docs($SLUG): plan (direct)`, STATE.md). Nothing else changes: `/jdi-do`
+sees a lite phase; every gate, reviewer and critic runs as usual. The files are
+not clear after a short look, or the work needs more than one task → it was
+not narrow: follow `/jdi-plan`.
+
+`planned`:
+
 - Follow the installed `/jdi-plan` process for `$SLUG`.
 - Follow the installed `/jdi-loop` process with ONE deviation, declared here:
   at the loop's human gate (iteration cap or oscillation), do NOT ask — take
   the `Continue` branch automatically:
   ```bash
-  npx -y jdi-cli@0.20.1 loop reset "$SLUG" --autonomous --reason "<gate reason from loop record>"
+  npx -y jdi-cli@0.21.0 loop reset "$SLUG" --autonomous --reason "<gate reason from loop record>"
   ```
   It appends `--- AUTO-RESET n (reason) ---` to LOOP.md and answers
   `continue` or `killed`. Resets are capped by

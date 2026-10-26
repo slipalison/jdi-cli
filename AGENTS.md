@@ -134,7 +134,7 @@
 
 **Rules:**
 - Max 8 tasks per phase (split if it exceeds)
-- Every task has: `files_modified`, measurable `acceptance`, `dependencies`, `test`, `specialist` (auto-assigned via file-glob match against `.jdi/specialists.md` — tasks spanning 2+ specialists are split)
+- Every task has: `files_modified`, measurable `acceptance`, `dependencies`, `test`, `specialist` (auto-assigned via file-glob match against `.jdi/specialists.md` — tasks spanning 2+ specialists are split), `Kind:` and `Weight:` (`light` / `standard` / `deep` — `jdi-cli route` picks the doer's model and effort from them, 0.21)
 - Wave grouping: parallel within, sequential between
 - `files_modified` disjoint within the same wave (overlap = automatic sequential)
 - Self-check before saving (5-item checklist)
@@ -189,7 +189,7 @@
 
 **Permissions:** full toolset on Copilot (no `tools:` restriction — terminal required); Claude: Read, Write, Edit, Bash, Grep, Glob (no Agent — solo by definition).
 
-### `jdi-dod-critic` (model: `.jdi/config.json` `models.critic`, default inherit)
+### `jdi-dod-critic` (model + effort: `jdi-cli route --role critic`; `models.critic` with routing off)
 
 **Role:** Judges whether each automatic DoD row's `Verify:` PROVES its criterion or merely exits 0 (a grep on text that already exists, a test that asserts nothing, a name filter that matches zero tests).
 
@@ -211,7 +211,7 @@ refreshes only those blocks; everything the project wrote outside them stays
 byte for byte. Specialists generated before 0.17 come under management once
 with `jdi-cli specialists upgrade --adopt [--write]`.
 
-### `jdi-doer-{slug}` (model: `.jdi/config.json` `models.doer`, default inherit)
+### `jdi-doer-{slug}` (model + effort: `jdi-cli route --role doer --task T-N`; `models.doer` with routing off)
 
 **Role:** Executor that ALREADY KNOWS the project's stack/code-design/conventions.
 
@@ -235,11 +235,12 @@ with `jdi-cli specialists upgrade --adopt [--write]`.
 - Atomic commit per task
 - Conventional Commits, scope = phase slug
 - Max 3 correction attempts per task before marking `blocked`
+- Return starts with `STATUS: DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT` (0.21): the orchestrator adds the missing context, or retries a BLOCKED task once a tier up — never the same prompt on the same route
 - Multi-stack: only touches files matching its `file_glob`; out-of-scope paths → `blocked: out-of-scope` (orchestrator re-routes)
 
 **Permissions:** Read, Write, Edit, Bash. No Web by default (must already know the stack).
 
-### `jdi-reviewer-{slug}` (model: `.jdi/config.json` `models.reviewer`, default inherit)
+### `jdi-reviewer-{slug}` (model + effort: `jdi-cli route --role reviewer`, never below `standard`; `models.reviewer` with routing off)
 
 **Role:** Runs the quality gates defined for the stack.
 
@@ -271,7 +272,7 @@ with `jdi-cli specialists upgrade --adopt [--write]`.
 - **APPROVED_PENDING_MANUAL** — gates 1-7 OK, DoD Auto PASS, Manual items awaiting `/jdi-confirm-dod`
 - BLOCKED — gate 1-3 failed OR gate 5 critical OR gate 8 with Auto FAIL OR gate 7 BLOCK
 
-**Permissions:** Read-only by design. Read + Bash (only to run gate commands). **No Write, no Edit.**
+**Permissions:** Read-only by design. Read + Bash (only to run gate commands). **No Write, no Edit.** Checked since 0.21: `review baseline` before the spawn, `review merge` after — a commit of product files made during the review blocks, an edited file warns.
 
 **Gate 8 hard rules:**
 - Never modifies DoD blocks (PROJECT.md/CONTEXT.md are LOCKED)

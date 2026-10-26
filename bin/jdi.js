@@ -689,7 +689,7 @@ async function cmdHelp() {
   console.log(`  ${c.cyan}render${c.reset} ${c.gray}[--check]${c.reset}          ${tr('help.helper.render')}`);
   console.log(`  ${c.cyan}migrate-layout${c.reset} ${c.gray}[--dry-run]${c.reset}  ${tr('help.helper.migrate_layout')}`);
   console.log(`  ${c.cyan}sync-specialists${c.reset} ${c.gray}[runtime] [--check]${c.reset}  ${tr('help.helper.sync_specialists')}`);
-  console.log(`  ${c.cyan}cost${c.reset} ${c.gray}[--targets] [--json] [--since d]${c.reset}  ${tr('help.helper.cost')}`);
+  console.log(`  ${c.cyan}cost${c.reset} ${c.gray}[--targets|--timeline] [--json] [--since d]${c.reset}  ${tr('help.helper.cost')}`);
   console.log(`  ${c.cyan}template${c.reset} ${c.gray}<name> [--out f] | --list${c.reset}  ${tr('help.helper.template')}`);
   console.log(`  ${c.cyan}learnings${c.reset} ${c.gray}[--last N] [--out f]${c.reset}  ${tr('help.helper.learnings')}`);
   console.log(`  ${c.cyan}decisions${c.reset} ${c.gray}[--index|--ids|--phase|--recent N]${c.reset}  ${tr('help.helper.decisions')}`);
@@ -699,14 +699,15 @@ async function cmdHelp() {
   console.log(`  ${c.cyan}phases archive${c.reset} ${c.gray}[--dry-run] [--keep N] [--rewrite-refs]${c.reset}  ${tr('help.helper.phases')}`);
   console.log(`  ${c.cyan}dod${c.reset} ${c.gray}<parse|lint|extract|bait> <phase>${c.reset}  ${tr('help.helper.dod')}`);
   console.log(`  ${c.cyan}brief${c.reset} ${c.gray}<phase> --role <r> [--task T-N] [--stack s]${c.reset}  ${tr('help.helper.brief')}`);
-  console.log(`  ${c.cyan}gates${c.reset} ${c.gray}<run|show> <phase> [--stack s[,s2]] [--only dod] [--failures --all]${c.reset}  ${tr('help.helper.gates')}`);
-  console.log(`  ${c.cyan}review${c.reset} ${c.gray}<verdict|blockers|plan|merge|fresh|from-gates> <phase>${c.reset}  ${tr('help.helper.review')}`);
+  console.log(`  ${c.cyan}gates${c.reset} ${c.gray}<run|show|wait> <phase> [--stack s[,s2]] [--only dod] [--detach] [--failures --all]${c.reset}  ${tr('help.helper.gates')}`);
+  console.log(`  ${c.cyan}review${c.reset} ${c.gray}<verdict|blockers|plan|baseline|merge|fresh|from-gates> <phase>${c.reset}  ${tr('help.helper.review')}`);
   console.log(`  ${c.cyan}loop${c.reset} ${c.gray}<init|record|reset|status> <phase>${c.reset}  ${tr('help.helper.loop')}`);
   console.log(`  ${c.cyan}budgets${c.reset} ${c.gray}<phase>${c.reset}  ${tr('help.helper.budgets')}`);
   console.log(`  ${c.cyan}known-errors${c.reset} ${c.gray}<query|migrate|render|list>${c.reset}  ${tr('help.helper.known_errors')}`);
   console.log(`  ${c.cyan}specialists${c.reset} ${c.gray}<lint|upgrade> [--adopt] [--write]${c.reset}  ${tr('help.helper.specialists')}`);
   console.log(`  ${c.cyan}critic${c.reset} ${c.gray}<plan|apply> <phase> [--preflight]${c.reset}  ${tr('help.helper.critic')}`);
-  console.log(`  ${c.cyan}size${c.reset} ${c.gray}<phase> [--intake] [--json]${c.reset}  ${tr('help.helper.size')}`);
+  console.log(`  ${c.cyan}size${c.reset} ${c.gray}<phase> [--intake|--direct] [--json]${c.reset}  ${tr('help.helper.size')}`);
+  console.log(`  ${c.cyan}route${c.reset} ${c.gray}<phase> --role <r> [--task T-N] [--attempt N]${c.reset}  ${tr('help.helper.route')}`);
   console.log(`  ${c.cyan}evidence${c.reset} ${c.gray}<record|status> <phase> [--row N --scope iteration|ship]${c.reset}  ${tr('help.helper.evidence')}`);
   console.log('');
 
@@ -886,6 +887,7 @@ async function main() {
     case 'critic':
     case 'size':
     case 'evidence':
+    case 'route':
       runNodeHelper(parsed.cmd, libArgs());
       break;
     case 'add-phase':

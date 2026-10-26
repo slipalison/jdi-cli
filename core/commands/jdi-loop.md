@@ -226,8 +226,9 @@ Next: /jdi-ship $PHASE_SLUG
 
 **Claude Code:** full loop as specified — sequential Agent() spawns per iter, fresh context each.
 <!-- jdi:only claude -->
-`.jdi/config.json` `models.doer` / `models.reviewer` other than `inherit` are
-passed as the Agent `model` parameter.
+Model and effort per spawn come from `npx -y {{JDI_CLI}} route` (see
+/jdi-do and /jdi-verify); the fix doer of iteration N routes with
+`--attempt N` — a stronger model only after a review that measured a failure.
 <!-- jdi:end -->
 
 **Copilot:** subagent spawning has no reliable completion signal. Run the loop

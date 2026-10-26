@@ -153,6 +153,27 @@ critic=on   (Step 4.6 preflight runs: hollow proofs are fixed before any code)
 
 ### Step 5: Plan + loop (autonomous variant, fuses intact)
 
+**Direct path — a narrow card skips the planner spawn:**
+
+```bash
+npx -y {{JDI_CLI}} size "$SLUG" --direct --json   # {path: "direct"|"planned", reasons}
+```
+
+`direct` (at most 3 automatic DoD rows and 3 acceptance criteria, no
+evidence row, one area, no sensitive path — `sizing.direct_max_*`): YOU write
+`$PHASE_DIR/PLAN.md` with ONE task, in the planner's format (the planner
+agent's Step 4 template): a `#### T-1: <objective>` heading, then
+`**Specialist:**` (the doer whose glob matches), `**Kind:**`, `**Weight:**`,
+`**Files modified:**` (find them with `grep -n` — a short look, not a
+survey), `**Acceptance:**` (the DoD rows), `**Dependencies:** none`,
+`**Test:**`, `**Status:** pending` — `validate-phase` checks these fields. Then run `/jdi-plan` Step 5 (`validate-dod`, commit
+as `docs($SLUG): plan (direct)`, STATE.md). Nothing else changes: `/jdi-do`
+sees a lite phase; every gate, reviewer and critic runs as usual. The files are
+not clear after a short look, or the work needs more than one task → it was
+not narrow: follow `/jdi-plan`.
+
+`planned`:
+
 - Follow the installed `/jdi-plan` process for `$SLUG`.
 - Follow the installed `/jdi-loop` process with ONE deviation, declared here:
   at the loop's human gate (iteration cap or oscillation), do NOT ask — take

@@ -2,6 +2,7 @@
 
 // `jdi-cli size <phase> [--json]` — lite or full, from the plan.
 // `jdi-cli size <phase> --intake [--json]` — split or single, from CONTEXT.md.
+// `jdi-cli size <phase> --direct [--json]` — direct or planned, from CONTEXT.md.
 //
 // Every agent spawn pays its system prompt, the specialist and its brief
 // before doing anything; for a small phase, that fixed cost dominates. A phase
@@ -26,6 +27,14 @@
 //     criteria, plus `e2e` for evidence rows
 //   - acceptance criteria              > sizing.split_max_criteria (8)
 // It only measures; where to cut is the asker's call (`mode=split`).
+//
+// --direct (0.21), at the same point: a card this narrow does not need a
+// planner spawn — the orchestrator writes a one-task PLAN.md itself and every
+// gate runs as usual. Direct when, in CONTEXT.md:
+//   - automatic DoD rows <= sizing.direct_max_dod_rows (3), no evidence row
+//   - acceptance criteria <= sizing.direct_max_criteria (3)
+//   - at most one area: the paths it names route to one stack
+//   - no path it names matches sizing.sensitive_globs
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -116,9 +125,14 @@ function acceptanceCriteria(text) {
   return n;
 }
 
+// The repository paths a text names.
+function pathsIn(text) {
+  return text.split(/[\s`'"(),;]+/).filter((t) => t.includes('/') && !t.startsWith('http') && !t.startsWith('.jdi/'));
+}
+
 // Stacks named by the paths in the DoD rows and the criteria.
 function areasOf(root, items, text) {
-  const paths = text.split(/[\s`'"(),;]+/).filter((t) => t.includes('/') && !t.startsWith('http') && !t.startsWith('.jdi/'));
+  const paths = pathsIn(text);
   const areas = new Set();
   for (const d of doerGlobs(root).filter((x) => !x.globs.includes('**/*'))) {
     if (paths.some((p) => core.matchesAny(p.replace(/^\.\//, ''), d.globs) || d.globs.some((g) => g.split('*')[0] && p.startsWith(g.split('*')[0])))) areas.add(d.name.replace(/^jdi-doer-/, ''));
@@ -127,13 +141,37 @@ function areasOf(root, items, text) {
   return areas;
 }
 
+function readContext(phase, flag) {
+  const ctxFile = path.join(phase.absDir, 'CONTEXT.md');
+  const text = core.readIf(ctxFile);
+  if (text === null) throw new core.JdiError(`${phase.dir}/CONTEXT.md not found — ${flag} measures the discussed phase`, 2);
+  return { text, items: dod.parse(text, ctxFile).items.filter((it) => it.type === 'auto') };
+}
+
+function direct(phase, root = process.cwd()) {
+  const config = core.loadConfig(root);
+  const limits = { direct_max_dod_rows: 3, direct_max_criteria: 3, sensitive_globs: [], ...config.sizing };
+  const { text, items } = readContext(phase, '--direct');
+  const areas = areasOf(root, items, text);
+  const criteria = acceptanceCriteria(text);
+  const evidence = items.filter((it) => it.evidence).length;
+  const sensitive = pathsIn(text).filter((p) => core.matchesAny(p.replace(/^\.\//, ''), limits.sensitive_globs || []));
+  const reasons = [
+    [items.length > limits.direct_max_dod_rows, `${items.length} DoD rows > ${limits.direct_max_dod_rows}`],
+    [evidence > 0, `${evidence} evidence row(s)`],
+    [criteria > limits.direct_max_criteria, `${criteria} acceptance criteria > ${limits.direct_max_criteria}`],
+    [areas.size > 1, `${areas.size} areas (${[...areas].join(', ')})`],
+    [sensitive.length > 0, 'sensitive paths: ' + [...new Set(sensitive)].join(', ')],
+  ]
+    .filter(([hit]) => hit)
+    .map(([, why]) => why);
+  return { phase: phase.slug, path: reasons.length ? 'planned' : 'direct', reasons, dod_rows: items.length, areas: [...areas], criteria };
+}
+
 function intake(phase, root = process.cwd()) {
   const config = core.loadConfig(root);
   const limits = { split_max_dod_rows: 12, split_max_areas: 3, split_max_criteria: 8, ...config.sizing };
-  const ctxFile = path.join(phase.absDir, 'CONTEXT.md');
-  const text = core.readIf(ctxFile);
-  if (text === null) throw new core.JdiError(`${phase.dir}/CONTEXT.md not found — --intake measures the discussed phase`, 2);
-  const items = dod.parse(text, ctxFile).items.filter((it) => it.type === 'auto');
+  const { text, items } = readContext(phase, '--intake');
   const areas = areasOf(root, items, text);
   const criteria = acceptanceCriteria(text);
   const reasons = [
@@ -146,24 +184,29 @@ function intake(phase, root = process.cwd()) {
   return { phase: phase.slug, intake: reasons.length ? 'split' : 'single', reasons, dod_rows: items.length, areas: [...areas], criteria };
 }
 
-function main(argv) {
-  const id = argv.find((a) => !a.startsWith('--'));
-  if (!id) throw new core.JdiError('usage: jdi size <phase> [--intake] [--json]', 1);
-  const root = process.cwd();
-  if (argv.includes('--intake')) {
-    const r = intake(core.resolvePhase(id, root), root);
-    const detail = r.reasons.length ? r.reasons.join('; ') : `${r.dod_rows} DoD row(s), ${r.areas.length} area(s), ${r.criteria} criteria`;
-    process.stdout.write(argv.includes('--json') ? JSON.stringify(r) + '\n' : `${r.intake} — ${detail}\n`);
-    return 0;
-  }
-  const r = size(core.resolvePhase(id, root), root);
-  if (argv.includes('--json')) {
-    process.stdout.write(JSON.stringify(r) + '\n');
-    return 0;
-  }
-  const detail = r.reasons.length ? r.reasons.join('; ') : `${r.tasks.length} task(s), ${r.files} file(s), ${r.dod_rows} DoD row(s), ${r.doer}`;
-  process.stdout.write(`${r.size} — ${detail}\n`);
+// One line (the verdict, then the reasons or the counts), or the JSON.
+function report(r, verdict, counts, json) {
+  const detail = r.reasons.length ? r.reasons.join('; ') : counts;
+  process.stdout.write(json ? JSON.stringify(r) + '\n' : `${verdict} — ${detail}\n`);
   return 0;
 }
 
-module.exports = { main, size, intake };
+function main(argv) {
+  const id = argv.find((a) => !a.startsWith('--'));
+  if (!id) throw new core.JdiError('usage: jdi size <phase> [--intake|--direct] [--json]', 1);
+  const root = process.cwd();
+  const json = argv.includes('--json');
+  const phase = core.resolvePhase(id, root);
+  if (argv.includes('--direct')) {
+    const r = direct(phase, root);
+    return report(r, r.path, `${r.dod_rows} DoD row(s), ${r.criteria} criteria, ${r.areas.length || 'no'} area`, json);
+  }
+  if (argv.includes('--intake')) {
+    const r = intake(phase, root);
+    return report(r, r.intake, `${r.dod_rows} DoD row(s), ${r.areas.length} area(s), ${r.criteria} criteria`, json);
+  }
+  const r = size(phase, root);
+  return report(r, r.size, `${r.tasks.length} task(s), ${r.files} file(s), ${r.dod_rows} DoD row(s), ${r.doer}`, json);
+}
+
+module.exports = { main, size, intake, direct };

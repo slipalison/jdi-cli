@@ -25,6 +25,8 @@
   "coverage_runs_tests": true,
   "lint_blocks": false,
   "timeout_min": 30,
+  "idle_timeout_s": 900,
+  "_idle_timeout_note": "No output for this long = the command is stalled (a deadlock, a lock held elsewhere, a dead connection): its whole process tree is killed and the gate fails with that reason. Absent or 0 = off. Keep it above any silence the suite has on its own (go test prints nothing per package for up to its -timeout, 10 min by default; Python buffers output when piped unless -u).",
   "cache_key_cmd": "rustc -V && cargo -V",
   "evidence_only": ["npm run e2e", "playwright test"]
 }

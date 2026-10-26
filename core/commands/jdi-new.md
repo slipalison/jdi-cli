@@ -105,7 +105,9 @@ printf '%s' '{{JDI_VERSION}}' > .jdi/VERSION
 
 The default covers: token budgets per artifact (`budgets`, measured in tokens
 with `chars_per_token` per language),
-model per role (`models`, `inherit` = the session's model), compaction and
+model and effort per agent (`routing`: a rule picks cheap / standard /
+strong by task weight, kind and sensitive files — `jdi-cli route`; with
+`routing.mode: "off"`, `models` per role as before), compaction and
 coverage. Edit by hand afterwards when needed.
 
 #### Step 4b: Enhanced orchestration opt-in (host-neutral capability flag)

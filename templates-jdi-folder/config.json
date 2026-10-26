@@ -38,7 +38,32 @@
     "split_max_dod_rows": 12,
     "split_max_areas": 3,
     "split_max_criteria": 8,
+    "direct_max_dod_rows": 3,
+    "direct_max_criteria": 3,
     "sensitive_globs": []
+  },
+  "routing": {
+    "mode": "on",
+    "profile": "base",
+    "tiers": {
+      "cheap": { "model": "haiku", "effort": "low" },
+      "standard": { "model": "sonnet", "effort": "medium" },
+      "strong": { "model": "opus", "effort": "high" }
+    },
+    "profiles": {
+      "base": {},
+      "economy": { "tiers": { "standard": { "model": "sonnet", "effort": "low" }, "strong": { "model": "sonnet", "effort": "high" } } },
+      "quality": { "tiers": { "cheap": { "model": "sonnet", "effort": "low" }, "standard": { "model": "opus", "effort": "medium" } } }
+    },
+    "rules": [
+      { "role": "doer", "if": ["sensitive"], "tier": "strong" },
+      { "role": "doer", "if": ["deep"], "tier": "strong" },
+      { "role": "doer", "if": ["light"], "tier": "cheap" },
+      { "role": "reviewer", "if": ["sensitive"], "tier": "strong" },
+      { "role": "planner", "tier": "strong" }
+    ],
+    "floors": { "reviewer": "standard", "critic": "standard" },
+    "escalate": true
   },
   "compaction": {
     "archive_after": 5

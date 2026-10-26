@@ -5,6 +5,88 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.0] - 2026-10-26
+
+The clock and the route. `cost --timeline` on a real project since 0.20:
+of the agent hours, the model was 17.5 h, foreground commands 25.9 h and
+polling loops 20.2 h, with 120 commands cut at the 10-minute tool limit. And
+every agent ran on one fixed model per role, whatever the task.
+
+### Added
+- **`cost --timeline`** — where the CLOCK went, from the same local Claude
+  Code transcripts: agent hours split into model, commands by kind
+  (tests/build, e2e, gates, local CI, other), polling, waiting on subagents,
+  on background runs, waiting on the user and idle gaps (parallel Agent calls
+  of one agent count once; a task notification is not a user turn); the same
+  per phase (its subagents, span,
+  roles); and the waste — commands that hit the 10-minute tool limit (with
+  the first 80 characters of each), polling calls, `pgrep -f` waits. Numbers
+  and roles only, never message content. Every speed change can now be
+  measured instead of guessed.
+- **Model AND effort per spawn, by rule** (`jdi-cli route`, config
+  `routing`). `route <phase> --role <r> [--task T-N] [--attempt N]` answers
+  `{model, effort, tier, why}` and the commands pass `model` and `effort` to
+  the Agent call (Claude Code takes both per spawn). Tiers cheap / standard /
+  strong (`haiku`/low, `sonnet`/medium, `opus`/high in the base profile;
+  `economy` and `quality` profiles swap them). Rules, first match wins, read
+  the task's new `Weight:` (`light`, `standard`, `deep`) and `Kind:`, and
+  whether it touches `sizing.sensitive_globs`; without `--task` the phase's
+  heaviest task counts. `floors`: reviewers and the critic never go below
+  standard (cheap models miss real defects). `escalate`: a fix after a
+  MEASURED failure — a red wave suite, a red gate before the reviewers, a
+  BLOCKED review, a doer that returned `STATUS: BLOCKED` — goes one tier up
+  per attempt, to strong at most; never on an agent's own opinion. The
+  planner now writes `Kind:` and `Weight:` on every task. New projects get
+  `routing.mode: "on"`; existing ones keep `"off"` (the fixed `models.<role>`)
+  until they turn it on — `{"routing": {"mode": "on"}}` is enough: the
+  tiers, profiles, rules and floors are built-in defaults.
+- **`STATUS:` line in the doer's return** (managed `return_contract` —
+  `jdi-cli specialists upgrade` delivers it): `DONE`, `DONE_WITH_CONCERNS`
+  (the concern goes into SUMMARY.md), `BLOCKED` (one fresh doer a tier up,
+  when that raises the tier; then the task stays blocked) or `NEEDS_CONTEXT`
+  (the missing decision, file or fact goes into the plan's orchestrator notes
+  before a fresh doer — never the same prompt to the same route again).
+  Specialists without the line are counted as before.
+- **Direct path** (`size <phase> --direct`): after `/jdi-discuss`, a card
+  with at most 3 automatic DoD rows and 3 acceptance criteria
+  (`sizing.direct_max_*`), no evidence row, one area and no sensitive path is
+  `direct` — `/jdi-issue` writes a one-task PLAN.md itself instead of
+  spawning the planner. Gates, reviewers and the critic run as for any phase.
+- **Gate watchdog.** Every gate command runs under `bin/lib/watchdog.js`: on
+  `timeout_min`, or after the stack's new `idle_timeout_s` with no output
+  (off unless set; the stack template writes 900), the WHOLE process tree is
+  killed — the shell's children too (POSIX process group; `taskkill /T` on
+  Windows) — and the gate fails with that reason first in its excerpt.
+  Killing only the shell used to leave a suite running and holding locks
+  after the gate had "ended". What a shell leaves running when it exits (a
+  server started with `&`) is ended too, instead of holding the pipes open;
+  an interrupt (Ctrl+C) takes the tree down.
+- **`ENV` from the failure itself.** A command not found (exit 127) or a full
+  disk (the OS's "No space left on device" in the command's OUTPUT — never
+  its own text) is `ENV` (exit 5), not `FAIL`: no doer is sent to fix the
+  machine and the loop does not count a defect. A build that hits it stops
+  the run like a failed build; a gate that does not block
+  (`lint_blocks`/`audit_blocks: false`) stays a warning.
+- **`gates run --detach` + `gates wait`** — for runtimes whose shell call is
+  cut at a fixed limit: `--detach` returns at once with a job id; `wait`
+  blocks until the run ends and prints it (its exit code — the same as in the
+  foreground, errors included), or returns 75 after ~9 minutes (`--timeout`
+  for less) while it is still running. A run that died without finishing is
+  exit 2 (nothing measured), never 1 and never a silent pass. Never a
+  `sleep` loop.
+- **Read-only check of the reviewers.** `review baseline <phase>`, right
+  before the reviewers and the critic are spawned, records HEAD and every
+  changed file outside `.jdi/` (content hash); `review merge` compares: a
+  commit made during the review adds a `## Read-only check` segment, BLOCKED
+  `[defect]` naming the files (a commit that touches only `.jdi/` — a harness
+  checkpointing the review — does not count); files changed but not
+  committed → a warning naming them. One baseline, one check.
+
+### Fixed
+- `cost` — a subagent transcript present in more than one session folder
+  (a long-lived session carries copies of earlier sessions' subagents, same
+  agent id) was counted once per copy; now once.
+
 ## [0.20.1] - 2026-10-25
 
 ### Fixed

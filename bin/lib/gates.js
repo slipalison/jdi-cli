@@ -18,7 +18,9 @@
 // Stack config: .jdi/stacks/<name>.json (`jdi-cli template stack`): gate
 // commands, env, path_prepend, coverage_runs_tests (run the suite once),
 // evidence_only (commands never executed here — e.g. E2E with a real login;
-// judged from recorded evidence), timeout_min, inputs, cache_key_cmd.
+// judged from recorded evidence), timeout_min, idle_timeout_s (0.21: no
+// output for this long = stalled, the tree is killed and the gate fails with
+// that reason; absent or 0 = off), inputs, cache_key_cmd.
 //
 // Reuse (#69, `economy.gate_cache`, on by default): a gate that PASSED on
 // exactly the same inputs is not run again — its result comes back marked
@@ -107,21 +109,38 @@ function tail(text, n = 20) {
   return lines.slice(Math.max(0, lines.length - n)).join('\n').trim();
 }
 
-function run(cmd, { root, cwd = root, env, shell, timeoutMin, log }) {
+const WATCHDOG = path.join(__dirname, 'watchdog.js');
+
+// One command, under the watchdog (0.21): on the deadline or after
+// `idleS` seconds without output, the whole process tree is killed — not
+// just the shell, which left suites running and holding locks. A timeout or
+// a stall is a FAIL with its reason first in the excerpt: a deadlock in the
+// code is a defect a doer can fix.
+function run(cmd, { root, cwd = root, env, shell, timeoutMin, log, idleS }) {
   const t0 = Date.now();
-  const r = spawnSync(shell.cmd, shell.args(cmd), {
-    cwd,
-    env,
-    encoding: 'utf8',
-    maxBuffer: 256 * 1024 * 1024,
-    timeout: Math.round((timeoutMin || 30) * 60 * 1000),
-  });
-  const out = `$ ${cmd}\n${r.stdout || ''}${r.stderr || ''}`;
+  const spec = { cmd: shell.cmd, args: shell.args(cmd), timeoutMs: Math.round((timeoutMin || 30) * 60 * 1000), idleMs: idleS ? Math.round(idleS * 1000) : 0 };
+  const r = spawnSync(process.execPath, [WATCHDOG], { cwd, env, input: JSON.stringify(spec), encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, windowsHide: true });
+  const output = `${r.stdout || ''}${r.stderr || ''}`;
+  const out = `$ ${cmd}\n${output}`;
   core.writeFileEnsured(log, out, root);
   const duration = Math.round((Date.now() - t0) / 100) / 10;
-  if (r.error?.code === 'ENOENT') return { exit: 127, duration, out, error: `shell '${shell.cmd}' not found` };
-  if (r.signal) return { exit: 124, duration, out, error: `killed by ${r.signal} (timeout ${timeoutMin} min?)` };
-  return { exit: r.status ?? 1, duration, out };
+  const killed = /^jdi-watchdog: (.*)$/m.exec(r.stderr || '');
+  if (r.status === 127 && killed) return { exit: 127, duration, out, output, error: `shell '${shell.cmd}' not found` };
+  if (killed) return { exit: r.status ?? 124, duration, out, output, error: killed[1] };
+  return { exit: r.status ?? 1, duration, out, output };
+}
+
+// A failure no code change can fix: reported as ENV (a setup problem the
+// human solves), never as a `[defect]` for a doer — a fix round on it only
+// burns a round. Only unambiguous signals, read from the command's OUTPUT
+// (never its own text: a DoD row that greps for "ENOSPC" is not a full disk):
+// the shell could not find the command, or the OS said the disk is full.
+const DISK_FULL = 'no space left on device';
+
+function envCause(r) {
+  if (r.exit === 127) return r.error || 'command not found (exit 127) — a tool the gate needs is not installed or not on PATH';
+  if (tail(r.output || '', 40).toLowerCase().includes(DISK_FULL)) return 'disk full: No space left on device';
+  return null;
 }
 
 function changedInScope(root, sha, globs) {
@@ -283,10 +302,12 @@ function execGate(ctx, name, cmd) {
   if (hit) return hit;
   const log = path.join(ctx.gateDir, ctx.label, `${name}.log`);
   const started = Date.now();
-  const r = run(cmd, { root: ctx.root, env: ctx.env, shell: ctx.shell, timeoutMin: ctx.timeoutMin, log });
+  const r = run(cmd, { root: ctx.root, env: ctx.env, shell: ctx.shell, timeoutMin: ctx.timeoutMin, log, idleS: ctx.idleS });
   const status = r.exit === 0 ? 'PASS' : 'FAIL';
   const res = { gate: name, status, exit: r.exit, duration_s: r.duration, log: path.relative(ctx.root, log).split(path.sep).join('/') };
   if (status === 'FAIL') res.excerpt = (r.error ? r.error + '\n' : '') + tail(r.out);
+  const env = status === 'FAIL' ? envCause(r) : null;
+  if (env) Object.assign(res, { status: 'ENV', reason: env });
   if (name === 'test' || name === 'coverage') {
     const report = snapshotTestReport(ctx, started);
     if (report?.stale) res.test_report_missing = true; // ran, wrote no fresh JUnit
@@ -450,7 +471,13 @@ function testAndCoverage(ctx, stack, want) {
   }
   const cov = execGate(ctx, 'coverage', g.coverage);
   if (cov.status === 'PASS') return [cov, { gate: 'test', status: 'PASS', reason: 'ran inside the coverage gate (coverage_runs_tests)' }];
+  if (cov.status === 'ENV') return [cov, want('test') && { gate: 'test', status: 'SKIPPED', reason: 'the coverage run hit the environment (ENV)' }].filter(Boolean);
   return [cov, want('test') && execGate(ctx, 'test', g.test)].filter(Boolean);
+}
+
+// A gate that does not block: its failure — or its environment — is a warning.
+function toWarning(res) {
+  if (res?.status === 'FAIL' || res?.status === 'ENV') res.status = 'WARN';
 }
 
 function stackResults(ctx, stack, only) {
@@ -459,15 +486,15 @@ function stackResults(ctx, stack, only) {
   // the audit reads the lockfiles, not the build: it runs either way
   const audit = want('audit') ? [execGate(ctx, 'audit', g.audit)] : [];
   // `audit_blocks: false`: an advisory (or an offline registry) is a warning
-  if (audit[0]?.status === 'FAIL' && stack.audit_blocks === false) audit[0].status = 'WARN';
+  if (stack.audit_blocks === false) toWarning(audit[0]);
   const results = want('build') ? [execGate(ctx, 'build', g.build)] : [];
-  if (results.some((x) => x.status === 'FAIL')) {
+  if (results.some((x) => x.status === 'FAIL' || x.status === 'ENV')) {
     return [...results, ...['test', 'coverage', 'lint'].filter(want).map((k) => ({ gate: k, status: 'SKIPPED', reason: 'build failed (fail-fast)' })), ...audit];
   }
   results.push(...testAndCoverage(ctx, stack, want));
   if (want('lint')) {
     const lint = execGate(ctx, 'lint', g.lint);
-    if (lint.status === 'FAIL' && !stack.lint_blocks) lint.status = 'WARN';
+    if (!stack.lint_blocks) toWarning(lint);
     results.push(lint);
   }
   return [...results, ...audit];
@@ -548,9 +575,11 @@ function dodResult(ctx, it, evidence, stacks) {
   const hit = reused(ctx, key);
   if (hit) return { ...hit, ...base };
   const log = path.join(ctx.gateDir, 'dod', `${it.source.toLowerCase()}-${it.id}.log`);
-  const r = run(it.verify.command, { root: ctx.root, env: ctx.env, shell: ctx.shell, timeoutMin: ctx.timeoutMin, log });
+  const r = run(it.verify.command, { root: ctx.root, env: ctx.env, shell: ctx.shell, timeoutMin: ctx.timeoutMin, log, idleS: ctx.idleS });
   const res = { ...base, status: r.exit === 0 ? 'PASS' : 'FAIL', exit: r.exit, duration_s: r.duration, log: path.relative(ctx.root, log).split(path.sep).join('/') };
   if (res.status === 'FAIL') res.excerpt = (r.error ? r.error + '\n' : '') + tail(r.out, 12);
+  const env = res.status === 'FAIL' ? envCause(r) : null;
+  if (env) Object.assign(res, { status: 'ENV', reason: env });
   remember(ctx, key, res);
   return res;
 }
@@ -603,6 +632,7 @@ function gateContext(root, phase, stack, stacks, opts) {
     env: envFor(stack ? [stack] : stacks),
     shell: shellFor(stack || stacks[0]),
     timeoutMin: (stack || stacks[0])?.timeout_min || 30,
+    idleS: (stack || stacks[0])?.idle_timeout_s || 0,
     reuse: config.economy?.gate_cache !== false && Boolean(head),
     fresh: Boolean(opts.fresh),
   };
@@ -620,7 +650,7 @@ function gateContext(root, phase, stack, stacks, opts) {
 function finishReport(ctx, report) {
   report.finished = new Date().toISOString();
   const all = [...report.results, ...report.dod];
-  if (report.preflight?.length || report.dod.some((x) => x.status === 'ENV')) report.status = 'ENV';
+  if (report.preflight?.length || all.some((x) => x.status === 'ENV')) report.status = 'ENV';
   else if (all.some((x) => x.status === 'FAIL')) report.status = 'FAIL';
   else report.status = 'PASS';
   return writeReport(ctx.root, ctx.gateDir, ctx.label, report);
@@ -679,6 +709,9 @@ function parseArgs(rest) {
     else if (a === '--fresh') opts.fresh = true;
     else if (a === '--failures') opts.failures = true;
     else if (a === '--all') opts.all = true;
+    else if (a === '--detach') opts.detach = true;
+    else if (a === '--job') opts.job = rest[++i];
+    else if (a === '--timeout') opts.timeout = Number(rest[++i]);
     else if (a.startsWith('--')) throw new core.JdiError(`unknown flag: ${a}`, 1);
     else id = a;
   }
@@ -725,7 +758,11 @@ function showCmd(root, phase, opts) {
 // The work list of a fix round: only what failed, with its excerpt.
 // The environment problems of a report (preflight, ENV DoD rows).
 function envLines(report) {
-  return [...(report.preflight || []), ...(report.dod || []).filter((x) => x.status === 'ENV').map((x) => `DoD ${x.source} ${x.id}: ${x.reason}`)];
+  return [
+    ...(report.preflight || []),
+    ...(report.results || []).filter((x) => x.status === 'ENV').map((x) => `${x.gate}: ${x.reason} (log: ${x.log})`),
+    ...(report.dod || []).filter((x) => x.status === 'ENV').map((x) => `DoD ${x.source} ${x.id}: ${x.reason}`),
+  ];
 }
 
 function failuresCmd(report) {
@@ -753,7 +790,10 @@ const exitOf = (report) => ({ PASS: 0, ENV: 5 })[report.status] ?? 1;
 // One child `gates run` per stack, all at once; resolves to their reports.
 function runChildren(phase, stackIds, rest) {
   const cli = path.join(__dirname, '..', 'jdi.js');
-  const base = rest.filter((a, i) => a !== '--stack' && rest[i - 1] !== '--stack' && a !== '--json');
+  // the children get the same flags minus the stack list, the output format
+  // and the detached job id (only the parent finishes the job)
+  const drop = new Set(['--stack', '--job']);
+  const base = rest.filter((a, i) => !drop.has(a) && !drop.has(rest[i - 1]) && a !== '--json');
   return Promise.all(
     stackIds.map(
       (s) =>
@@ -787,14 +827,119 @@ function printReports(reports, json) {
 
 // Always a promise (several stacks in parallel resolve later); errors keep
 // their exit code (bin/jdi.js awaits it).
+// --------------------------------------------------------------------------
+// Detached runs (0.21): `run --detach` returns at once; `wait` blocks up to
+// --timeout seconds (default and max 540: under a 10-minute tool-call limit)
+// and prints the run's output when it is done. For runtimes that cannot run a
+// command in the background and be told when it ends; a 20-minute suite in
+// the foreground used to hit the tool limit and lose its result.
+// --------------------------------------------------------------------------
+
+const WAIT_MAX_S = 540;
+const JOB_DIED = 2;
+const jobsDir = (root, phase) => path.join(root, core.JDI_DIR, 'cache', 'gates', phase.slug, 'jobs');
+
+function detach(root, phase, rest) {
+  const dir = jobsDir(root, phase);
+  fs.mkdirSync(dir, { recursive: true });
+  const job = Date.now().toString(36);
+  const outFd = fs.openSync(path.join(dir, `${job}.out`), 'w');
+  const args = rest.filter((a) => a !== '--detach');
+  const child = spawn(process.execPath, [path.join(__dirname, '..', 'jdi.js'), 'gates', 'run', ...args, '--job', job], {
+    cwd: root,
+    env: process.env,
+    detached: true,
+    windowsHide: true,
+    stdio: ['ignore', outFd, outFd],
+  });
+  child.unref();
+  fs.closeSync(outFd);
+  fs.writeFileSync(path.join(dir, `${job}.json`), JSON.stringify({ job, pid: child.pid, args, started: new Date().toISOString(), done: false }) + '\n');
+  process.stdout.write(`gates job ${job} started — \`jdi-cli gates wait ${phase.slug}\` (blocks up to ${WAIT_MAX_S}s per call)\n`);
+  return 0;
+}
+
+function finishJob(root, phase, job, code) {
+  const f = path.join(jobsDir(root, phase), `${job}.json`);
+  const j = core.readJson(f, {}) || {};
+  fs.writeFileSync(f, JSON.stringify({ ...j, done: true, code, finished: new Date().toISOString() }) + '\n');
+  return code;
+}
+
+function alive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function latestJob(root, phase) {
+  const files = fs.existsSync(jobsDir(root, phase)) ? fs.readdirSync(jobsDir(root, phase)).filter((f) => f.endsWith('.json')) : [];
+  return files.sort(core.compareStr).at(-1)?.slice(0, -5) || null;
+}
+
+// One look at the job: its exit code when it ended (or died, or ran out of
+// time to wait), null while it is still running.
+function jobStep(root, phase, job, deadline) {
+  const f = path.join(jobsDir(root, phase), `${job}.json`);
+  const j = core.readJson(f, null);
+  if (!j) throw new core.JdiError(`no gates job ${job}`, 2);
+  const out = () => core.readIf(path.join(jobsDir(root, phase), `${job}.out`)) || '';
+  if (j.done) {
+    process.stdout.write(out());
+    return j.code;
+  }
+  if (!alive(j.pid)) {
+    // not 1: 1 means "gates ran and failed" — this run measured nothing
+    process.stdout.write(out() + `\ngates job ${job}: the run died before it finished — nothing was measured, run it again\n`);
+    return JOB_DIED;
+  }
+  if (Date.now() > deadline) {
+    process.stdout.write(`gates job ${job}: still running (${Math.round((Date.now() - Date.parse(j.started)) / 60000)} min) — call \`jdi-cli gates wait ${phase.slug} --job ${job}\` again\n`);
+    return 75;
+  }
+  return null;
+}
+
+function waitJob(root, phase, opts) {
+  const job = opts.job || latestJob(root, phase);
+  if (!job) throw new core.JdiError(`no detached gates run for ${phase.slug} — start one with \`gates run ... --detach\``, 2);
+  const deadline = Date.now() + Math.min(opts.timeout || WAIT_MAX_S, WAIT_MAX_S) * 1000;
+  const poll = (resolve, reject) => {
+    try {
+      const code = jobStep(root, phase, job, deadline);
+      if (code === null) setTimeout(() => poll(resolve, reject), 2000);
+      else resolve(code);
+    } catch (err) {
+      reject(err);
+    }
+  };
+  return new Promise(poll);
+}
+
 async function main(argv) {
   const [sub, ...rest] = argv;
   const { id, opts } = parseArgs(rest);
-  if (!id) throw new core.JdiError('usage: jdi gates <run|show> <phase> [--stack <name>[,<name>]] [--only ...] [--changed-since <sha>]', 1);
+  if (!id) throw new core.JdiError('usage: jdi gates <run|show|wait> <phase> [--stack <name>[,<name>]] [--only ...] [--changed-since <sha>] [--detach]', 1);
   const root = process.cwd();
   const phase = core.resolvePhase(id, root);
   if (sub === 'show') return showCmd(root, phase, opts);
-  if (sub !== 'run') throw new core.JdiError('usage: jdi gates <run|show> <phase> ...', 1);
+  if (sub === 'wait') return waitJob(root, phase, opts);
+  if (sub !== 'run') throw new core.JdiError('usage: jdi gates <run|show|wait> <phase> ...', 1);
+  if (opts.detach) return detach(root, phase, rest);
+  if (!opts.job) return runCmd(root, phase, opts, rest);
+  // a detached run: its end (and its error's exit code) goes to the job file
+  try {
+    return finishJob(root, phase, opts.job, await runCmd(root, phase, opts, rest));
+  } catch (err) {
+    finishJob(root, phase, opts.job, err instanceof core.JdiError ? err.code : 1);
+    throw err; // the CLI prints it — into the job's output file
+  }
+}
+
+async function runCmd(root, phase, opts, rest) {
   const names = String(opts.stack || '').split(',').map((s) => s.trim()).filter(Boolean);
   if (names.length <= 1) return printReports([runGates(phase, opts, root)], opts.json);
   // every name resolved before anything runs; a reviewer without a stack

@@ -78,8 +78,15 @@ Invoke `jdi-planner` with:
 - `brief=$BRIEF`
 
 <!-- jdi:only claude -->
-If `.jdi/config.json` sets `models.planner` to anything other than `inherit`,
-pass it as the Agent `model` parameter.
+Model and effort come from `routing` in `.jdi/config.json` — a rule, not a
+judgment of the moment:
+
+```bash
+npx -y {{JDI_CLI}} route "$PHASE_SLUG" --role planner --json   # {model, effort, tier, why}
+```
+
+Pass `model` and `effort` as the Agent `model` and `effort` parameters (a
+`null` one is left out: the session's own applies).
 <!-- jdi:end -->
 
 Wait. The planner returns a short status (return contract); do not open
