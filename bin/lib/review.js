@@ -311,11 +311,12 @@ function mergeReview(phase, root = process.cwd()) {
     fs.writeFileSync(reviewFile, head + fresh.join('\n\n') + '\n');
     fs.rmSync(segDir(root, phase), { recursive: true, force: true });
   }
-  if (!fs.existsSync(reviewFile)) throw new core.JdiError(`${phase.dir}/REVIEW.md not found — the reviewers did not write it`, 2);
+  if (core.readIf(reviewFile) === null) throw new core.JdiError(`${phase.dir}/REVIEW.md not found — the reviewers did not write it`, 2);
   const readOnly = readOnlyCheck(root, phase, reviewFile, st);
   const text = core.readIf(reviewFile);
-  if (!fs.existsSync(carryFile)) return { carried: 0, readOnly, verified: stamp(reviewFile, root) };
-  const carried = segments(fs.readFileSync(carryFile, 'utf8'));
+  const carriedText = core.readIf(carryFile);
+  if (carriedText === null) return { carried: 0, readOnly, verified: stamp(reviewFile, root) };
+  const carried = segments(carriedText);
   const present = new Set(segments(text).map((x) => x.name));
   const add = carried.filter((x) => !present.has(x.name));
   fs.writeFileSync(reviewFile, text.replace(STAMP_RE, '').trimEnd() + '\n\n' + add.map((x) => x.text).join('\n\n') + '\n');

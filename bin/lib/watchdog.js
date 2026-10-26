@@ -3,8 +3,10 @@
 // Runs ONE gate command under watch, for `gates.run` (which stays
 // synchronous: it spawns this file with spawnSync). Usage, internal:
 //
-//   node watchdog.js '<json: { cmd, args, timeoutMs, idleMs }>'
+//   node watchdog.js   < json: { cmd, args, timeoutMs, idleMs }
 //
+// The spec comes on stdin, never as an argument: argv is readable by any
+// process on the machine (`ps`), and a gate command is the project's own.
 // - The command's stdout and stderr go, interleaved, to this process's stdout.
 // - On the deadline, or after `idleMs` with no output at all (a deadlock, a
 //   lock held elsewhere, a dead connection), the WHOLE process tree is killed:
@@ -18,6 +20,7 @@
 //   says which (gates.run reads it), and the code is 124 (130 interrupted).
 // - The shell itself not found: exit 127, message on stderr.
 
+const fs = require('node:fs');
 const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
 
@@ -101,6 +104,6 @@ function watch(spec) {
   });
 }
 
-if (require.main === module) watch(JSON.parse(process.argv[2]));
+if (require.main === module) watch(JSON.parse(fs.readFileSync(0, 'utf8')));
 
 module.exports = { watch };

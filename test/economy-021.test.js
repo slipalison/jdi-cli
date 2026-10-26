@@ -186,7 +186,8 @@ test('watchdog: an interrupt (Ctrl+C) takes the whole tree down (0.21)', { skip:
   const dir = tmpdir('jdi-021-int-');
   const pidFile = path.join(dir, 'child.pid');
   const spec = { cmd: 'bash', args: ['-c', `sleep 60 & echo $! > '${pidFile}'; wait`], timeoutMs: 60000, idleMs: 0 };
-  const wd = spawn(process.execPath, [path.join(__dirname, '..', 'bin', 'lib', 'watchdog.js'), JSON.stringify(spec)], { stdio: 'ignore' });
+  const wd = spawn(process.execPath, [path.join(__dirname, '..', 'bin', 'lib', 'watchdog.js')], { stdio: ['pipe', 'ignore', 'ignore'] });
+  wd.stdin.end(JSON.stringify(spec)); // the spec comes on stdin, never in argv
   return new Promise((resolve, reject) => {
     const poll = setInterval(() => {
       if (!fs.existsSync(pidFile) || !read(dir, 'child.pid').trim()) return;

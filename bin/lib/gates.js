@@ -119,7 +119,7 @@ const WATCHDOG = path.join(__dirname, 'watchdog.js');
 function run(cmd, { root, cwd = root, env, shell, timeoutMin, log, idleS }) {
   const t0 = Date.now();
   const spec = { cmd: shell.cmd, args: shell.args(cmd), timeoutMs: Math.round((timeoutMin || 30) * 60 * 1000), idleMs: idleS ? Math.round(idleS * 1000) : 0 };
-  const r = spawnSync(process.execPath, [WATCHDOG, JSON.stringify(spec)], { cwd, env, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, windowsHide: true });
+  const r = spawnSync(process.execPath, [WATCHDOG], { cwd, env, input: JSON.stringify(spec), encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, windowsHide: true });
   const output = `${r.stdout || ''}${r.stderr || ''}`;
   const out = `$ ${cmd}\n${output}`;
   core.writeFileEnsured(log, out, root);
@@ -880,30 +880,43 @@ function latestJob(root, phase) {
   return files.sort(core.compareStr).at(-1)?.slice(0, -5) || null;
 }
 
-async function waitJob(root, phase, opts) {
+// One look at the job: its exit code when it ended (or died, or ran out of
+// time to wait), null while it is still running.
+function jobStep(root, phase, job, deadline) {
+  const f = path.join(jobsDir(root, phase), `${job}.json`);
+  const j = core.readJson(f, null);
+  if (!j) throw new core.JdiError(`no gates job ${job}`, 2);
+  const out = () => core.readIf(path.join(jobsDir(root, phase), `${job}.out`)) || '';
+  if (j.done) {
+    process.stdout.write(out());
+    return j.code;
+  }
+  if (!alive(j.pid)) {
+    // not 1: 1 means "gates ran and failed" — this run measured nothing
+    process.stdout.write(out() + `\ngates job ${job}: the run died before it finished — nothing was measured, run it again\n`);
+    return JOB_DIED;
+  }
+  if (Date.now() > deadline) {
+    process.stdout.write(`gates job ${job}: still running (${Math.round((Date.now() - Date.parse(j.started)) / 60000)} min) — call \`jdi-cli gates wait ${phase.slug} --job ${job}\` again\n`);
+    return 75;
+  }
+  return null;
+}
+
+function waitJob(root, phase, opts) {
   const job = opts.job || latestJob(root, phase);
   if (!job) throw new core.JdiError(`no detached gates run for ${phase.slug} — start one with \`gates run ... --detach\``, 2);
-  const f = path.join(jobsDir(root, phase), `${job}.json`);
   const deadline = Date.now() + Math.min(opts.timeout || WAIT_MAX_S, WAIT_MAX_S) * 1000;
-  for (;;) {
-    const j = core.readJson(f, null);
-    if (!j) throw new core.JdiError(`no gates job ${job}`, 2);
-    const out = () => core.readIf(path.join(jobsDir(root, phase), `${job}.out`)) || '';
-    if (j.done) {
-      process.stdout.write(out());
-      return j.code;
+  const poll = (resolve, reject) => {
+    try {
+      const code = jobStep(root, phase, job, deadline);
+      if (code === null) setTimeout(() => poll(resolve, reject), 2000);
+      else resolve(code);
+    } catch (err) {
+      reject(err);
     }
-    if (!alive(j.pid)) {
-      // not 1: 1 means "gates ran and failed" — this run measured nothing
-      process.stdout.write(out() + `\ngates job ${job}: the run died before it finished — nothing was measured, run it again\n`);
-      return JOB_DIED;
-    }
-    if (Date.now() > deadline) {
-      process.stdout.write(`gates job ${job}: still running (${Math.round((Date.now() - Date.parse(j.started)) / 60000)} min) — call \`jdi-cli gates wait ${phase.slug} --job ${job}\` again\n`);
-      return 75;
-    }
-    await new Promise((r) => setTimeout(r, 2000));
-  }
+  };
+  return new Promise(poll);
 }
 
 async function main(argv) {
