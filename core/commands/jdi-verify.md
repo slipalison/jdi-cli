@@ -159,7 +159,9 @@ round. ONE fix pass first: a FRESH doer per stack with failures (the doer
 paired with that reviewer), each with its own list —
 `npx -y {{JDI_CLI}} gates show "$PHASE_SLUG" --failures --stack <stack> > .jdi/cache/gate-failures-<stack>.txt`
 and `mode=fix_wave failures=.jdi/cache/gate-failures-<stack>.txt` (routed
-with `route ... --role doer --attempt 2`: a measured failure); the DoD
+with `route ... --role doer --attempt 2`: a measured failure — on Copilot
+and OpenCode with `--runtime <rt> --agent <that doer>`, spawning its
+`agent`); the DoD
 failures (`gates show "$PHASE_SLUG" --failures`, the `dod` report) go to the
 first stack's doer. A fix that committed changes what `review plan` decided
 (a carried reviewer's scope may now have changed): run Step 4 again from
@@ -248,6 +250,12 @@ parameters (a `null` one left out). Reviewers and the critic never go below
 their `floors` tier (cheap models miss real defects); the reviewers of a
 phase that touches `sizing.sensitive_globs` get the strong one. Never re-dispatch work to a
 reviewer that already returned (SendMessage): spawn a fresh one.
+<!-- jdi:end -->
+<!-- jdi:only copilot,opencode -->
+The agent to spawn: `npx -y {{JDI_CLI}} route "$PHASE_SLUG" --role reviewer --runtime {{JDI_RUNTIME}} --agent "$REVIEWER" --json`
+(and `--role critic --agent jdi-dod-critic` for the critic) → its `agent`: a
+copy with the tier's model (`routing.runtime_models.{{JDI_RUNTIME}}`), or the agent itself.
+Reviewers and the critic never go below their `floors` tier.
 <!-- jdi:end -->
 
 Each reviewer scopes its gates to its `file_glob` (from frontmatter

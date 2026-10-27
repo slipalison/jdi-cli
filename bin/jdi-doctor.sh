@@ -228,7 +228,8 @@ if [[ -d "$PROJECT_DIR/.jdi" ]]; then
       ok ".jdi/agents/ com $spec_count specialist(s) per-project"
       # Runtime copies (#33): the runtime spawns from .claude/agents/ etc.,
       # never from .jdi/agents/ — a missing/stale copy kills /jdi-do.
-      if bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/jdi-sync-specialists.sh" --check --quiet 2>/dev/null; then
+      if bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/jdi-sync-specialists.sh" --check --quiet 2>/dev/null \
+        && (cd "$PROJECT_DIR" && node "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/tiers.js" --check --quiet); then
         ok "specialists em sync com os runtime dirs (.claude/agents/, .github/agents/, ...)"
       else
         warn "specialists ausentes/desatualizados nos runtime dirs — rode: npx -y jdi-cli sync-specialists"

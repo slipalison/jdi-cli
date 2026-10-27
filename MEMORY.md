@@ -255,7 +255,8 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
     "sizing": true,
     "gate_cache": true,
     "parallel_review": true,
-    "parallel_gates": false
+    "parallel_gates": false,
+    "worktree_doers": false
   },
   "sizing": {
     "lite_max_tasks": 3,
@@ -285,8 +286,12 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
       { "role": "planner", "tier": "strong" }
     ],
     "floors": { "reviewer": "standard", "critic": "standard" },
-    "escalate": true
+    "escalate": true,
+    "quota_aware": true,
+    "adapt": { "mode": "off", "min_samples": 8, "raise_below": 0.7, "lower_above": 0.95 },
+    "runtime_models": {}
   },
+  "quota": { "warn_pct": 80, "stop_pct": 95, "session_mtok": null, "weekly_mtok": null },
   "compaction": {
     "archive_after": 5
   },
@@ -297,7 +302,8 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
   "orchestration": {
     "mode": "standard",
     "source": "default",
-    "max_resets_autonomous": 3
+    "max_resets_autonomous": 3,
+    "phase_ceiling": { "spawns": 60, "hours": 12, "weighted_mtok": 150 }
   },
   "gate": {
     "code_globs": ["src/**"]
@@ -326,6 +332,12 @@ Since 0.3.0 it lives in `.gitignore` — every command rewrites it, so versionin
 - `loop.non_product_globs` — files that do not count as a product change for the ralph loop's convergence rule (`.jdi/**` never counts). E.g. `["docs/**", "*.md"]`.
 - `orchestration.max_resets_autonomous` — reset cap of the loop under `/jdi-issue` (no human at the gate); reaching it kills the loop.
 - `chars_per_token` — per language, used to estimate tokens. Measured: Claude tokenizes pt-BR JDI artifacts at 2.0-2.4 chars/token (the old "4 chars/token" undercounted twice).
+- `routing.runtime_models` (0.22) — `{ copilot: { cheap, standard, strong }, opencode: {...} }`: each runtime's model id per tier. Those runtimes take the model from the agent file, so `sync-specialists` writes a copy of each specialist (and of jdi-planner, jdi-asker, jdi-dod-critic) per named tier, `<agent>--<tier>`, with that model; `route --runtime <rt> --agent <name>` answers which to spawn. A tier left out keeps the runtime's own model. Empty (the default) = no copies.
+- `routing.quota_aware` (0.22, default true) — while the cached `jdi-cli quota` verdict is `tight` (at most 15 min old), a doer task that is neither deep nor sensitive gets one tier less on its first attempt.
+- `routing.adapt` (0.22) — `mode` `off` (default) or `on`. `route` logs every answer to `<git common dir>/jdi/route-log.jsonl` (shared by the clone's worktrees, kept when one is removed; one log per JDI project in the repo). A doer decision counts once its phase has an outcome (a reviewer routed, or a fix), and passed the first time when no later fix of its phase (attempt >= 2) names its task or no task — a fix that names no task counts against every task of the phase (conservative: it can only keep a tier up). With at least `min_samples` decisions of a weight on a tier: below `raise_below` → one tier up; at or above `lower_above`, unless the tier below is known to fail → one tier down (never for deep or sensitive work). `cost --by-model` shows the table it acts on.
+- `quota` (0.22) — `warn_pct` / `stop_pct`: the `tight` / `stop` thresholds over a limit's used percentage. `session_mtok` / `weekly_mtok`: limits in millions of cache-weighted tokens for the LOCAL estimate only (this machine's usage) — used when no status line snapshot (`jdi quota record`, the global command) is fresh; `jdi-cli quota` lists the local usage at recent blocks to help pick them.
+- `orchestration.phase_ceiling` (0.22) — `spawns`, `hours`, `weighted_mtok` of an autonomous run on a phase since `jdi-cli ceiling --start` (`/jdi-issue` Step 3); past any of them `/jdi-issue` stops with a HANDOFF and never ships. `null` = no limit (the default for projects created before 0.22).
+- `economy.worktree_doers` (0.22, default false) — each doer of a parallel wave works in its own git worktree (`jdi-cli wave`); stack key `worktree_setup` runs in each fresh worktree first (dependencies, warm-up).
 - `models.<role>` — `asker`, `planner`, `doer`, `reviewer`, `critic`: `inherit` (the session's model) or a model the user chose; used when `routing.mode` is off (`jdi-cli route` returns it, with no effort). The commands pass it as the Agent `model` parameter where the runtime supports it. Tokens do not change with the model; the price per token does.
 - `compaction.archive_after` — how many shipped phases `jdi-cli phases archive` keeps in `.jdi/phases/` (default for `--keep`); older shipped phases move to `.jdi/archive/`, except those still referenced outside their folder (`--rewrite-refs` updates the references instead). Never run by `/jdi-ship`. `0` disables it.
 - `coverage_min` — overridable per PROJECT.md. Reviewer uses it.

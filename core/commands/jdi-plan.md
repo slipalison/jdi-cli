@@ -88,6 +88,18 @@ npx -y {{JDI_CLI}} route "$PHASE_SLUG" --role planner --json   # {model, effort,
 Pass `model` and `effort` as the Agent `model` and `effort` parameters (a
 `null` one is left out: the session's own applies).
 <!-- jdi:end -->
+<!-- jdi:only copilot,opencode -->
+This runtime takes the model from the agent file, so `routing` answers WHICH
+agent to spawn:
+
+```bash
+npx -y {{JDI_CLI}} route "$PHASE_SLUG" --role planner --runtime {{JDI_RUNTIME}} --agent jdi-planner --json   # {agent, tier, model, why}
+```
+
+Spawn its `agent`: a copy of jdi-planner with the tier's model
+(`routing.runtime_models.{{JDI_RUNTIME}}`, written by `sync-specialists`), or jdi-planner
+itself when that tier has no copy.
+<!-- jdi:end -->
 
 Wait. The planner returns a short status (return contract); do not open
 PLAN.md just to repeat it.

@@ -326,7 +326,15 @@ goes one tier up, and reviewers never go below `standard`. AskUserQuestion:
 
 Write the answer into `.jdi/config.json` (create the key if absent). The
 commands pass `model` and `effort` as Agent parameters at dispatch on
-runtimes that support them; nothing is pinned in the agent files. Tokens do
+runtimes that support them; nothing is pinned in the agent files.
+
+GitHub Copilot and OpenCode take the model from the agent file instead: when
+the project installs either, ask (once, optional) the model id that runtime
+knows for each tier — e.g. OpenCode `anthropic/claude-haiku-4-5`, Copilot
+`gpt-5-mini` — into `routing.runtime_models.<runtime>.<tier>`. Each tier
+named there gets a copy of every agent with that model (`<agent>--<tier>`,
+written by `jdi-cli sync-specialists`); a tier left out keeps the runtime's
+own model. Junie and Antigravity choose the model themselves: nothing to ask. Tokens do
 not change with the model — the price per token does, and so can quality:
 say so.
 

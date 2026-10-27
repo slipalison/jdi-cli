@@ -16,7 +16,7 @@ Strategy: 1 source of truth (`core/`) + adapters per runtime (`runtimes/<name>/`
 | Hook | `settings.json` `hooks` | none | none | `opencode.jsonc` `permission` | `~/.junie/config.json` `hooks` |
 | Invocation | `/jdi-discuss` | `/jdi-discuss` or `@jdi-asker` | discovery by trigger | `/jdi-discuss` or `@jdi-asker` | semantic discovery (type "/jdi-discuss auth-flow" in the message) |
 | Restricted tools | frontmatter `tools:` | frontmatter `tools:` | no formal restriction | frontmatter `permission:` | frontmatter `tools:`/`disallowedTools:` (enforced) |
-| Model selection | `model: opus\|sonnet\|haiku` | inherited from picker | not exposed | inherited (or `llm_config`) | inherited — LLM-agnostic by design |
+| Model selection | `model: opus\|sonnet\|haiku`; per spawn: `route` model + effort | inherited from picker; per spawn: a tier copy `<agent>--<tier>` with `model:` (0.22) | not exposed | inherited (or `llm_config`); per spawn: a tier copy (0.22) | inherited — LLM-agnostic by design |
 | Subagent flag | implicit (Agent tool spawn) | referenced via `@<name>` | discovery | `mode: subagent` + `subtask: true` | automatic delegation by description match |
 
 **Junie note:** JDI commands ship as Junie **skills**, not Junie custom commands — Junie custom commands require named template arguments (`$phase`) that are all mandatory and would treat the `$VARS` inside JDI command bodies as parameters. Skills use semantic discovery instead: mention the command and the slug in your message ("run /jdi-plan for auth-flow"). Subagents delegate automatically by description match; there is no manual `@agent` invocation.
@@ -29,6 +29,24 @@ Refs:
 - [OpenCode commands](https://opencode.ai/docs/commands/)
 - [OpenCode skills](https://opencode.ai/docs/skills/)
 - [Junie CLI docs](https://junie.jetbrains.com/docs/junie-cli.html) · [subagents](https://junie.jetbrains.com/docs/junie-cli-subagents.html) · [skills](https://junie.jetbrains.com/docs/agent-skills.html)
+
+## What each runtime gets of the routing, quota and measurement work (0.21-0.22)
+
+The helpers are one Node CLI, so everything that runs in a shell works on all
+five runtimes. What does not is what needs the runtime itself: choosing a
+model per spawn, and reading its session data.
+
+| Feature | Claude Code | Copilot | OpenCode | Junie | Antigravity |
+|---|---|---|---|---|---|
+| Gate watchdog, `ENV`, `gates --detach`/`wait`, read-only check, `STATUS:`, direct path, brief score, ceiling hours | yes | yes | yes | yes | yes |
+| Worktree waves (`economy.worktree_doers`) | yes | where it runs parallel doers | yes | where it runs parallel doers | — |
+| Model per spawn (`route`) | model + effort per call | tier copies of each agent (`routing.runtime_models.copilot`) | tier copies (`routing.runtime_models.opencode`) | no (picks a subagent by description; no model) | no (no model) |
+| `routing.adapt`, route log | yes | yes (with tier copies) | yes (with tier copies) | — | — |
+| `quota`, ceiling spawns/tokens, `cost --timeline`, `cost --by-model` | yes (status line + transcripts) | no — `quota` answers `unknown`, the ceiling counts hours only | same | same | same |
+
+Reading the session data of the other runtimes (to give them `quota` and the
+cost reports) needs each one's format confirmed on a machine that runs it;
+until then those commands degrade to "unknown" rather than guess.
 
 ## Copilot is THREE surfaces, not one
 

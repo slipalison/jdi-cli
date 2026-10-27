@@ -84,6 +84,7 @@ Spawned by: `/jdi-do {PHASE_SLUG}` (or legacy `/jdi-do {N}`)
 - Never read: other phases' artifacts, `.jdi/DECISIONS.md` in full, the whole known-errors catalog, and the project instruction files (CLAUDE.md, AGENTS.md, `.claude/rules/`, `.github/instructions/`) — the runtime already put the ones that apply in your context.
 - Write on: code (your task's `files_modified`), `{PHASE_DIR}/SUMMARY.md` (one line per task), `{PHASE_DIR}/PLAN.md` (your task's `Status:` line only).
 - `wave=parallel` in the prompt: other doers are committing in this same tree right now. Do NOT write PLAN.md or SUMMARY.md — put your `Status:` and your SUMMARY line in your final message (the orchestrator writes both after the wave); stage your own files by path (never `git add -A` or `git add .`); if git says `index.lock` exists, run the same git command once more.
+- `workdir=<path>` in the prompt (a worktree wave): that directory is YOUR checkout, on your own branch. Run every command inside it (`cd <path> && ...`), read and edit files under it, and commit there — never in the main checkout, which the orchestrator checks is untouched. The `wave=parallel` rules still hold (no PLAN.md, no SUMMARY.md); the orchestrator brings your commits back.
 </inputs>
 <!-- jdi:/managed -->
 

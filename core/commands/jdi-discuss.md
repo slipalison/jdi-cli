@@ -107,6 +107,18 @@ npx -y {{JDI_CLI}} route "$PHASE_SLUG" --role asker --json   # {model, effort, t
 Pass `model` and `effort` as the Agent `model` and `effort` parameters (a
 `null` one is left out: the session's own applies).
 <!-- jdi:end -->
+<!-- jdi:only copilot,opencode -->
+This runtime takes the model from the agent file, so `routing` answers WHICH
+agent to spawn:
+
+```bash
+npx -y {{JDI_CLI}} route "$PHASE_SLUG" --role asker --runtime {{JDI_RUNTIME}} --agent jdi-asker --json   # {agent, tier, model, why}
+```
+
+Spawn its `agent`: a copy of jdi-asker with the tier's model
+(`routing.runtime_models.{{JDI_RUNTIME}}`, written by `sync-specialists`), or jdi-asker
+itself when that tier has no copy.
+<!-- jdi:end -->
 
 Agent runs its own process. Returns when CONTEXT.md is written to `$PHASE_DIR/CONTEXT.md`.
 Its final message is a short status (return contract) — do not open
@@ -158,6 +170,10 @@ Agent(
 <!-- jdi:only claude -->
 Model and effort: `npx -y {{JDI_CLI}} route "$PHASE_SLUG" --role critic --json`
 → its `model` and `effort` as the Agent parameters (a `null` one left out).
+<!-- jdi:end -->
+<!-- jdi:only copilot,opencode -->
+The critic to spawn: `npx -y {{JDI_CLI}} route "$PHASE_SLUG" --role critic --runtime {{JDI_RUNTIME}} --agent jdi-dod-critic --json`
+→ its `agent` (a copy with the tier's model, or `jdi-dod-critic` itself).
 <!-- jdi:end -->
 
 ```bash

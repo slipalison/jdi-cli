@@ -231,6 +231,14 @@ Model and effort per spawn come from `npx -y {{JDI_CLI}} route` (see
 `--attempt N` — a stronger model only after a review that measured a failure.
 <!-- jdi:end -->
 
+<!-- jdi:only copilot,opencode -->
+**Model per spawn:** when the loop spawns agents, it spawns the `agent` that
+`route --runtime {{JDI_RUNTIME}} --agent <name>` answers (see /jdi-do and
+/jdi-verify); the fix doer of iteration N routes with `--attempt N`. When the
+loop runs inline (below), every step runs on the session's model and routing
+has nothing to choose.
+<!-- jdi:end -->
+
 **Copilot:** subagent spawning has no reliable completion signal. Run the loop
 body inline instead: execute /jdi-do steps, then /jdi-verify steps, in this
 same session, one iter at a time. Caps/oscillation/human gates unchanged.

@@ -239,6 +239,7 @@ if [[ ${#specialists[@]} -gt 0 ]]; then
   else
     (cd "$PROJECT_DIR" && node "$ROOT/bin/jdi.js" specialists upgrade --write) || true
     (cd "$PROJECT_DIR" && JDI_LANG="$JDI_LANG" bash "$ROOT/bin/lib/jdi-sync-specialists.sh" all --quiet) || true
+    (cd "$PROJECT_DIR" && node "$ROOT/bin/lib/tiers.js" all --quiet) || true
   fi
   legacy=0
   for s in "${specialists[@]}"; do

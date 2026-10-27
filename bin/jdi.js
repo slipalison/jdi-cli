@@ -367,6 +367,14 @@ function libArgs() {
   return out;
 }
 
+// The runtime copies first (shell, byte-identical twins), then the tier
+// variants Copilot and OpenCode need for `route` (0.22).
+function cmdSyncSpecialists() {
+  const { code } = runLibScript('jdi-sync-specialists', libArgs());
+  if (code !== 0) process.exit(code);
+  runNodeHelper('tiers', libArgs());
+}
+
 // Node helpers live in bin/lib/<name>.js and export main(argv) -> exit code.
 // Errors carrying a numeric `code` (JdiError) keep it as the exit code.
 function runNodeHelper(name, rawArgs) {
@@ -689,7 +697,8 @@ async function cmdHelp() {
   console.log(`  ${c.cyan}render${c.reset} ${c.gray}[--check]${c.reset}          ${tr('help.helper.render')}`);
   console.log(`  ${c.cyan}migrate-layout${c.reset} ${c.gray}[--dry-run]${c.reset}  ${tr('help.helper.migrate_layout')}`);
   console.log(`  ${c.cyan}sync-specialists${c.reset} ${c.gray}[runtime] [--check]${c.reset}  ${tr('help.helper.sync_specialists')}`);
-  console.log(`  ${c.cyan}cost${c.reset} ${c.gray}[--targets|--timeline] [--json] [--since d]${c.reset}  ${tr('help.helper.cost')}`);
+  console.log(`  ${c.cyan}cost${c.reset} ${c.gray}[--targets|--timeline|--by-model] [--json] [--since d]${c.reset}  ${tr('help.helper.cost')}`);
+  console.log(`  ${c.cyan}quota${c.reset} ${c.gray}[--json] | record${c.reset}  ${tr('help.helper.quota')}`);
   console.log(`  ${c.cyan}template${c.reset} ${c.gray}<name> [--out f] | --list${c.reset}  ${tr('help.helper.template')}`);
   console.log(`  ${c.cyan}learnings${c.reset} ${c.gray}[--last N] [--out f]${c.reset}  ${tr('help.helper.learnings')}`);
   console.log(`  ${c.cyan}decisions${c.reset} ${c.gray}[--index|--ids|--phase|--recent N]${c.reset}  ${tr('help.helper.decisions')}`);
@@ -707,7 +716,9 @@ async function cmdHelp() {
   console.log(`  ${c.cyan}specialists${c.reset} ${c.gray}<lint|upgrade> [--adopt] [--write]${c.reset}  ${tr('help.helper.specialists')}`);
   console.log(`  ${c.cyan}critic${c.reset} ${c.gray}<plan|apply> <phase> [--preflight]${c.reset}  ${tr('help.helper.critic')}`);
   console.log(`  ${c.cyan}size${c.reset} ${c.gray}<phase> [--intake|--direct] [--json]${c.reset}  ${tr('help.helper.size')}`);
-  console.log(`  ${c.cyan}route${c.reset} ${c.gray}<phase> --role <r> [--task T-N] [--attempt N]${c.reset}  ${tr('help.helper.route')}`);
+  console.log(`  ${c.cyan}route${c.reset} ${c.gray}<phase> --role <r> [--task T-N] [--attempt N] [--runtime rt --agent name]${c.reset}  ${tr('help.helper.route')}`);
+  console.log(`  ${c.cyan}ceiling${c.reset} ${c.gray}<phase> [--start] [--json]${c.reset}  ${tr('help.helper.ceiling')}`);
+  console.log(`  ${c.cyan}wave${c.reset} ${c.gray}<worktrees|merge|clean> <phase> [--tasks T-1,T-2]${c.reset}  ${tr('help.helper.wave')}`);
   console.log(`  ${c.cyan}evidence${c.reset} ${c.gray}<record|status> <phase> [--row N --scope iteration|ship]${c.reset}  ${tr('help.helper.evidence')}`);
   console.log('');
 
@@ -864,7 +875,7 @@ async function main() {
       cmdLibZeroArg('jdi-migrate-layout', libArgs());
       break;
     case 'sync-specialists':
-      cmdLibZeroArg('jdi-sync-specialists', libArgs());
+      cmdSyncSpecialists();
       break;
     case 'monitor':
       cmdLibPassthrough('jdi-monitor', 'monitor <file...>', libArgs());
@@ -888,6 +899,9 @@ async function main() {
     case 'size':
     case 'evidence':
     case 'route':
+    case 'quota':
+    case 'ceiling':
+    case 'wave':
       runNodeHelper(parsed.cmd, libArgs());
       break;
     case 'add-phase':

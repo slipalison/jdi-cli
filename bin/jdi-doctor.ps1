@@ -226,6 +226,10 @@ if (Test-Path "$ProjectDir\.jdi") {
       # never from .jdi/agents/ - a missing/stale copy kills /jdi-do.
       & (Join-Path $PSScriptRoot 'lib\jdi-sync-specialists.ps1') -Check -Quiet
       if ($LASTEXITCODE -eq 0) {
+        Push-Location $ProjectDir
+        try { & node (Join-Path $PSScriptRoot 'lib\tiers.js') --check --quiet } finally { Pop-Location }
+      }
+      if ($LASTEXITCODE -eq 0) {
         Write-OK 'specialists em sync com os runtime dirs (.claude/agents/, .github/agents/, ...)'
       } else {
         Write-WARN 'specialists ausentes/desatualizados nos runtime dirs - rode: npx -y jdi-cli sync-specialists'

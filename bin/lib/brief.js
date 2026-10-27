@@ -259,6 +259,44 @@ function dodRow(it, ctxRel, limit, { stack = false, max = 400 } = {}) {
   return `- DoD ${it.id} (${kind}): ${it.criterion.slice(0, max)}\n  Verify: ${verifyRef(it, ctxRel, limit)}`;
 }
 
+// A task field's text: inline after the label, or the lines under it, up to
+// the next `- **Field:**` at the field's own indentation (a sub-bullet that
+// starts with a bold label belongs to the field).
+function fieldBody(block, name) {
+  const label = `**${name}:**`;
+  const i = block.indexOf(label);
+  if (i === -1) return '';
+  const lineStart = block.lastIndexOf('\n', i) + 1;
+  const indent = block.slice(lineStart, i).search(/\S/); // spaces before the field's own `- `
+  const lines = block.slice(i + label.length).split('\n');
+  const end = lines.findIndex((l, n) => {
+    if (n === 0) return false;
+    const m = FIELD_LINE.exec(l);
+    return Boolean(m) && m[1].length <= indent;
+  });
+  return (end === -1 ? lines : lines.slice(0, end)).join('\n').trim();
+}
+
+const FIELD_LINE = /^( *)- \*\*[A-Z][^*]*:\*\*/;
+const NO_TEST = /^(none|n\/a|-|—|nenhum)$/i;
+
+// Can a doer start from this task without coming back NEEDS_CONTEXT (0.22)?
+// An objective, a result it can verify, a scope — without any of the three
+// the brief is WEAK — and the constraints that bind it (decisions, DoD lines,
+// orchestrator notes), which a small task may lack.
+function briefScore(task, constraints) {
+  const test = fieldBody(task.block, 'Test');
+  const files = fieldBody(task.block, 'Files modified'); // `Dockerfile` has no dot: not in task.files
+  const checks = [
+    ['objective', task.title.trim().length >= 3],
+    ['verifiable result', Boolean(fieldBody(task.block, 'Acceptance')) || Boolean(test && !NO_TEST.test(test))],
+    ['scope', task.files.length > 0 || Boolean(files && !NO_TEST.test(files))],
+    ['constraints', constraints],
+  ];
+  const missing = checks.filter(([, ok]) => !ok).map(([name]) => name);
+  return { score: checks.length - missing.length, of: checks.length, missing, weak: missing.some((m) => m !== 'constraints') };
+}
+
 function doerParts(c) {
   const { b, opts, phase, planText, planRel, ctxText, ctxRel, doc, limit } = c;
   const task = parseTasks(planText).find((t) => t.id === opts.task);
@@ -278,6 +316,7 @@ function doerParts(c) {
     `Implement only \`${task.id}\`, only in its files. Lint, then the task's targeted test — never the full suite, coverage or E2E (the verify step runs them once).`,
     `Mark \`${task.id}\` \`Status:\` in ${planRel}, append one line to ${phase.dir}/SUMMARY.md, commit atomically. Return at most 10 lines.`,
   ].join('\n'), 0);
+  return { score: briefScore(task, Boolean(picked.length || rows.length || notes.length || locked)) };
 }
 
 function gateLine(g) {
@@ -401,7 +440,7 @@ function build(phase, opts, root = process.cwd()) {
     "Open an artifact only for what the brief points to, and say why. Never read other phases' artifacts or the whole `.jdi/DECISIONS.md`.",
     runtimeNote(opts.runtime),
   ].join('\n'), 0);
-  parts({
+  const meta = parts({
     b,
     opts,
     root,
@@ -416,7 +455,7 @@ function build(phase, opts, root = process.cwd()) {
     ke: (stage, files) => knownErrorsText(root, config, ratio, stage, files),
     learn: () => learnings.render(root, 3, 1500).trim(),
   });
-  return b.render();
+  return { ...b.render(), score: meta?.score || null };
 }
 
 function defaultOut(root, phase, opts) {
@@ -456,8 +495,12 @@ function main(argv) {
   const out = opts.out ? path.resolve(opts.out) : defaultOut(root, phase, opts);
   core.writeFileEnsured(out, r.text, root);
   const left = r.dropped.length ? '; left out: ' + r.dropped.join(', ') : '';
-  console.log(`${path.relative(root, out).split(path.sep).join('/')} (~${r.tokens} tokens${left})`);
+  const s = r.score;
+  let score = '';
+  if (s) score = `; score ${s.score}/${s.of}` + (s.missing.length ? ' — missing ' + s.missing.join(', ') : '');
+  console.log(`${path.relative(root, out).split(path.sep).join('/')} (~${r.tokens} tokens${left}${score})`);
+  if (s?.weak) console.error(`WEAK BRIEF: ${opts.task} has no ${s.missing.filter((m) => m !== 'constraints').join(', no ')} — complete the task in PLAN.md (or its Orchestrator notes) before the spawn; a doer without them comes back NEEDS_CONTEXT`);
   return 0;
 }
 
-module.exports = { main, build, parseTasks, expandBraces, sections };
+module.exports = { main, build, parseTasks, expandBraces, sections, briefScore };
