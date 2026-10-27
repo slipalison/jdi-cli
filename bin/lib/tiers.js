@@ -98,33 +98,42 @@ function present(root, rt) {
     .filter((f) => MARK_RE.test(core.readIf(f) || ''));
 }
 
+// One copy that should exist: in sync, stale (--check) or written.
+function syncCopy(root, file, text, opts, tally) {
+  const rel = path.relative(root, file).split(path.sep).join('/');
+  if ((core.readIf(file) || '').replaceAll('\r\n', '\n') === text) {
+    tally.same++;
+    if (opts.porcelain) tally.lines.push(rel);
+    return;
+  }
+  if (opts.check) {
+    tally.drift++;
+    if (!opts.porcelain) tally.lines.push(`STALE   ${rel} (tier variant)`);
+    return;
+  }
+  core.writeFileEnsured(file, text, root);
+  tally.written++;
+  tally.lines.push(opts.porcelain ? rel : `  ${rel}`);
+}
+
+// One copy that should not exist anymore: extra (--check) or removed.
+function dropCopy(root, file, opts, tally) {
+  const rel = path.relative(root, file).split(path.sep).join('/');
+  if (opts.check) {
+    tally.drift++;
+    if (!opts.porcelain) tally.lines.push(`EXTRA   ${rel} (tier no longer configured)`);
+    return;
+  }
+  fs.rmSync(file, { force: true });
+  tally.removed++;
+  // porcelain feeds `git add`: a removed path stages its deletion
+  tally.lines.push(opts.porcelain ? rel : `  removed ${rel}`);
+}
+
 function syncRuntime(root, rt, models, opts, tally) {
   const want = expected(root, rt, models);
-  const rel = (f) => path.relative(root, f).split(path.sep).join('/');
-  for (const [file, text] of want) {
-    if ((core.readIf(file) || '').replaceAll('\r\n', '\n') === text) {
-      tally.same++;
-      if (opts.porcelain) tally.lines.push(rel(file));
-    } else if (opts.check) {
-      tally.drift++;
-      if (!opts.porcelain) tally.lines.push(`STALE   ${rel(file)} (tier variant)`);
-    } else {
-      core.writeFileEnsured(file, text, root);
-      tally.written++;
-      tally.lines.push(opts.porcelain ? rel(file) : `  ${rel(file)}`);
-    }
-  }
-  for (const file of present(root, rt).filter((f) => !want.has(f))) {
-    if (opts.check) {
-      tally.drift++;
-      if (!opts.porcelain) tally.lines.push(`EXTRA   ${rel(file)} (tier no longer configured)`);
-    } else {
-      fs.rmSync(file, { force: true });
-      tally.removed++;
-      // porcelain feeds `git add`: a removed path stages its deletion
-      tally.lines.push(opts.porcelain ? rel(file) : `  removed ${rel(file)}`);
-    }
-  }
+  for (const [file, text] of want) syncCopy(root, file, text, opts, tally);
+  for (const file of present(root, rt).filter((f) => !want.has(f))) dropCopy(root, file, opts, tally);
 }
 
 function sync(root, opts = {}) {

@@ -367,6 +367,14 @@ function libArgs() {
   return out;
 }
 
+// The runtime copies first (shell, byte-identical twins), then the tier
+// variants Copilot and OpenCode need for `route` (0.22).
+function cmdSyncSpecialists() {
+  const { code } = runLibScript('jdi-sync-specialists', libArgs());
+  if (code !== 0) process.exit(code);
+  runNodeHelper('tiers', libArgs());
+}
+
 // Node helpers live in bin/lib/<name>.js and export main(argv) -> exit code.
 // Errors carrying a numeric `code` (JdiError) keep it as the exit code.
 function runNodeHelper(name, rawArgs) {
@@ -866,14 +874,9 @@ async function main() {
     case 'migrate-layout':
       cmdLibZeroArg('jdi-migrate-layout', libArgs());
       break;
-    case 'sync-specialists': {
-      // the runtime copies first (shell, byte-identical twins), then the
-      // tier variants Copilot and OpenCode need for `route` (0.22)
-      const { code } = runLibScript('jdi-sync-specialists', libArgs());
-      if (code !== 0) process.exit(code);
-      runNodeHelper('tiers', libArgs());
+    case 'sync-specialists':
+      cmdSyncSpecialists();
       break;
-    }
     case 'monitor':
       cmdLibPassthrough('jdi-monitor', 'monitor <file...>', libArgs());
       break;

@@ -122,9 +122,10 @@ const pct = (x) => `${Math.round(100 * x)}%`;
 const BURST_MS = 10 * 60 * 1000;
 
 // This project's place in the clone: several JDI projects can share one repo.
+// Asked to git, not computed from paths (Windows: C:\Users\RUNNER~1 here,
+// C:/Users/runneradmin from `--show-toplevel`).
 function projectKey(root) {
-  const top = core.git(['rev-parse', '--show-toplevel'], root).stdout;
-  return top ? path.relative(top, root).split(path.sep).join('/') : '';
+  return core.git(['rev-parse', '--show-prefix'], root).stdout.replace(/\/$/, '');
 }
 
 function readLog(root) {
