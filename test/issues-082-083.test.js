@@ -6,25 +6,17 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
-const { tmpdir, write, read, jdi } = require('./helpers');
+const { write, read, jdi, gitRepo } = require('./helpers');
 
-function repo(files) {
-  const root = tmpdir('jdi-8283-');
-  const g = (...a) => spawnSync('git', a, { cwd: root, encoding: 'utf8' });
-  g('init', '-q');
-  g('config', 'user.email', 't@example.com');
-  g('config', 'user.name', 'Tester');
-  g('config', 'core.autocrlf', 'false');
-  for (const [rel, content] of Object.entries(files)) write(root, rel, content);
-  g('add', '-A');
-  g('commit', '-q', '-m', 'init');
-  return { root, g };
-}
+const repo = (files) => gitRepo(files, 'jdi-8283-');
 
-const ROADMAP = { '.jdi/roadmap/alpha.md': '---\norder: 1\nname: Alpha\ncreated_with: 0.22.0\n---\n- **Slug:** alpha\n- **Goal:** a\n' };
-const NO_DOD = '# Alpha\n\n## Definition of Done\n\n### Auto-verifiable\n- _(none)_\n';
-const BASE = { ...ROADMAP, '.gitignore': '.jdi/cache/\nout/\n', '.jdi/phases/alpha/CONTEXT.md': NO_DOD, 'src/a.js': 'a\n' };
+// one phase, its roadmap entry, a product file; out/ for what the gates write
+const BASE = {
+  '.jdi/roadmap/alpha.md': ['---', 'order: 1', 'name: Alpha', '---', '- **Slug:** alpha', ''].join('\n'),
+  '.jdi/phases/alpha/CONTEXT.md': '# Alpha\n',
+  '.gitignore': ['.jdi/cache/', 'out/', ''].join('\n'),
+  'src/a.js': 'a\n',
+};
 const stack = (extra) => ({ '.jdi/stacks/api.json': JSON.stringify({ name: 'api', file_glob: ['src/**'], ...extra }) });
 
 test('#82: a gate run under npx sees neither npm_* variables nor the npx .bin on PATH; a stack may declare one', () => {

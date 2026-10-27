@@ -43,4 +43,15 @@ function read(root, rel) {
   return fs.readFileSync(path.join(root, rel), 'utf8');
 }
 
-module.exports = { REPO, CLI, tmpdir, fixture, jdi, write, read };
+// A throwaway git repo with `files` committed: { root, g } (g = git in it).
+function gitRepo(files, prefix = 'jdi-git-') {
+  const root = tmpdir(prefix);
+  const g = (...a) => spawnSync('git', a, { cwd: root, encoding: 'utf8' });
+  for (const args of [['init', '-q'], ['config', 'user.email', 't@example.com'], ['config', 'user.name', 'Tester'], ['config', 'core.autocrlf', 'false']]) g(...args);
+  for (const [rel, content] of Object.entries(files)) write(root, rel, content);
+  g('add', '-A');
+  g('commit', '-q', '-m', 'init');
+  return { root, g };
+}
+
+module.exports = { REPO, CLI, tmpdir, fixture, jdi, write, read, gitRepo };
