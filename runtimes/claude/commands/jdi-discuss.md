@@ -32,7 +32,7 @@ Capture locked decisions for the given phase. Output: CONTEXT.md consumed by the
 
 ### Step 1: Validation
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.22.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.22.1 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new first."; exit 1; }
 
@@ -44,7 +44,7 @@ ls .jdi/agents/jdi-reviewer-*.md >/dev/null 2>&1 || { echo "Reviewer specialist 
 ### Step 2: Resolve phase
 
 ```bash
-RESOLVED="$(npx -y jdi-cli@0.22.0 resolve-phase "$1")" || {
+RESOLVED="$(npx -y jdi-cli@0.22.1 resolve-phase "$1")" || {
   echo "Phase '$1' not found in ROADMAP."
   exit 1
 }
@@ -57,7 +57,7 @@ PHASE_POSITION="$JDI_PHASE_POSITION"
 
 PowerShell:
 ```powershell
-$r = npx -y jdi-cli@0.22.0 resolve-phase $args[0] --json | ConvertFrom-Json
+$r = npx -y jdi-cli@0.22.1 resolve-phase $args[0] --json | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) { Write-Error "Phase '$($args[0])' not found."; exit $LASTEXITCODE }
 $phaseSlug = $r.slug; $phaseDir = $r.dir; $phasePosition = $r.position
 ```
@@ -75,8 +75,8 @@ those passed 50k tokens per spawn:
 
 ```bash
 mkdir -p .jdi/cache
-npx -y jdi-cli@0.22.0 template dod-schema --out .jdi/cache/dod-schema.md
-BRIEF=$(npx -y jdi-cli@0.22.0 brief "$PHASE_SLUG" --role asker --runtime claude | cut -d' ' -f1)
+npx -y jdi-cli@0.22.1 template dod-schema --out .jdi/cache/dod-schema.md
+BRIEF=$(npx -y jdi-cli@0.22.1 brief "$PHASE_SLUG" --role asker --runtime claude | cut -d' ' -f1)
 ```
 
 ### Step 4: Spawn asker
@@ -95,7 +95,7 @@ Model and effort come from `routing` in `.jdi/config.json` — a rule, not a
 judgment of the moment:
 
 ```bash
-npx -y jdi-cli@0.22.0 route "$PHASE_SLUG" --role asker --json   # {model, effort, tier, why}
+npx -y jdi-cli@0.22.1 route "$PHASE_SLUG" --role asker --json   # {model, effort, tier, why}
 ```
 
 Pass `model` and `effort` as the Agent `model` and `effort` parameters (a
@@ -113,11 +113,11 @@ grep -q '## Definition of Done' "$PHASE_DIR/CONTEXT.md" || { echo "CONTEXT.md mi
 
 # Long Verify bodies -> $PHASE_DIR/verify/dod-N.sh (executed by the reviewer,
 # read by nobody else). Verbatim command, bash -n checked, idempotent.
-npx -y jdi-cli@0.22.0 dod extract "$PHASE_SLUG"
+npx -y jdi-cli@0.22.1 dod extract "$PHASE_SLUG"
 
 # Hollow-proof patterns caught by form, before any code exists (one second
 # here, a whole loop round later).
-npx -y jdi-cli@0.22.0 validate-dod "$PHASE_SLUG" > .jdi/cache/dod-lint.txt; LINT_RC=$?
+npx -y jdi-cli@0.22.1 validate-dod "$PHASE_SLUG" > .jdi/cache/dod-lint.txt; LINT_RC=$?
 ```
 
 `LINT_RC` = 1 (at least one ERROR): spawn a FRESH asker with
@@ -135,7 +135,7 @@ invoking orchestrator passed `critic=on` (`/jdi-issue`). `economy.critic:
 fix; caught in verify, it costs loop iterations.
 
 ```bash
-CRIT=$(npx -y jdi-cli@0.22.0 critic plan "$PHASE_SLUG" --preflight --runtime claude)   # JSON: rows, brief, skip
+CRIT=$(npx -y jdi-cli@0.22.1 critic plan "$PHASE_SLUG" --preflight --runtime claude)   # JSON: rows, brief, skip
 ```
 
 `rows` empty → skip this step (the JSON says why). Otherwise:
@@ -148,11 +148,11 @@ Agent(
 )
 ```
 
-Model and effort: `npx -y jdi-cli@0.22.0 route "$PHASE_SLUG" --role critic --json`
+Model and effort: `npx -y jdi-cli@0.22.1 route "$PHASE_SLUG" --role critic --json`
 → its `model` and `effort` as the Agent parameters (a `null` one left out).
 
 ```bash
-npx -y jdi-cli@0.22.0 critic apply "$PHASE_SLUG" --preflight; CRIT_RC=$?
+npx -y jdi-cli@0.22.1 critic apply "$PHASE_SLUG" --preflight; CRIT_RC=$?
 ```
 
 `CRIT_RC` = 3 (objective hollow proofs): spawn a FRESH asker with
@@ -165,7 +165,7 @@ a failed or silent critic changes nothing (fail-open).
 ### Step 4.7: Is it one phase? (size at intake)
 
 ```bash
-npx -y jdi-cli@0.22.0 size "$PHASE_SLUG" --intake > .jdi/cache/intake.txt   # "single — ..." or "split — reasons"
+npx -y jdi-cli@0.22.1 size "$PHASE_SLUG" --intake > .jdi/cache/intake.txt   # "single — ..." or "split — reasons"
 ```
 
 `split` (too many DoD rows, areas or criteria for one phase — each row is a
@@ -174,7 +174,7 @@ proof that can cost a verify round, #72): interactive → AskUserQuestion
 `/jdi-issue`, which always splits) → spawn a FRESH asker with `phase_slug`,
 `phase_dir`, `mode=split`, `intake=.jdi/cache/intake.txt`; then register each
 extra part of `$PHASE_DIR/SPLIT.md` right after this phase, in order (layout
-v3: `npx -y jdi-cli@0.22.0 add-phase "<part name>" --goal "<goal>" --after <previous part slug> --reason "split of $PHASE_SLUG"`, plus `--unique` under `/jdi-issue`;
+v3: `npx -y jdi-cli@0.22.1 add-phase "<part name>" --goal "<goal>" --after <previous part slug> --reason "split of $PHASE_SLUG"`, plus `--unique` under `/jdi-issue`;
 legacy: `/jdi-add-phase`), and commit SPLIT.md with the trimmed CONTEXT.md
 in Step 5. Each part gets its own `/jdi-discuss`, plan and PR.
 
@@ -187,7 +187,7 @@ silently commits nothing, #39).
 
 ```bash
 if [ -d .jdi/roadmap ]; then
-  npx -y jdi-cli@0.22.0 render
+  npx -y jdi-cli@0.22.1 render
   git add "$PHASE_DIR/CONTEXT.md" .jdi/decisions/ .jdi/todos/ 2>/dev/null
   [ -d "$PHASE_DIR/verify" ] && git add "$PHASE_DIR/verify/"
   [ -d .jdi/known-errors ] && git add .jdi/known-errors/
@@ -218,7 +218,7 @@ Next: /jdi-plan $PHASE_SLUG
 </process>
 
 <gates>
-- pre: `.jdi/` exists + doer/reviewer specialists exist + phase resolves via `npx -y jdi-cli@0.22.0 resolve-phase`
+- pre: `.jdi/` exists + doer/reviewer specialists exist + phase resolves via `npx -y jdi-cli@0.22.1 resolve-phase`
 - post: CONTEXT.md written (including `## Definition of Done`) + commit made + STATE.md updated
 </gates>
 

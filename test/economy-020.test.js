@@ -105,14 +105,14 @@ test('Verify (test): proven by the JUnit report of the test gate at HEAD, never 
   assert.equal(r0.code, 5);
   let d = json(r0).dod;
   assert.equal(d[0].status, 'ENV');
-  assert.match(d[0].reason, /no gate results for api at HEAD/);
+  assert.match(d[0].reason, /no report at HEAD \w+ for api/);
   jdi(root, ['gates', 'run', 'alpha', '--stack', 'api']);
   // a later partial run overwrites out/junit.xml — the snapshot keeps the proof
   fs.writeFileSync(path.join(root, 'out/junit.xml'), '<testsuites/>');
   d = json(jdi(root, ['gates', 'run', 'alpha', '--only', 'dod', '--json'])).dod;
   assert.equal(d[0].status, 'PASS', JSON.stringify(d[0]));
   assert.equal(d[1].status, 'FAIL');
-  assert.match(d[1].reason, /no testcase named `limits::never_written`/);
+  assert.match(d[1].reason, /no testcase matches `limits::never_written`/);
   assert.deepEqual(ran(root), ['test'], 'the suite ran once, for the stack gate only');
   // a failing testcase fails the row
   write(root, '.jdi/stacks/api.json', JSON.stringify({ name: 'api', file_glob: ['src/**'], gates: { test: writeReport(JUNIT_BAD) }, test_report: 'out/junit.xml' }));

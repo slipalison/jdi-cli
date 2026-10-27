@@ -83,8 +83,27 @@ function expandHome(p) {
   return p.startsWith('~') ? path.join(os.homedir(), p.slice(1)) : p;
 }
 
+// What `npx` / `npm exec` adds to the environment of jdi-cli itself: npm's
+// config (`npm_config_*`, from ~/.npmrc too), the lifecycle and package
+// variables, and its own `.bin` dirs on PATH. A gate run through
+// `npx jdi-cli` must see what the same command sees run directly (#82: an
+// `allow-scripts` in ~/.npmrc became `npm_config_allow_scripts`, and
+// `npm audit` in the gate refused it). A stack that wants one declares it in
+// `env`.
+const NPM_EXEC_VARS = /^(npm_config_|npm_lifecycle_|npm_package_)|^(npm_execpath|npm_node_execpath|npm_command|npm_exec)$/i;
+const NPM_EXEC_PATH = /(?:[\\/]_npx[\\/])|(?:[\\/]node-gyp-bin$)/;
+
+function withoutNpmExec(env) {
+  if (!env.npm_command && !env.npm_execpath) return env; // not run by npm
+  const out = {};
+  for (const [k, v] of Object.entries(env)) if (!NPM_EXEC_VARS.test(k)) out[k] = v;
+  const key = Object.keys(out).find((k) => k.toUpperCase() === 'PATH');
+  if (key) out[key] = out[key].split(path.delimiter).filter((p) => !NPM_EXEC_PATH.test(p)).join(path.delimiter);
+  return out;
+}
+
 function envFor(stacks) {
-  const env = { ...process.env };
+  const env = withoutNpmExec({ ...process.env });
   const prepend = [];
   for (const s of stacks) {
     Object.assign(env, s.env || {});
@@ -402,7 +421,7 @@ function parseJunit(xml) {
     let status = 'passed';
     if (cut || body.includes('<failure') || body.includes('<error')) status = 'failed';
     else if (body.includes('<skipped')) status = 'skipped';
-    cases.push({ name: xmlAttr(tag, 'name'), classname: xmlAttr(tag, 'classname'), status });
+    cases.push({ name: xmlAttr(tag, 'name'), classname: xmlAttr(tag, 'classname'), status, ...(cut && { cut }) });
   }
   return cases;
 }
@@ -441,24 +460,33 @@ function headReports(ctx, it, stacks) {
 
 // Why no report can prove the row: the suite failed (the stack gate already
 // says so: SKIPPED here), or the setup is wrong (ENV: no doer can fix it).
-function noProofResult(reports, base) {
+function noProofResult(reports, base, head) {
   if (reports.some((r) => r.suiteFailed)) return { ...base, status: 'SKIPPED', reason: 'Verify (test): the suite failed or did not run — see the stack gates' };
   const unmeasured = reports.filter((r) => !r.measured).map((r) => r.stack);
-  if (unmeasured.length) return { ...base, status: 'ENV', reason: `Verify (test): no gate results for ${unmeasured.join(',')} at HEAD — run \`gates run --stack ${unmeasured.join(',')}\` before the DoD` };
+  if (unmeasured.length) return { ...base, status: 'ENV', reason: `Verify (test): no report at HEAD ${String(head || '').slice(0, 10)} for ${unmeasured.join(',')} — run \`gates run --stack ${unmeasured.join(',')}\` before the DoD` };
   const why = reports.some((r) => r.noReport) ? 'the test gate ran but wrote no fresh JUnit at `test_report` (an incremental runner that skipped the run?)' : 'the stack results carry no test report';
   return { ...base, status: 'ENV', reason: `Verify (test): ${why} — fix the gate command or \`test_report\`` };
+}
+
+const caseName = (c) => (c.classname ? `${c.classname}::${c.name}` : c.name);
+
+function badCasesReason(id, hits, bad) {
+  const names = bad.slice(0, 3).map(caseName).join(', ') + (bad.length > 3 ? ', ...' : '');
+  const cut = bad.filter((c) => c.cut);
+  if (cut.length) return `Verify (test): \`${id}\` — report cut off (the run was interrupted) at ${cut.map(caseName).slice(0, 3).join(', ')}`;
+  return `Verify (test): \`${id}\` — ${hits.length} case(s), ${bad.length} not passed (${bad[0].status}): ${names}`;
 }
 
 function testRowResult(ctx, it, stacks, base) {
   const id = it.verify.command.trim();
   const reports = headReports(ctx, it, stacks);
   if (!reports.length) return { ...base, status: 'ENV', reason: 'Verify (test): no stack declares `test_report` (JUnit) — nothing can prove it' };
-  if (!reports.some((r) => r.file)) return noProofResult(reports, base);
+  if (!reports.some((r) => r.file)) return noProofResult(reports, base, ctx.head);
   const cases = reports.filter((r) => r.file).flatMap((r) => parseJunit(fs.readFileSync(r.file, 'utf8')));
   const hits = cases.filter((c) => matchesTest(c, id));
-  if (!hits.length) return { ...base, status: 'FAIL', reason: `Verify (test): no testcase named \`${id}\` in the report — the proof does not exist` };
+  if (!hits.length) return { ...base, status: 'FAIL', reason: `Verify (test): no testcase matches \`${id}\` in the report — the proof does not exist` };
   const bad = hits.filter((c) => c.status !== 'passed');
-  if (bad.length) return { ...base, status: 'FAIL', reason: `Verify (test): \`${id}\` ${bad[0].status} (${bad.length}/${hits.length})` };
+  if (bad.length) return { ...base, status: 'FAIL', reason: badCasesReason(id, hits, bad) };
   return { ...base, status: 'PASS', proof: `${hits.length} testcase(s) \`${id}\` passed in the test report at HEAD` };
 }
 
@@ -687,7 +715,8 @@ function dodLines(dodRows) {
   return [
     `  dod       PASS ${c('PASS')} (reused ${dodRows.filter((d) => d.reused).length}) · FAIL ${c('FAIL')} · EVIDENCE ${c('EVIDENCE')} · MANUAL ${c('MANUAL_REQUIRED')} · INCONCLUSIVE ${c('INCONCLUSIVE')}` + (c('ENV') ? ` · ENV ${c('ENV')}` : '') + (c('SKIPPED') ? ` · SKIPPED ${c('SKIPPED')}` : ''),
     ...dodRows.filter((x) => x.status === 'ENV').map((d) => `    ENV ${d.source} ${d.id}: ${d.reason}`),
-    ...dodRows.filter((x) => x.status === 'FAIL').map((d) => `    FAIL ${d.source} ${d.id}: ${d.log}`),
+    // a `Verify (test):` row has a reason, a run row a log
+    ...dodRows.filter((x) => x.status === 'FAIL').map((d) => `    FAIL ${d.source} ${d.id}: ${d.reason || d.log || d.excerpt || 'failed'}`),
     ...dodRows.filter((x) => x.evidence).map((d) => `    EVIDENCE ${d.source} ${d.id}: iteration ${d.evidence.iteration} · ship ${d.evidence.ship}` + (d.evidence.reason ? ' (' + d.evidence.reason + ')' : '')),
   ];
 }
@@ -779,7 +808,7 @@ function failuresCmd(report) {
   }
   for (const x of fails) {
     const log = x.log ? ' (log: ' + x.log + ')' : '';
-    const excerpt = (x.excerpt || '').split('\n').map((l) => '    ' + l).join('\n');
+    const excerpt = (x.excerpt || x.reason || '').split('\n').map((l) => '    ' + l).join('\n');
     console.log(`- FAIL ${x.what}${log}\n${excerpt}`);
   }
   return 1;

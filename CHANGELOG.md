@@ -5,7 +5,23 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.22.0] - 2026-10-26
+## [0.22.1] - 2026-10-27
+
+### Fixed
+- **Gates run through `npx` saw npm's own environment** (#82). `npx` /
+  `npm exec` hands jdi-cli npm's config as `npm_config_*` (from ~/.npmrc
+  too), its lifecycle and package variables and its `.bin` dirs on PATH, and
+  `gates run` passed all of it to the gate commands: an `allow-scripts` in
+  ~/.npmrc made `npm audit` fail in the gate and pass when run directly. When
+  jdi-cli is run by npm, the gate environment drops `npm_config_*`,
+  `npm_lifecycle_*`, `npm_package_*`, `npm_execpath`, `npm_node_execpath`,
+  `npm_command` and the `_npx` / `node-gyp-bin` PATH entries — the DoD rows
+  and `worktree_setup` too. A stack that needs one declares it in `env`.
+- **A failing `Verify (test):` row printed `undefined`** (#83). The summary of
+  `gates run` and the work list of `gates show --failures` now say why: no
+  testcase matches the name; how many cases matched and which did not pass;
+  no report at HEAD `<sha>` (ENV); a report cut off by an interrupted run.
+
 
 Quota, ceiling and learning. An autonomous run stopped wherever the
 account's usage limit caught it — the 5-hour limit hit four times in one week
