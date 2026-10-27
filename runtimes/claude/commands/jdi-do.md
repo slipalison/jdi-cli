@@ -30,7 +30,7 @@ Executes all tasks of the given phase. Reads PLAN.md, groups into waves, dispatc
 
 ### Step 1: Validation
 
-**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.21.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
+**View refresh (layout v3):** if `.jdi/roadmap/` exists, run `npx -y jdi-cli@0.22.0 render` FIRST — it regenerates the untracked views (ROADMAP.md, DECISIONS.md, todos.md, registry tables) from the per-entry dirs, so every read below sees current state. No-op on legacy projects (and never overwrites a legacy tracked file).
 ```bash
 test -d .jdi/ || { echo "Not a JDI project. /jdi-new."; exit 1; }
 # STATE.md is an untracked advisory cache — absence is normal on a fresh clone
@@ -45,13 +45,13 @@ ls .jdi/agents/jdi-doer-*.md 2>/dev/null | head -1 || {
 # Runtime copies: Agent(subagent_type=...) resolves from .claude/agents/ (etc.),
 # never from .jdi/agents/. Self-heal a fresh clone or a stale copy before the
 # first spawn (byte-deterministic; no-op when already in sync).
-npx -y jdi-cli@0.21.0 sync-specialists --check --quiet || npx -y jdi-cli@0.21.0 sync-specialists --quiet
+npx -y jdi-cli@0.22.0 sync-specialists --check --quiet || npx -y jdi-cli@0.22.0 sync-specialists --quiet
 ```
 
 ### Step 2: Resolve phase
 
 ```bash
-RESOLVED="$(npx -y jdi-cli@0.21.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
+RESOLVED="$(npx -y jdi-cli@0.22.0 resolve-phase "$1")" || { echo "Phase '$1' not found."; exit 1; }
 eval "$RESOLVED"
 PHASE_SLUG="$JDI_PHASE_SLUG"
 PHASE_DIR="$JDI_PHASE_DIR"
@@ -106,13 +106,13 @@ Agent(
   subagent_type="$DOER",
   description="Fix blockers phase $PHASE_SLUG",
   prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, mode=fix_blockers.
-          Work list: `npx -y jdi-cli@0.21.0 review blockers $PHASE_SLUG` (not the
+          Work list: `npx -y jdi-cli@0.22.0 review blockers $PHASE_SLUG` (not the
           whole REVIEW.md). Fix, run the targeted tests, commit atomically."
 )
 ```
 
 Route it as a fix (a review measured the failure):
-`npx -y jdi-cli@0.21.0 route "$PHASE_SLUG" --role doer --attempt 2 --json` —
+`npx -y jdi-cli@0.22.0 route "$PHASE_SLUG" --role doer --attempt 2 --json` —
 under `/jdi-loop`, `--attempt` is the loop's iteration instead.
 
 If no pending tasks and no BLOCKED review → "phase already executed", exit 0.
@@ -120,7 +120,7 @@ If no pending tasks and no BLOCKED review → "phase already executed", exit 0.
 **Size (lite or full):**
 
 ```bash
-SIZE=$(npx -y jdi-cli@0.21.0 size "$PHASE_SLUG" --json)   # {size, reasons, tasks, doer}
+SIZE=$(npx -y jdi-cli@0.22.0 size "$PHASE_SLUG" --json)   # {size, reasons, tasks, doer}
 ```
 
 Every spawn pays its system prompt, the specialist and its brief before doing
@@ -130,13 +130,16 @@ anything; for a small phase that fixed cost dominates. `size: "lite"` (at most
 one commit per task. Briefs are still one per task:
 
 ```
-for each pending task T-{X}:  BRIEF_TX=$(npx -y jdi-cli@0.21.0 brief "$PHASE_SLUG" --role doer --task T-{X} --runtime <rt> | cut -d' ' -f1)
+for each pending task T-{X}:  BRIEF_TX=$(npx -y jdi-cli@0.22.0 brief "$PHASE_SLUG" --role doer --task T-{X} --runtime <rt> | cut -d' ' -f1)
 Agent(
   subagent_type="<doer from SIZE>",
   description="Execute phase $PHASE_SLUG (lite)",
   prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, tasks=T-1,T-2,..., briefs=<brief paths, same order>"
 )
 ```
+
+Its model and effort: `npx -y jdi-cli@0.22.0 route "$PHASE_SLUG" --role doer --json`
+(no `--task`: the heaviest task decides) → the Agent `model` and `effort`.
 
 Then skip to Step 7 (counts) and Step 8. Lite changes how the work is
 dispatched, never what is checked: verify runs every gate as for a full
@@ -168,8 +171,45 @@ block, the orchestrator notes, the decisions it cites, the DoD lines that touch
 its files, known errors, learnings), under `budgets.brief_tokens`:
 
 ```bash
-BRIEF_TX=$(npx -y jdi-cli@0.21.0 brief "$PHASE_SLUG" --role doer --task T-{X} --runtime claude | cut -d' ' -f1)
+BRIEF_TX=$(npx -y jdi-cli@0.22.0 brief "$PHASE_SLUG" --role doer --task T-{X} --runtime claude | cut -d' ' -f1)
 ```
+
+The brief line ends with its score (objective, verifiable result, scope,
+constraints). `WEAK BRIEF` on stderr — the task has no objective, no
+`Acceptance:`/`Test:` or no `Files modified:` — means the doer would have to
+guess: complete the task in PLAN.md (or its `## Orchestrator notes`) and
+build the brief again BEFORE the spawn. A doer without them comes back
+`NEEDS_CONTEXT`, and that costs a whole spawn.
+
+**Worktree wave** (`economy.worktree_doers: true`, a parallel wave only):
+each doer works in its own git worktree, so none compiles or tests the
+half-written code of another. Before the spawns:
+
+```bash
+npx -y jdi-cli@0.22.0 wave worktrees "$PHASE_SLUG" --tasks T-1,T-2   # "T-N <absolute path>" per task
+```
+
+Exit 1 = a task's line says `FAILED` (its worktree could not be made, or a
+stack's `worktree_setup` failed there): it has no worktree — run it in the
+main checkout after the wave, like a sequential task. Add
+`workdir=<its path>` to each other doer's prompt (quote it) and pass the
+brief as an ABSOLUTE path (the worktree has no `.jdi/cache/`). When the wave
+returns, before the statuses:
+
+```bash
+npx -y jdi-cli@0.22.0 wave merge "$PHASE_SLUG"   # cherry-picks each task's commits onto HEAD, in task order
+```
+
+Exit 1, per task line: `CONFLICT` — its commits were rolled back: run that
+task again, alone, in the main checkout. `UNCOMMITTED` — the doer left work
+it did not commit; its worktree is kept: look at it (`git -C <path> status`),
+commit it there or discard it, then `wave merge` again. Exit 3 = the main
+checkout changed during the wave (a file, or a commit — a doer wrote outside
+its worktree): nothing was merged and nothing was thrown away. STOP and show
+the line — a person looks at what changed; with the main checkout back as it
+was, `wave merge` again. Never `wave clean` here: it deletes the doers'
+branches. A line `outside its Files modified` is a scope warning for the
+reviewer, not a stop.
 
 Sequential dispatch — ONE `Agent()` per message with `run_in_background: true`. Each task resolves its OWN `subagent_type` from task.specialist (multi-stack):
 
@@ -179,7 +219,7 @@ TASK_SPECIALIST = <task.specialist field from PLAN.md> OR <single doer fallback>
 Agent(
   subagent_type="${TASK_SPECIALIST}",
   description="Execute T-{X} phase $PHASE_SLUG",
-  prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, task=T-{X}, mode=single_task, wave=parallel, brief=$BRIEF_TX",
+  prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, task=T-{X}, mode=single_task, wave=parallel, brief=$BRIEF_TX[, workdir=<worktree path>]",
   run_in_background: true
 )
 ```
@@ -202,7 +242,7 @@ Model and effort per spawn come from `routing` in `.jdi/config.json` — a
 rule, not a judgment of the moment:
 
 ```bash
-npx -y jdi-cli@0.21.0 route "$PHASE_SLUG" --role doer --task T-{X} --json   # {model, effort, tier, why}
+npx -y jdi-cli@0.22.0 route "$PHASE_SLUG" --role doer --task T-{X} --json   # {model, effort, tier, why}
 ```
 
 Pass `model` and `effort` as the Agent `model` and `effort` parameters (a
@@ -268,8 +308,8 @@ before the wave:
 ```bash
 mkdir -p .jdi/cache
 STACKS=$(ls .jdi/stacks/*.json | xargs -n1 basename | sed 's/\.json$//' | paste -sd, -)
-npx -y jdi-cli@0.21.0 gates run "$PHASE_SLUG" --stack "$STACKS" --only build,test --changed-since "$WAVE_BASE" >/dev/null; GRUN_RC=$?
-npx -y jdi-cli@0.21.0 gates show "$PHASE_SLUG" --failures --all > .jdi/cache/wave-failures.txt; WAVE_RC=$?
+npx -y jdi-cli@0.22.0 gates run "$PHASE_SLUG" --stack "$STACKS" --only build,test --changed-since "$WAVE_BASE" >/dev/null; GRUN_RC=$?
+npx -y jdi-cli@0.22.0 gates show "$PHASE_SLUG" --failures --all > .jdi/cache/wave-failures.txt; WAVE_RC=$?
 ```
 
 `GRUN_RC` other than 0, 1 or 5: STOP — the suite did not run (no stack
@@ -294,6 +334,10 @@ later waves depend on it):
   phase is marked `partial` at the end.
 
 ### Step 8: After all waves
+
+Worktree waves: with every task in (the conflicted ones re-run in the main
+checkout, no `UNCOMMITTED` left), `npx -y jdi-cli@0.22.0 wave clean "$PHASE_SLUG"`
+removes the branches kept for conflicts.
 
 Verify SUMMARY.md was created:
 ```bash

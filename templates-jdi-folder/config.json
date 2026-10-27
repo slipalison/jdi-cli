@@ -29,7 +29,8 @@
     "sizing": true,
     "gate_cache": true,
     "parallel_review": true,
-    "parallel_gates": false
+    "parallel_gates": false,
+    "worktree_doers": false
   },
   "sizing": {
     "lite_max_tasks": 3,
@@ -63,7 +64,16 @@
       { "role": "planner", "tier": "strong" }
     ],
     "floors": { "reviewer": "standard", "critic": "standard" },
-    "escalate": true
+    "escalate": true,
+    "quota_aware": true,
+    "adapt": { "mode": "off", "min_samples": 8, "raise_below": 0.7, "lower_above": 0.95 },
+    "runtime_models": {}
+  },
+  "quota": {
+    "warn_pct": 80,
+    "stop_pct": 95,
+    "session_mtok": null,
+    "weekly_mtok": null
   },
   "compaction": {
     "archive_after": 5
@@ -75,7 +85,8 @@
   "orchestration": {
     "mode": "standard",
     "source": "default",
-    "max_resets_autonomous": 3
+    "max_resets_autonomous": 3,
+    "phase_ceiling": { "spawns": 60, "hours": 12, "weighted_mtok": 150 }
   },
   "gate": {
     "code_globs": ["src/**"]

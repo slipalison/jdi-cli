@@ -750,6 +750,7 @@ function parseArgs(argv) {
     if (a === '--json') o.json = true;
     else if (a === '--targets') o.targets = true;
     else if (a === '--timeline') o.timeline = true;
+    else if (a === '--by-model') o.byModel = true;
     else if (a === '--no-worktrees') o.siblings = false;
     else if (a === '--project') o.project = v();
     else if (a === '--claude-dir') o.claudeDir = v();
@@ -771,11 +772,22 @@ function timelineCmd(o, projectDir, claudeProjects) {
   return 0;
 }
 
+// `--by-model`: what each model did for each role, and the route log.
+function byModelCmd(o, projectDir, claudeProjects) {
+  const bm = require('./bymodel');
+  const { agents } = loadAgents({ projectDir, claudeProjects, since: o.since, until: o.until, siblings: o.siblings });
+  const inRange = (e) => (!o.since || e.at >= o.since) && (!o.until || e.at <= o.until);
+  const report = bm.byModel(agents, require('./route').readLog(projectDir).filter(inRange));
+  process.stdout.write((o.json ? JSON.stringify(report, null, 2) : bm.render(report)) + '\n');
+  return 0;
+}
+
 function main(argv) {
   const o = parseArgs(argv);
   const claudeProjects = o.claudeDir || path.join(os.homedir(), '.claude', 'projects');
   const projectDir = path.resolve(o.project);
   if (o.timeline) return timelineCmd(o, projectDir, claudeProjects);
+  if (o.byModel) return byModelCmd(o, projectDir, claudeProjects);
   const rep = analyze({ projectDir, claudeProjects, since: o.since, until: o.until, siblings: o.siblings });
   const cfg = core.loadConfig(projectDir);
   const targets = o.targets ? evaluateTargets(rep, cfg.economy?.targets) : null;

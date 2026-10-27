@@ -116,6 +116,11 @@ Route it as a fix (a review measured the failure):
 `npx -y {{JDI_CLI}} route "$PHASE_SLUG" --role doer --attempt 2 --json` —
 under `/jdi-loop`, `--attempt` is the loop's iteration instead.
 <!-- jdi:end -->
+<!-- jdi:only copilot,opencode -->
+Route it as a fix (a review measured the failure) and spawn the answer's
+`agent`: `npx -y {{JDI_CLI}} route "$PHASE_SLUG" --role doer --attempt 2 --runtime {{JDI_RUNTIME}} --agent "$DOER" --json`
+— under `/jdi-loop`, `--attempt` is the loop's iteration instead.
+<!-- jdi:end -->
 
 If no pending tasks and no BLOCKED review → "phase already executed", exit 0.
 
@@ -139,6 +144,15 @@ Agent(
   prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, tasks=T-1,T-2,..., briefs=<brief paths, same order>"
 )
 ```
+
+<!-- jdi:only claude -->
+Its model and effort: `npx -y {{JDI_CLI}} route "$PHASE_SLUG" --role doer --json`
+(no `--task`: the heaviest task decides) → the Agent `model` and `effort`.
+<!-- jdi:end -->
+<!-- jdi:only copilot,opencode -->
+The agent to spawn: `npx -y {{JDI_CLI}} route "$PHASE_SLUG" --role doer --runtime {{JDI_RUNTIME}} --agent "<doer from SIZE>" --json`
+(no `--task`: the heaviest task decides) → its `agent`.
+<!-- jdi:end -->
 
 Then skip to Step 7 (counts) and Step 8. Lite changes how the work is
 dispatched, never what is checked: verify runs every gate as for a full
@@ -178,6 +192,43 @@ BRIEF_TX=$(npx -y {{JDI_CLI}} brief "$PHASE_SLUG" --role doer --task T-{X} --run
 <!-- jdi:end -->
 ```
 
+The brief line ends with its score (objective, verifiable result, scope,
+constraints). `WEAK BRIEF` on stderr — the task has no objective, no
+`Acceptance:`/`Test:` or no `Files modified:` — means the doer would have to
+guess: complete the task in PLAN.md (or its `## Orchestrator notes`) and
+build the brief again BEFORE the spawn. A doer without them comes back
+`NEEDS_CONTEXT`, and that costs a whole spawn.
+
+**Worktree wave** (`economy.worktree_doers: true`, a parallel wave only):
+each doer works in its own git worktree, so none compiles or tests the
+half-written code of another. Before the spawns:
+
+```bash
+npx -y {{JDI_CLI}} wave worktrees "$PHASE_SLUG" --tasks T-1,T-2   # "T-N <absolute path>" per task
+```
+
+Exit 1 = a task's line says `FAILED` (its worktree could not be made, or a
+stack's `worktree_setup` failed there): it has no worktree — run it in the
+main checkout after the wave, like a sequential task. Add
+`workdir=<its path>` to each other doer's prompt (quote it) and pass the
+brief as an ABSOLUTE path (the worktree has no `.jdi/cache/`). When the wave
+returns, before the statuses:
+
+```bash
+npx -y {{JDI_CLI}} wave merge "$PHASE_SLUG"   # cherry-picks each task's commits onto HEAD, in task order
+```
+
+Exit 1, per task line: `CONFLICT` — its commits were rolled back: run that
+task again, alone, in the main checkout. `UNCOMMITTED` — the doer left work
+it did not commit; its worktree is kept: look at it (`git -C <path> status`),
+commit it there or discard it, then `wave merge` again. Exit 3 = the main
+checkout changed during the wave (a file, or a commit — a doer wrote outside
+its worktree): nothing was merged and nothing was thrown away. STOP and show
+the line — a person looks at what changed; with the main checkout back as it
+was, `wave merge` again. Never `wave clean` here: it deletes the doers'
+branches. A line `outside its Files modified` is a scope warning for the
+reviewer, not a stop.
+
 Sequential dispatch — ONE `Agent()` per message with `run_in_background: true`. Each task resolves its OWN `subagent_type` from task.specialist (multi-stack):
 
 ```
@@ -186,7 +237,7 @@ TASK_SPECIALIST = <task.specialist field from PLAN.md> OR <single doer fallback>
 Agent(
   subagent_type="${TASK_SPECIALIST}",
   description="Execute T-{X} phase $PHASE_SLUG",
-  prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, task=T-{X}, mode=single_task, wave=parallel, brief=$BRIEF_TX",
+  prompt="phase_slug=$PHASE_SLUG, phase_dir=$PHASE_DIR, task=T-{X}, mode=single_task, wave=parallel, brief=$BRIEF_TX[, workdir=<worktree path>]",
   run_in_background: true
 )
 ```
@@ -223,6 +274,25 @@ a BLOCKED review, a doer that returned `STATUS: BLOCKED` — adds `--attempt N`
 (2 for the first fix, then 3): one tier up per attempt. Never escalate on a
 doer's own opinion, only on a check that failed. With `routing.mode` off
 (projects created before 0.21) the route is `models.doer` and no effort.
+<!-- jdi:end -->
+<!-- jdi:only copilot,opencode -->
+The model of each spawn comes from `routing` in `.jdi/config.json` — a rule,
+not a judgment of the moment. This runtime takes the model from the agent
+file, so the answer is WHICH agent to spawn:
+
+```bash
+npx -y {{JDI_CLI}} route "$PHASE_SLUG" --role doer --task T-{X} --runtime {{JDI_RUNTIME}} --agent "$TASK_SPECIALIST" --json   # {agent, tier, model, why}
+```
+
+Spawn its `agent` in place of `$TASK_SPECIALIST`: a copy of the specialist
+with the tier's model (`routing.runtime_models.{{JDI_RUNTIME}}`, written by
+`sync-specialists`), or the specialist itself when that tier has no copy. A
+light task goes to the cheap copy, a sensitive or deep one to the strong one;
+a lite phase routes without `--task`. A fix after a MEASURED failure (a red
+wave suite, a BLOCKED review, a doer that returned `STATUS: BLOCKED`) adds
+`--attempt N`: one tier up per attempt.
+<!-- jdi:end -->
+<!-- jdi:only claude -->
 
 Never send new work to a doer that already returned (SendMessage): spawn a
 fresh one. A resumed agent drags its whole context along, and after more than
@@ -303,6 +373,10 @@ later waves depend on it):
   phase is marked `partial` at the end.
 
 ### Step 8: After all waves
+
+Worktree waves: with every task in (the conflicted ones re-run in the main
+checkout, no `UNCOMMITTED` left), `npx -y {{JDI_CLI}} wave clean "$PHASE_SLUG"`
+removes the branches kept for conflicts.
 
 Verify SUMMARY.md was created:
 ```bash

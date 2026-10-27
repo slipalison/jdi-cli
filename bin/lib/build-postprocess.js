@@ -13,6 +13,7 @@
 //      `{{JDI_VERSION}}` -> `<version>`. Installed commands then always call the
 //      exact CLI version they were built with — never a stale npx cache and
 //      never a newer release with different helpers.
+//   3. `{{JDI_RUNTIME}}` -> the runtime's name (0.22: `route --runtime`).
 //
 // Usage: node bin/lib/build-postprocess.js <runtimes-dir> [--version <v>]
 //        node bin/lib/build-postprocess.js --stdin <runtime> [--version <v>]
@@ -66,7 +67,8 @@ function transform(text, runtime, version, where = '<text>') {
   return out
     .join('\n')
     .replaceAll('{{JDI_CLI}}', `jdi-cli@${version}`)
-    .replaceAll('{{JDI_VERSION}}', version);
+    .replaceAll('{{JDI_VERSION}}', version)
+    .replaceAll('{{JDI_RUNTIME}}', runtime);
 }
 
 function walk(dir, visit) {

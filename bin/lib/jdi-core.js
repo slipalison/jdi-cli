@@ -47,6 +47,7 @@ const CONFIG_DEFAULTS = {
     gate_cache: true,
     parallel_review: true,
     parallel_gates: false,
+    worktree_doers: false,
   },
   sizing: {
     lite_max_tasks: 3,
@@ -85,7 +86,18 @@ const CONFIG_DEFAULTS = {
     ],
     floors: { reviewer: 'standard', critic: 'standard' },
     escalate: true,
+    quota_aware: true,
+    adapt: { mode: 'off', min_samples: 8, raise_below: 0.7, lower_above: 0.95 },
+    // Copilot / OpenCode model ids per tier, e.g. { opencode: { cheap:
+    // "anthropic/claude-haiku-4-5", strong: "anthropic/claude-opus-4-1" } }
+    runtime_models: {},
   },
+  // 0.22 — `jdi-cli quota`: the verdict thresholds (percent of a limit) and,
+  // for the local estimate only, the limits in millions of cache-weighted tokens
+  quota: { warn_pct: 80, stop_pct: 95, session_mtok: null, weekly_mtok: null },
+  // 0.22 — `jdi-cli ceiling`: an autonomous run's fuse (null = no limit; the
+  // template /jdi-new writes sets them)
+  orchestration: { phase_ceiling: { spawns: null, hours: null, weighted_mtok: null } },
   loop: { non_product_globs: [], record_commits: 'per_round' },
 };
 
@@ -376,7 +388,9 @@ function readIf(file) {
 function ensureCacheIgnored(root = process.cwd()) {
   const gi = path.join(root, '.gitignore');
   const cur = readIf(gi) ?? '';
-  if (/^\.jdi\/cache\/?\s*$/m.test(cur)) return false;
+  // `.jdi/cache/`, `/.jdi/cache`, `.jdi/cache/**`... — or any rule git applies
+  if (/^\/?\.jdi\/cache(\/(\*\*)?)?\s*$/m.test(cur)) return false;
+  if (git(['check-ignore', '-q', `${JDI_DIR}/cache/probe`], root).code === 0) return false;
   const sep = cur === '' || cur.endsWith('\n') ? '' : '\n';
   fs.writeFileSync(gi, `${cur}${sep}# JDI: derived per-clone files (briefs, gate results, schema copies)\n.jdi/cache/\n`);
   return true;

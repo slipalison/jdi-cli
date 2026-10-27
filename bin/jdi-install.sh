@@ -51,6 +51,7 @@ sync_specialists() {
   local rt="$1"
   ls "$PWD/.jdi/agents/"jdi-*.md >/dev/null 2>&1 || return 0
   JDI_LANG="$JDI_LANG" bash "$ROOT/bin/lib/jdi-sync-specialists.sh" "$rt" --quiet
+  node "$ROOT/bin/lib/tiers.js" "$rt" --quiet || true   # tier copies (Copilot/OpenCode, routing.runtime_models)
   echo "  -> specialists de .jdi/agents/ sincronizados pro runtime $rt (npx -y jdi-cli sync-specialists)"
   return 0
 }

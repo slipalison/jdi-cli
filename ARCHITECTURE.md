@@ -154,6 +154,17 @@ Specialist routing via `.jdi/specialists.md` and `.jdi/reviewers.md` (multi-stac
 
 Sequential dispatch avoids the `.git/config.lock` race (a well-documented git worktree problem).
 
+**Worktree waves (0.22, `economy.worktree_doers`).** In one shared tree a doer's
+targeted test compiles the half-written code of the doer next to it. With the
+flag on, `jdi-cli wave worktrees` gives each task of a parallel wave its own
+worktree and branch (`jdi/<slug>/<T-N>`, under the git-ignored
+`.jdi/cache/worktrees/`), runs each stack's `worktree_setup` there, and the doer
+works under `workdir=`. `jdi-cli wave merge` cherry-picks each task's commits
+onto HEAD in task order: a conflict rolls that task back (it runs again alone),
+and a main checkout that changed meanwhile merges nothing. The worktrees are
+removed before the wave's suite runs, so no test runner sees their copies.
+Off by default: a worktree starts cold.
+
 ## Question loop (jdi-asker)
 
 Adaptive. Rules:
@@ -313,6 +324,45 @@ Users can customize `.githooks/` for:
 - Fast pre-commit lint
 - Post-commit Slack notification
 - Etc.
+
+## Quota, ceiling and routing (0.21-0.22)
+
+- **Route.** Every spawn's model and effort come from `jdi-cli route` (config
+  `routing`): a rule over the task's `Weight:`/`Kind:` and sensitive files,
+  then `adapt` (the project's own first-time pass rates, off by default), then
+  the quota (`tight`: lighter doer work one tier down), then the attempt (a fix
+  after a measured failure goes up), then the role's floor. Every answer is
+  logged to `<git common dir>/jdi/route-log.jsonl`; `cost --by-model` reads it.
+- **Quota.** `jdi-cli quota` reads, in order of trust: a status line snapshot
+  (`quota record` keeps the `rate_limits` Claude Code gives a status line), a
+  block in the transcripts (`error: "rate_limit"` with `quotaLimits.resetsAt`),
+  a local estimate against `quota.*_mtok`. `/jdi-issue` checks it before every
+  long step and pauses with a HANDOFF on `stop`.
+- **Ceiling.** `jdi-cli ceiling` holds an autonomous run to
+  `orchestration.phase_ceiling` (spawns, hours, tokens since `--start`).
+
+### Design note — workers in other CLIs (not built)
+
+The idea, from multi-CLI orchestrators: send some workers to another agent CLI
+(Codex, Gemini, Kimi...) to spread usage across accounts and vendors. What it
+would take in JDI, and why it is not built yet:
+
+- **Where it plugs in.** `route` already answers per spawn; a tier could name a
+  *runner* (`{"runner": "codex", "model": "...", "effort": "..."}`) instead of
+  only a model. The orchestrator would then shell out (`codex exec`, `gemini
+  -p`) instead of calling its own Agent tool, with the brief as the prompt
+  and `workdir=` as the checkout — a worktree wave already isolates such a
+  worker, and `wave merge` already brings its commits back.
+- **What it needs from the other CLI.** Headless run with a prompt file, a
+  working directory, a time limit, and an exit code; no interactive
+  approvals. The same return contract (`STATUS:` line) parsed from its output.
+- **Why not yet.** The doer's knowledge lives in a Claude/Copilot agent file
+  (frontmatter, tools, the managed blocks); another CLI would need its own
+  rendering of the specialist, and the gates must stay outside it (they
+  already are: `gates run`). Measuring first: `cost --by-model` shows which
+  roles and weights pass on cheaper tiers — the first candidates to move.
+  Doers of `light` work are the natural first runner; reviewers stay where
+  the project's specialists are.
 
 ## Not 100% spec-driven
 

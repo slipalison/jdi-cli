@@ -110,8 +110,8 @@ canonical source shipped in the package (`templates-jdi-folder/config.json`,
 #57), and record the JDI version this project runs:
 
 ```bash
-[ -f .jdi/config.json ] || npx -y jdi-cli@0.21.0 template config --out .jdi/config.json
-printf '%s' '0.21.0' > .jdi/VERSION
+[ -f .jdi/config.json ] || npx -y jdi-cli@0.22.0 template config --out .jdi/config.json
+printf '%s' '0.22.0' > .jdi/VERSION
 ```
 
 The default covers: token budgets per artifact (`budgets`, measured in tokens

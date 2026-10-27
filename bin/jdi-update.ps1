@@ -251,6 +251,7 @@ if ($specialists.Count -gt 0) {
       } else {
         & node $jdiJs specialists upgrade --write
         & ([System.IO.Path]::Combine($Root, 'bin', 'lib', 'jdi-sync-specialists.ps1')) -Runtime all -Quiet
+        & node ([System.IO.Path]::Combine($Root, 'bin', 'lib', 'tiers.js')) all --quiet
       }
     } finally {
       Pop-Location

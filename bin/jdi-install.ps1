@@ -84,6 +84,8 @@ function Sync-Specialists {
   if (-not $specs) { return }
   $env:JDI_LANG = $JdiLang
   & (Join-Path $PSScriptRoot 'lib\jdi-sync-specialists.ps1') -Runtime $Rt -Quiet
+  # tier copies (Copilot/OpenCode, routing.runtime_models)
+  & node (Join-Path $PSScriptRoot 'lib\tiers.js') $Rt --quiet
   Write-Output "  -> specialists de .jdi/agents/ sincronizados pro runtime $Rt (npx -y jdi-cli sync-specialists)"
 }
 

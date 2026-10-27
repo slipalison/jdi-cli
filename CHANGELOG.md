@@ -5,6 +5,96 @@ All notable changes to `jdi-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.0] - 2026-10-26
+
+Quota, ceiling and learning. An autonomous run stopped wherever the
+account's usage limit caught it — the 5-hour limit hit four times in one week
+on a real project, each time in the middle of whatever was running — and
+nothing stopped a phase that would not converge: one took 172 million tokens
+where the others took 8 to 45. And `route` (0.21) decided by
+rules alone, with no way to see whether the cheap tier actually worked.
+
+### Added
+- **`jdi-cli quota`** — how close the ACCOUNT is to its usage limits, from
+  the most trusted source available: a status line snapshot (Claude Code
+  hands every status line `rate_limits.five_hour/seven_day` with the used
+  percentage; `jdi quota record` — the global command — piped from the
+  status line, keeps it),
+  else a block already in the transcripts (`error: "rate_limit"` with
+  `quotaLimits.resetsAt` — the exact time it lifts), else a local estimate
+  against `quota.session_mtok` / `weekly_mtok` (this machine only; measured,
+  its usage in the real windows of four blocks ranged from 27 to 61 million,
+  so it is a guide). Sessions are anchored on the reset times the blocks
+  report, and start on a 10-minute boundary, as the real ones do.
+  Verdict `ok` / `tight` (`warn_pct`, 80) / `stop` (`stop_pct`, 95, or
+  blocked) / `unknown`; exit 0/3/4. Only a full window sets `resume_at`, and
+  a window that already reset counts as empty. A per-file index keeps a
+  repeated call under a second (4.7 s → 0.15 s on 400 MB of transcripts).
+  Every source is Claude Code's: `--runtime <other>` answers `unknown`.
+- **`jdi-cli ceiling`** — an autonomous run's fuse: subagents spawned, hours
+  and cache-weighted tokens for the phase since `ceiling --start`, against
+  `orchestration.phase_ceiling` (template: 60 spawns, 12 h, 150M; off for
+  older projects). Exit 3 when over. On another runtime (`--runtime`) it
+  counts hours only.
+- **`/jdi-issue` checkpoints** — before the plan, before each loop iteration,
+  before the warnings round and before the ship: `quota` `stop` → HANDOFF.md
+  with `resume_at`, stop (a step started on an empty quota dies halfway);
+  `tight` → go on, lighter doer work one tier down; `ceiling` over → HANDOFF,
+  never ship. The run's ceiling starts when the phase is registered.
+- **Brief score** — a doer brief is scored on objective, verifiable result
+  (`Acceptance:` or `Test:`), scope (`Files modified:`) and constraints
+  (decisions, DoD lines, orchestrator notes). Missing one of the first three:
+  `WEAK BRIEF` on stderr, and `/jdi-do` completes the task before the spawn —
+  a doer without them comes back `NEEDS_CONTEXT`, a whole spawn later.
+- **Worktree waves** (`economy.worktree_doers`, off by default) — `jdi-cli
+  wave worktrees` gives each doer of a parallel wave its own git worktree and
+  branch (and runs the stacks' new `worktree_setup` there); the doer works
+  under `workdir=`; `wave merge` cherry-picks each task's commits onto HEAD in
+  task order — a conflict rolls that task back (it runs again alone); work a
+  doer left uncommitted is never thrown away (its worktree is kept, and asking
+  for it again is refused); a file of a wave task changed or committed in the
+  main checkout meanwhile merges nothing (the orchestrator's own commits —
+  a task re-run there, the status lines — do not count); files outside the
+  task's `Files modified` are reported; the worktrees go before the wave's
+  suite.
+- **Route log, `cost --by-model`, `routing.adapt`** — every `route` answer is
+  logged (`<git common dir>/jdi/route-log.jsonl`: one history for every
+  worktree of the clone, kept when one is removed; one per JDI project in the
+  repo). `cost --by-model` shows subagents by
+  role × model (spawns, tokens, agent hours) and, per weight × tier, how often
+  doer work passed the first time (counted once its phase has an outcome — a
+  reviewer or a fix — and failed by a later fix that names its task or none).
+  `routing.adapt` (off by default) acts on that: a weight whose tier fails
+  the first time too often goes one tier up; one that always passes tries
+  the tier below — never for deep or sensitive work, never below a floor.
+- **`routing.quota_aware`** (on) — a `tight` quota puts doer work that is
+  neither deep nor sensitive one tier down on its first attempt.
+- **Routing on GitHub Copilot and OpenCode.** Both take the model from the
+  agent file, not from the spawn, so 0.21's routing did nothing there. Now
+  `routing.runtime_models.<runtime>.<tier>` names the runtime's model id for
+  a tier, and `sync-specialists` writes a copy of every specialist (and of
+  the planner, asker and critic) per named tier — `<agent>--<tier>`, made
+  from the copy it already writes, with only the name, the description's
+  first words and `model:` changed (`--check` covers them; a tier taken out
+  of the config removes its copies). `route --runtime <rt> --agent <name>`
+  answers which agent to spawn, and the commands' Copilot/OpenCode text uses
+  it. Effort stays a Claude Code feature; Junie (picks subagents by
+  description) and Antigravity (no model) are left out. PORTABILITY.md has
+  the table of what each runtime gets.
+- **Design note: workers in other CLIs** (ARCHITECTURE.md) — where a runner
+  would plug into `route` and `wave`, what it needs from the other CLI, and
+  why it waits for `cost --by-model` data.
+
+### Fixed
+- A `.gitignore` that ignores the cache as `/.jdi/cache/` (or `.jdi/cache`,
+  or any rule git applies) is recognized: JDI no longer appends a second
+  `.jdi/cache/` line to it.
+- Lite phases never reached the routing text of `/jdi-do` (0.21): the one
+  doer of a lite phase is now routed too (no `--task`: the heaviest task).
+- `/jdi-issue` — the loop and the critic instructions sat under the `planned`
+  branch, so the direct path (0.21) could read as skipping the loop; they now
+  apply either way.
+
 ## [0.21.0] - 2026-10-26
 
 The clock and the route. `cost --timeline` on a real project since 0.20:

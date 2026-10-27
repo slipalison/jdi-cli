@@ -235,6 +235,7 @@ with `jdi-cli specialists upgrade --adopt [--write]`.
 - Atomic commit per task
 - Conventional Commits, scope = phase slug
 - Max 3 correction attempts per task before marking `blocked`
+- `workdir=<path>` in the prompt (0.22, worktree wave): its own git worktree — every command and edit there, commits there; `jdi-cli wave merge` brings them back
 - Return starts with `STATUS: DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT` (0.21): the orchestrator adds the missing context, or retries a BLOCKED task once a tier up — never the same prompt on the same route
 - Multi-stack: only touches files matching its `file_glob`; out-of-scope paths → `blocked: out-of-scope` (orchestrator re-routes)
 
